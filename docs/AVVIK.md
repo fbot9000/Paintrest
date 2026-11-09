@@ -11,7 +11,6 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 5. **Avviket `swap_product`.** Datamodellen nevner bytte av produkt, endret blanding, ekstra steg og endret instruks. Prototypen har `swap_product`, `change_instruction`, `extra_step` og `note`. Endret blanding mangler. `kind` er ikke oppregnet i skjemaet.
 6. **`openPart` skriver ikke `change_record`.** «Sist åpnede del» er et minne for brukergrensesnittet, ikke en endring av innhold.
 7. **Kobling til BGG matcher utvidelser på navn.** En manuell utvidelse med samme navn som en utvidelse fra BGG får thing-id i stedet for at det lages en ny rad.
-
 8. **`ai_credential.base_url`.** Skjemaet har ikke adressen til tjenesten. Prototypen lagrer den på raden, slik at adressen kan endres uten ny kode.
 9. **Nøkkelen ligger i en fil, ikke i PostgreSQL.** Raden har samme form som i skjemaet, men ligger i `.paintrest-data/ai_credential.json` til databasen finnes. Hovednøkkelen ligger i en fil ved siden av eller i en miljøvariabel. Hvilket nøkkellager som skal brukes i produksjon, er ikke avgjort (skjema §10).
 10. **Ingen innlogging.** Serveren lytter bare på 127.0.0.1. Kjøres Vite med `--host`, kan alle på samme nett nå `/api` gjennom proxyen, og dermed bruke nøkkelen, men ikke lese den.
