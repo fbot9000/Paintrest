@@ -54,3 +54,11 @@ Skjermene skriver aldri rett til data. De kaller `Commands`. Senere erstattes `c
 Hver kommando kjører som én transaksjon og skriver `change_record` med `initiated_by = user`. Hvis kommandoen feiler, endres ingenting.
 
 Avvik fra dokumentene og antakelser står i [docs/AVVIK.md](docs/AVVIK.md).
+
+## Bygg for innebygd forhåndsvisning
+
+Noen verter tillater bare en enkel `#navn` i adressen. Bygg da med minneruting:
+
+```bash
+VITE_ROUTER=memory npm run build
+```

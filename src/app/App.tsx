@@ -1,4 +1,4 @@
-import { createHashRouter, Link, Navigate, Outlet, RouterProvider, useNavigate } from 'react-router';
+import { createHashRouter, createMemoryRouter, Link, Navigate, Outlet, RouterProvider, useNavigate } from 'react-router';
 import { useState } from 'react';
 import { ProjectsPage } from '../features/projects/ProjectsPage';
 import { ProjectLayout } from '../features/projects/ProjectLayout';
@@ -11,8 +11,9 @@ import { useCommand } from './context';
 import { Logo } from '../ui/Logo';
 import './shell.css';
 
-// Hash routing works on any static host, including a preview link opened on the iPad.
-const router = createHashRouter([
+// Hash routing works on any static host. Embedded previews that only allow a plain
+// #name in the hash are built with VITE_ROUTER=memory instead.
+const routes = [
   {
     element: <Shell />,
     children: [
@@ -32,7 +33,8 @@ const router = createHashRouter([
   },
   { path: 'male/:subjectId', element: <PaintingMode /> },
   { path: '*', element: <Navigate to="/" replace /> },
-]);
+];
+const router = import.meta.env.VITE_ROUTER === 'memory' ? createMemoryRouter(routes) : createHashRouter(routes);
 
 export function App() {
   return <RouterProvider router={router} />;
