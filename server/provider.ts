@@ -35,14 +35,17 @@ export class ResponsesProvider {
     });
   }
 
-  async respond(input: string, opts: { model?: string; instructions?: string } = {}): Promise<RespondResult> {
+  async respond(
+    input: string | { role: 'user' | 'assistant'; content: string }[],
+    opts: { model?: string; instructions?: string; timeoutMs?: number } = {},
+  ): Promise<RespondResult> {
     return this.store.useSecret(async (secret, cred) => {
       const model = opts.model || cred.default_model;
       if (!model) throw new UserError('Velg en standardmodell først');
       const res = await this.call(secret, `${cred.base_url}/responses`, {
         method: 'POST',
         body: JSON.stringify({ model, input, ...(opts.instructions ? { instructions: opts.instructions } : {}) }),
-      });
+      }, opts.timeoutMs);
       const body = (await res.json()) as {
         model?: string;
         output_text?: string;
@@ -59,16 +62,16 @@ export class ResponsesProvider {
     });
   }
 
-  private async call(secret: string, url: string, init: RequestInit): Promise<Response> {
+  private async call(secret: string, url: string, init: RequestInit, timeoutMs = TIMEOUT_MS): Promise<Response> {
     let res: Response;
     try {
       res = await this.fetchImpl(url, {
         ...init,
         headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json', Accept: 'application/json' },
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (err) {
-      const reason = err instanceof Error && err.name === 'TimeoutError' ? 'svarte ikke innen 60 sekunder' : 'kunne ikke nås';
+      const reason = err instanceof Error && err.name === 'TimeoutError' ? `svarte ikke innen ${Math.round(timeoutMs / 1000)} sekunder` : 'kunne ikke nås';
       throw new UserError(`Tjenesten ${reason}. Sjekk adressen og nettverket.`, 502);
     }
     if (res.ok) return res;

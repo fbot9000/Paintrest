@@ -52,7 +52,28 @@ export function emptyTables(): Tables {
     source_link: {},
     source_link_asset: [],
     change_record: {},
+    research_task: {},
+    task_scope: {},
+    task_result_type: [],
+    task_revision_target: {},
+    research_message: {},
+    research_proposal: {},
+    context_ref: {},
   };
+}
+
+/**
+ * Brings stored data up to the current schema without losing it.
+ * Returns undefined when the data is unknown or newer than this app.
+ */
+export function migrate(s: DbState | undefined): DbState | undefined {
+  if (!s || typeof s.schema_version !== 'number' || s.schema_version > SCHEMA_VERSION) return undefined;
+  let state = s;
+  if (state.schema_version === 1) {
+    // v2: research tables (agent). New tables start empty.
+    state = { ...state, schema_version: 2, tables: { ...emptyTables(), ...state.tables } };
+  }
+  return state.schema_version === SCHEMA_VERSION ? state : undefined;
 }
 
 export class Store {

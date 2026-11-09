@@ -40,6 +40,15 @@ Appen virker fullt ut uten AI. Nøkkelen legges inn under «⋯ → AI-nøkkel»
 npm test   # også serveren: kryptering, at nøkkelen ikke lekker, feilmeldinger
 ```
 
+## Researchagent
+
+Panelet til høyre i hvert prosjekt. Det bruker nøkkelen og standardmodellen fra «AI-nøkkel».
+
+- Agenten leser prosjektet, miniatyrene, maleplanene og malingene dine. Den lager **utkast**: nye miniatyrer (`catalog_subject`) og maleplaner (`paint_plan`).
+- En godkjent plan kan agenten bare foreslå ny versjon av når du har trykket «Revider planen med agenten» på miniatyren. Det åpner planen som revisjonsmål (`plan_revision`).
+- Hvert forslag godkjennes for seg i én transaksjon. Maling som ikke finnes i katalogen, må du koble til et produkt eller opprette som ubekreftet før planen kan godkjennes. Er planen endret siden forslaget ble laget, stopper godkjenningen.
+- Forslag som bryter omfanget, avvises før de lagres, og panelet sier hvorfor.
+
 ## Dette er med
 
 | Bit | Innhold |

@@ -7,6 +7,7 @@ import type { Expansion, Grouping, MiniatureSubject } from '../../domain/types';
 import { assetFileId, attachedExpansions, deletedSubjects, liveSubjects, physicalStatus } from '../../domain/views';
 import type { PhysicalStatus } from '../../domain/views';
 import { Badge, Button, Dialog, ErrorNote, Field, FileImage, ImagePicker, Segmented, Stepper } from '../../ui/components';
+import { useAgentActions } from '../agent/AgentPanel';
 import './miniatures.css';
 
 type Filter = 'all' | 'base' | string;
@@ -23,6 +24,7 @@ export function MiniaturesPage() {
   const [filter, setFilter] = useState<Filter>('all');
   const [onlyActive, setOnlyActive] = useState(false);
   const [editing, setEditing] = useState<MiniatureSubject | 'new' | null>(null);
+  const agentActions = useAgentActions(projectId);
 
   const shown = data.subjects.filter(({ s, status }) => {
     if (onlyActive && status !== 'in_progress') return false;
@@ -78,6 +80,9 @@ export function MiniaturesPage() {
               fileId={file}
               expansion={data.expansions.find((e) => e.id === s.expansion_id)}
               onEdit={() => setEditing(s)}
+              onAgent={() => (s.current_plan_version_id
+                ? run(() => agentActions.revisePlan(s.id, s.name))
+                : agentActions.suggestPlan(s.name))}
               onPaint={async () => {
                 if (!s.current_plan_version_id) await run((c) => c.createEmptyPlan(s.id));
                 navigate(`/male/${s.id}`);
@@ -124,8 +129,8 @@ function FilterChip({ on, onClick, children }: { on: boolean; onClick: () => voi
 
 const STATUS_LABEL: Record<PhysicalStatus, string> = { not_started: 'Ikke startet', in_progress: 'Under arbeid', finished: 'Ferdig' };
 
-function MiniCard({ s, status, fileId, expansion, onEdit, onPaint }: {
-  s: MiniatureSubject; status: PhysicalStatus; fileId: string | null; expansion?: Expansion; onEdit: () => void; onPaint: () => void;
+function MiniCard({ s, status, fileId, expansion, onEdit, onPaint, onAgent }: {
+  s: MiniatureSubject; status: PhysicalStatus; fileId: string | null; expansion?: Expansion; onEdit: () => void; onPaint: () => void; onAgent: () => void;
 }) {
   return (
     <article className={`mini-card status-${status}`}>
@@ -149,6 +154,9 @@ function MiniCard({ s, status, fileId, expansion, onEdit, onPaint }: {
           <Button variant="primary" onClick={onPaint}>{s.current_plan_version_id ? 'Mal' : 'Lag maleplan'}</Button>
           <Button onClick={onEdit}>Rediger</Button>
         </div>
+        <button type="button" className="mini-agent" onClick={onAgent}>
+          ✦ {s.current_plan_version_id ? 'Revider planen med agenten' : 'Be agenten foreslå maleplan'}
+        </button>
       </div>
     </article>
   );

@@ -29,6 +29,21 @@ export interface AiTestResult {
   latency_ms: number;
 }
 
+export interface AgentTurnInput {
+  context: unknown;
+  messages: { role: 'user' | 'assistant'; content: string }[];
+  result_types: string[];
+  model?: string;
+}
+
+export interface AgentTurnResult {
+  message: string;
+  /** Raw proposals from the model; validated on the client against the task scope. */
+  proposals: unknown[];
+  model: string;
+  parse_warning: string | null;
+}
+
 export interface AiGateway {
   /** `unavailable` when the app runs without its server (e.g. a static preview). */
   getCredential(): Promise<{ status: 'ok'; credential: AiCredentialView | null } | { status: 'unavailable' }>;
@@ -36,4 +51,5 @@ export interface AiGateway {
   deleteCredential(): Promise<void>;
   listModels(): Promise<string[]>;
   test(model?: string): Promise<AiTestResult>;
+  agentTurn(input: AgentTurnInput): Promise<AgentTurnResult>;
 }

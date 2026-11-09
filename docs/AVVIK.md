@@ -14,12 +14,18 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 8. **`ai_credential.base_url`.** Skjemaet har ikke adressen til tjenesten. Prototypen lagrer den på raden, slik at adressen kan endres uten ny kode.
 9. **Nøkkelen ligger i en fil, ikke i PostgreSQL.** Raden har samme form som i skjemaet, men ligger i `.paintrest-data/ai_credential.json` til databasen finnes. Hovednøkkelen ligger i en fil ved siden av eller i en miljøvariabel. Hvilket nøkkellager som skal brukes i produksjon, er ikke avgjort (skjema §10).
 10. **Ingen innlogging.** Serveren lytter bare på 127.0.0.1. Kjøres Vite med `--host`, kan alle på samme nett nå `/api` gjennom proxyen, og dermed bruke nøkkelen, men ikke lese den.
+11. **Bare to resultattyper.** En oppgave får `catalog_subject` og `paint_plan`. `plan_revision` kommer i tillegg når brukeren åpner en plan for revisjon. Skjema §6 lister flere typer for `new_project`, og de legges til når flatene for dem finnes.
+12. **Omfanget sjekkes i klienten.** Prosjektdataene ligger i nettleseren, så sjekkene i §7 og godkjenningen i §8 kjører i det lokale kommandolaget (`src/data/research-commands.ts`). Serveren kaller bare modellen og skriver ingenting. Når databasen kommer, flyttes sjekkene dit, med samme regler.
+13. **Ekstra felt på forslag og meldinger.** `research_proposal.ref` (F1, F2 …) lar agenten vise til egne utkast. `research_proposal.last_error` viser hvorfor en godkjenning stoppet. `research_message.model_id` viser hvilken modell som svarte.
+14. **Én åpen oppgave per prosjekt i panelet.** «Ny oppgave» lukker den åpne og starter en ny.
 
 ## Antakelser
 
 - **Klient:** React og TypeScript som webapp med hash-ruting. Det er godkjent av brukeren 9. november 2026.
 - **Lagring:** All data ligger lokalt i nettleseren (IndexedDB). Det finnes ingen synkronisering mellom enheter.
 - **UiB-API-et:** Adresse, endepunkter og Bearer-autentisering er oppgitt av brukeren. Svarformatet (`data[].id` fra `/models`, og `output[].content[].text` eller `output_text` fra `/responses`) følger OpenAI-konvensjonen. Det er ikke testet mot UiB, fordi nettverket i utviklingsmiljøet blokkerte adressen. Testene bruker en simulert tjeneste.
+- **Agentens svarformat:** Modellen blir bedt om å svare med ett JSON-objekt. Formatet er ikke lagt inn som `text.format`/`json_schema`, fordi det er ukjent om alle modellene hos UiB støtter det. Svar som ikke kan tolkes, vises som vanlig tekst, og eventuelle forslag i dem leses ikke inn.
+- **Agenten har ikke nettilgang.** Den kjenner bare konteksten den får og det modellen kan fra før. Instruksen sier at slike forslag skal merkes «synthesized».
 - **BGG:** Oppslaget er simulert. Navnene og thing-id-ene (9000xx) er oppdiktet.
 - **Eksempeldata:** Spillet og kildene er plassholdere hentet fra Figma. Fargene på fargeprøvene er tilnærminger. Malingsnavnene er Citadel-produkter. Det er ikke sjekket om navnene er i produksjon i dag.
 - **Skrift:** DM Serif Display, DM Sans og DM Mono, lastet fra Google Fonts. Valget er gjort ut fra skjermbildene i Figma og ikke kontrollert mot filen.
@@ -27,5 +33,5 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 ## Ikke bygget ennå
 
 - Redigering av maleplanen (bit 4). «Lag maleplan» lager bare en tom versjon 1.
-- Palett, kilder, kunnskap og agentpanel.
+- Palett, kilder og kunnskap. Agenten kan foreløpig ikke foreslå referanser, teknikker eller oppskrifter.
 - Ny planversjon ved redigering. Det kommer i bit 4, og der blir problemet med fremdrift og avvik på tvers av versjoner synlig.

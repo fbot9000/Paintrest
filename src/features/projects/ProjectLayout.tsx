@@ -1,7 +1,9 @@
+import type { ReactNode } from 'react';
 import { NavLink, Outlet, useParams } from 'react-router';
 import { useView } from '../../app/context';
 import { projectSummary } from '../../domain/views';
 import { Badge } from '../../ui/components';
+import { AgentPanel, AgentPanelProvider, useAgentPanel } from '../agent/AgentPanel';
 
 export function ProjectLayout() {
   const { projectId = '' } = useParams();
@@ -10,7 +12,8 @@ export function ProjectLayout() {
     return <main className="page"><h1>Fant ikke prosjektet</h1><p><NavLink to="/">Til prosjektene</NavLink></p></main>;
   }
   return (
-    <div className="project">
+    <AgentPanelProvider>
+      <ProjectGrid projectId={projectId}>
       <nav className="sidebar" aria-label="Prosjekt">
         <div className="sidebar-title">
           <span className="eyebrow">Prosjekt</span>
@@ -25,6 +28,17 @@ export function ProjectLayout() {
       <div className="project-main">
         <Outlet />
       </div>
+      </ProjectGrid>
+    </AgentPanelProvider>
+  );
+}
+
+function ProjectGrid({ projectId, children }: { projectId: string; children: ReactNode }) {
+  const { open } = useAgentPanel();
+  return (
+    <div className={`project ${open ? 'with-agent' : 'agent-closed'}`}>
+      {children}
+      <AgentPanel projectId={projectId} />
     </div>
   );
 }

@@ -1,0 +1,302 @@
+/**
+ * Agent proposals: payload shapes, normalisation of what the model returns,
+ * product matching and the context the agent reads (datamodell v3 §12–13).
+ * Pure functions only; writes live in data/agent-commands.ts and data/research-commands.ts.
+ */
+import type {
+  ElementKind, Evidence, Grouping, Id, MaterialRole, PaintProduct, ResultType, Tables, Uncertainty,
+} from './types';
+import { attachedExpansions, liveSubjects, ownershipOf } from './views';
+
+// ---------- Payloads ----------
+
+export interface ProductRef {
+  manufacturer: string | null;
+  range: string | null;
+  name: string;
+}
+
+export interface CatalogSubjectPayload {
+  name: string;
+  grouping: Grouping;
+  physical_count: number;
+  expansion_name: string | null;
+  category_label: string | null;
+  count_basis: 'documented' | 'inferred' | null;
+  grouping_basis: 'documented' | 'inferred' | null;
+  note: string | null;
+}
+
+export interface PlanMaterialPayload {
+  product: ProductRef;
+  role: MaterialRole;
+  role_label: string | null;
+}
+
+export interface PlanStepPayload {
+  instruction: string;
+  materials: PlanMaterialPayload[];
+  mix: { label: string | null; components: { product: ProductRef; parts: number }[] } | null;
+}
+
+export interface PlanElementPayload {
+  kind: ElementKind;
+  name: string;
+  steps: PlanStepPayload[];
+}
+
+export interface PaintPlanPayload {
+  subject_id: Id;
+  elements: PlanElementPayload[];
+  note: string | null;
+}
+
+/** What the server hands back for each proposal, before validation. */
+export interface RawProposal {
+  type?: unknown;
+  update_of?: unknown;
+  evidence?: unknown;
+  uncertainty?: unknown;
+  payload?: unknown;
+}
+
+export interface NormalisedProposal {
+  result_type: 'catalog_subject' | 'paint_plan';
+  update_of: string | null;
+  evidence: Evidence;
+  uncertainty: Uncertainty[];
+  payload: CatalogSubjectPayload | PaintPlanPayload;
+}
+
+const ROLES: MaterialRole[] = ['base', 'shade', 'layer', 'highlight', 'wash', 'glaze', 'mix', 'other'];
+const EVIDENCE: Evidence[] = ['documented', 'synthesized', 'unresolved'];
+
+/**
+ * Turns one model proposal into a typed payload, or explains why it cannot.
+ * `subjectRefs` maps the short refs shown to the model (M1, M2 …) to subject ids.
+ */
+export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, Id>):
+  { ok: true; value: NormalisedProposal } | { ok: false; reason: string } {
+  const o = obj(raw.payload);
+  const common = {
+    update_of: typeof raw.update_of === 'string' && raw.update_of.trim() ? raw.update_of.trim() : null,
+    evidence: (EVIDENCE as string[]).includes(String(raw.evidence)) ? (raw.evidence as Evidence) : 'synthesized' as Evidence,
+    uncertainty: arr(raw.uncertainty).flatMap((u) => {
+      const x = obj(u);
+      const reason = str(x.reason);
+      return reason ? [{ path: str(x.path) || '', reason }] : [];
+    }),
+  };
+
+  if (raw.type === 'catalog_subject') {
+    const name = str(o.name).trim();
+    if (!name) return { ok: false, reason: 'Miniatyrforslaget mangler navn' };
+    const grouping: Grouping = o.grouping === 'group' ? 'group' : 'single';
+    const count = Math.max(1, Math.round(Number(o.physical_count) || 1));
+    return {
+      ok: true,
+      value: {
+        ...common,
+        result_type: 'catalog_subject',
+        payload: {
+          name,
+          grouping,
+          physical_count: grouping === 'single' ? 1 : count,
+          expansion_name: str(o.expansion_name).trim() || null,
+          category_label: str(o.category_label).trim() || null,
+          count_basis: basis(o.count_basis),
+          grouping_basis: basis(o.grouping_basis),
+          note: str(o.note).trim() || null,
+        },
+      },
+    };
+  }
+
+  if (raw.type === 'paint_plan') {
+    const ref = str(o.subject).trim();
+    const subject_id = subjectRefs[ref] ?? subjectRefs[ref.toUpperCase()];
+    if (!subject_id) return { ok: false, reason: `Maleplanen viser til en ukjent miniatyr (${ref || 'ingen'})` };
+    const elements: PlanElementPayload[] = arr(o.elements).map((e, i) => {
+      const eo = obj(e);
+      return {
+        kind: eo.kind === 'operation' ? 'operation' : 'part',
+        name: str(eo.name).trim() || `Del ${i + 1}`,
+        steps: arr(eo.steps).map((s) => {
+          const so = obj(s);
+          const mixO = so.mix ? obj(so.mix) : null;
+          const mixComponents = mixO ? arr(mixO.components).flatMap((c) => {
+            const co = obj(c);
+            const product = productRef(co.product);
+            return product ? [{ product, parts: Math.max(1, Math.round(Number(co.parts) || 1)) }] : [];
+          }) : [];
+          return {
+            instruction: str(so.instruction).trim(),
+            materials: arr(so.materials).flatMap((m) => {
+              const mo = obj(m);
+              const product = productRef(mo.product);
+              if (!product) return [];
+              const role = (ROLES as string[]).includes(str(mo.role)) ? (mo.role as MaterialRole) : 'other';
+              return [{ product, role, role_label: str(mo.role_label).trim() || null }];
+            }),
+            mix: mixComponents.length >= 2 ? { label: str(mixO!.label).trim() || null, components: mixComponents } : null,
+          };
+        }),
+      };
+    });
+    if (!elements.length) return { ok: false, reason: 'Maleplanen har ingen deler' };
+    return { ok: true, value: { ...common, result_type: 'paint_plan', payload: { subject_id, elements, note: str(o.note).trim() || null } } };
+  }
+
+  return { ok: false, reason: `Ukjent forslagstype (${String(raw.type)})` };
+}
+
+// ---------- Produkter ----------
+
+export function productKey(p: ProductRef): string {
+  return `${(p.manufacturer ?? '').trim().toLowerCase()}|${p.name.trim().toLowerCase()}`;
+}
+
+/**
+ * Exact-name match against the catalogue. A manufacturer, when both sides
+ * have one, must match too. Ambiguous matches return null: the user decides.
+ */
+export function matchProduct(t: Tables, ref: ProductRef): PaintProduct | null {
+  const name = ref.name.trim().toLowerCase();
+  const maker = ref.manufacturer?.trim().toLowerCase() || null;
+  const hits = Object.values(t.paint_product).filter((p) => {
+    if (p.deleted_at || p.name.trim().toLowerCase() !== name) return false;
+    const pm = p.manufacturer?.trim().toLowerCase() || null;
+    return !maker || !pm || maker === pm;
+  });
+  return hits.length === 1 ? hits[0]! : null;
+}
+
+/** Every distinct product a plan payload names. */
+export function planProductRefs(p: PaintPlanPayload): ProductRef[] {
+  const out = new Map<string, ProductRef>();
+  for (const e of p.elements) for (const s of e.steps) {
+    for (const m of s.materials) out.set(productKey(m.product), m.product);
+    for (const c of s.mix?.components ?? []) out.set(productKey(c.product), c.product);
+  }
+  return [...out.values()];
+}
+
+// ---------- Kontekst ----------
+
+export interface AgentContext {
+  /** Sent to the model as JSON. */
+  data: Record<string, unknown>;
+  subjectRefs: Record<string, Id>;
+  allowedTypes: ResultType[];
+}
+
+/** What the agent may read for this task (datamodell v3 §12 «Lesing»). */
+export function buildAgentContext(t: Tables, task_id: Id): AgentContext {
+  const scope = t.task_scope[task_id];
+  const project = scope?.work_project_id ? t.project[scope.work_project_id] : undefined;
+  const game = project ? t.game[project.game_id] : undefined;
+  const allowedTypes = t.task_result_type.filter((r) => r.task_id === task_id).map((r) => r.result_type);
+  if (!project || !game) return { data: {}, subjectRefs: {}, allowedTypes };
+
+  const subjects = liveSubjects(t, project.id);
+  const subjectRefs: Record<string, Id> = {};
+  const expansions = attachedExpansions(t, project.id);
+  const targets = Object.values(t.task_revision_target).filter((r) => r.task_id === task_id);
+
+  const subjectData = subjects.map((s, i) => {
+    const ref = `M${i + 1}`;
+    subjectRefs[ref] = s.id;
+    const pv = s.current_plan_version_id ? t.paint_plan_version[s.current_plan_version_id] : undefined;
+    const elements = pv ? Object.values(t.plan_element).filter((e) => e.plan_version_id === pv.id).sort((a, b) => a.position - b.position) : [];
+    const target = targets.find((r) => r.target_id === s.id);
+    return {
+      ref,
+      name: s.name,
+      grouping: s.grouping,
+      physical_count: s.physical_count,
+      expansion: expansions.find((e) => e.id === s.expansion_id)?.name ?? null,
+      category: s.category_label,
+      plan: pv
+        ? {
+            version: pv.version_number,
+            open_for_revision: !!target && target.base_version_id === pv.id,
+            elements: elements.map((e) => ({
+              kind: e.kind,
+              name: e.name,
+              steps: Object.values(t.plan_step).filter((st) => st.element_id === e.id).sort((a, b) => a.position - b.position).map((st) => ({
+                instruction: st.instruction,
+                materials: Object.values(t.step_material).filter((m) => m.step_id === st.id).map((m) => {
+                  const p = t.paint_product[m.product_id];
+                  return { product: p ? fullName(p) : '?', role: m.role };
+                }),
+              })),
+            })),
+          }
+        : null,
+    };
+  });
+
+  const paints = Object.values(t.paint_product)
+    .filter((p) => !p.deleted_at)
+    .map((p) => ({ manufacturer: p.manufacturer, range: p.range_name, name: p.name, kind: p.product_kind, ownership: ownershipOf(t, p.id) }))
+    .sort((a, b) => Number(b.ownership === 'owns') - Number(a.ownership === 'owns'))
+    .slice(0, 300);
+
+  const pending = Object.values(t.research_proposal)
+    .filter((p) => p.task_id === task_id && p.decision === 'pending')
+    .map((p) => ({ ref: p.ref, type: p.result_type, summary: proposalTitle(t, p.result_type, p.payload) }));
+
+  return {
+    subjectRefs,
+    allowedTypes,
+    data: {
+      project: {
+        game: game.primary_name,
+        year: game.year_published,
+        publishers: game.publishers,
+        expansions_in_project: expansions.map((e) => e.name),
+      },
+      miniatures: subjectData,
+      paints,
+      your_pending_proposals: pending,
+    },
+  };
+}
+
+export function proposalTitle(t: Tables, type: ResultType, payload: unknown): string {
+  if (type === 'catalog_subject') {
+    const p = payload as CatalogSubjectPayload;
+    return `${p.name} (${p.grouping === 'group' ? `gruppe, ${p.physical_count}` : 'enkeltfigur'})`;
+  }
+  if (type === 'paint_plan' || type === 'plan_revision') {
+    const p = payload as PaintPlanPayload;
+    return `Maleplan for ${t.miniature_subject[p.subject_id]?.name ?? 'ukjent miniatyr'}`;
+  }
+  return type;
+}
+
+function fullName(p: PaintProduct): string {
+  return [p.manufacturer, p.range_name, p.name].filter(Boolean).join(' · ');
+}
+
+// ---------- små hjelpere ----------
+
+function obj(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+function arr(v: unknown): unknown[] {
+  return Array.isArray(v) ? v : [];
+}
+function str(v: unknown): string {
+  return typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
+}
+function basis(v: unknown): 'documented' | 'inferred' | null {
+  return v === 'documented' || v === 'inferred' ? v : null;
+}
+function productRef(v: unknown): ProductRef | null {
+  if (typeof v === 'string' && v.trim()) return { manufacturer: null, range: null, name: v.trim() };
+  const o = obj(v);
+  const name = str(o.name).trim();
+  if (!name) return null;
+  return { manufacturer: str(o.manufacturer).trim() || null, range: str(o.range).trim() || null, name };
+}

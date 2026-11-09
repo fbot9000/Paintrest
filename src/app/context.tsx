@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useMemo, useState, useSyncExter
 import type { ReactNode } from 'react';
 import type { AiGateway } from '../domain/ai';
 import type { Commands } from '../domain/commands';
+import type { AgentCommands, ResearchCommands } from '../domain/research';
 import type { Tables } from '../domain/types';
 import type { Store } from '../data/store';
 
@@ -9,16 +10,18 @@ interface AppCtx {
   store: Store;
   cmd: Commands;
   ai: AiGateway;
+  research: ResearchCommands;
+  agent: AgentCommands;
 }
 
 const Ctx = createContext<AppCtx | null>(null);
 
-export function AppProvider({ store, cmd, ai, children }: AppCtx & { children: ReactNode }) {
-  const value = useMemo(() => ({ store, cmd, ai }), [store, cmd, ai]);
+export function AppProvider({ store, cmd, ai, research, agent, children }: AppCtx & { children: ReactNode }) {
+  const value = useMemo(() => ({ store, cmd, ai, research, agent }), [store, cmd, ai, research, agent]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
-function useApp(): AppCtx {
+export function useApp(): AppCtx {
   const c = useContext(Ctx);
   if (!c) throw new Error('AppProvider mangler');
   return c;

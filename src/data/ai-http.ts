@@ -1,4 +1,4 @@
-import type { AiCredentialView, AiGateway, AiTestResult } from '../domain/ai';
+import type { AgentTurnResult, AiCredentialView, AiGateway, AiTestResult } from '../domain/ai';
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
@@ -40,6 +40,9 @@ export function httpAiGateway(): AiGateway {
     },
     async test(model) {
       return request<AiTestResult>('POST', '/api/ai/test', { model });
+    },
+    async agentTurn(input) {
+      return request<AgentTurnResult>('POST', '/api/agent/turn', input);
     },
   };
 }

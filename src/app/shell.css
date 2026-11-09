@@ -27,6 +27,11 @@
 
 /* Project layout: sidebar + content */
 .project { flex: 1; display: grid; grid-template-columns: 240px 1fr; min-height: 0; }
+.project.with-agent { grid-template-columns: 240px minmax(0, 1fr) 380px; }
+.project.agent-closed { grid-template-columns: 240px minmax(0, 1fr) 48px; }
+@media (max-width: 1180px) {
+  .project.with-agent, .project.agent-closed { grid-template-columns: 240px minmax(0, 1fr); }
+}
 .sidebar {
   background: var(--panel); padding: 20px 12px; display: flex; flex-direction: column; gap: 6px;
   position: sticky; top: 60px; height: calc(100vh - 60px); overflow: auto;
@@ -46,7 +51,7 @@
 @media (max-width: 860px) {
   .topbar { padding: 0 16px; }
   .topbar-proto { display: none; }
-  .project { grid-template-columns: 1fr; }
+  .project, .project.with-agent, .project.agent-closed { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; flex-direction: row; overflow-x: auto; padding: 8px 12px; gap: 4px; }
   .sidebar-title { display: none; }
   .sidebar a { white-space: nowrap; }

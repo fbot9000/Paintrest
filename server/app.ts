@@ -7,8 +7,11 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { CredentialStore } from './credential-store.ts';
 import { UserError } from './credential-store.ts';
 import type { ResponsesProvider } from './provider.ts';
+import { runTurn } from './agent.ts';
+import type { TurnInput } from './agent.ts';
 
 const MAX_BODY = 64 * 1024;
+const MAX_AGENT_BODY = 1024 * 1024;
 
 export const UIB_PROVIDER = 'uib';
 
@@ -51,6 +54,17 @@ export function createHandler(store: CredentialStore, provider: ResponsesProvide
           return json(res, 200, { ok: true, model: r.model, text: r.text, latency_ms: Date.now() - started });
         }
 
+        case 'POST /api/agent/turn': {
+          const body = await readJson(req, MAX_AGENT_BODY);
+          const input: TurnInput = {
+            context: body.context ?? {},
+            messages: Array.isArray(body.messages) ? body.messages as TurnInput['messages'] : [],
+            result_types: Array.isArray(body.result_types) ? body.result_types.filter((x): x is string => typeof x === 'string') : [],
+            model: str(body.model) || undefined,
+          };
+          return json(res, 200, await runTurn(provider, input));
+        }
+
         default:
           return json(res, 404, { error: 'Ukjent adresse' });
       }
@@ -85,12 +99,12 @@ function str(v: unknown): string {
   return typeof v === 'string' ? v : '';
 }
 
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+async function readJson(req: IncomingMessage, max = MAX_BODY): Promise<Record<string, unknown>> {
   let size = 0;
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > MAX_BODY) throw new UserError('Forespørselen er for stor', 413);
+    if (size > max) throw new UserError('Forespørselen er for stor', 413);
     chunks.push(chunk as Buffer);
   }
   if (!chunks.length) return {};

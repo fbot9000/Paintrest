@@ -5,9 +5,10 @@ import { App } from './app/App';
 import { AppProvider } from './app/context';
 import { httpAiGateway } from './data/ai-http';
 import { createLocalCommands } from './data/local-commands';
+import { createAgentCommands, createResearchCommands } from './data/research-commands';
 import { indexedDbPersistence, memoryPersistence } from './data/persistence';
 import { buildSampleData } from './data/seed';
-import { Store, isCurrentSchema } from './data/store';
+import { Store, migrate } from './data/store';
 import type { Persistence } from './data/store';
 
 async function boot() {
@@ -21,14 +22,15 @@ async function boot() {
     console.warn('IndexedDB er ikke tilgjengelig; data lagres bare i denne fanen.', err);
     persistence = memoryPersistence();
   }
-  const state = isCurrentSchema(loaded) ? loaded : await buildSampleData(persistence);
+  const migrated = migrate(loaded);
+  const state = migrated ?? await buildSampleData(persistence);
   const store = new Store(state, persistence);
-  if (!isCurrentSchema(loaded)) await persistence.save(state).catch(() => undefined);
+  if (!migrated || migrated !== loaded) await persistence.save(state).catch(() => undefined);
   const cmd = createLocalCommands(store);
 
   root.render(
     <StrictMode>
-      <AppProvider store={store} cmd={cmd} ai={httpAiGateway()}>
+      <AppProvider store={store} cmd={cmd} ai={httpAiGateway()} research={createResearchCommands(store)} agent={createAgentCommands(store)}>
         <App />
       </AppProvider>
     </StrictMode>,

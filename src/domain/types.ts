@@ -362,6 +362,97 @@ export interface Tables {
   source_link: Record<Id, SourceLink>;
   source_link_asset: SourceLinkAsset[];
   change_record: Record<Id, ChangeRecord>;
+  research_task: Record<Id, ResearchTask>;
+  task_scope: Record<Id, TaskScope>;
+  task_result_type: TaskResultType[];
+  task_revision_target: Record<Id, TaskRevisionTarget>;
+  research_message: Record<Id, ResearchMessage>;
+  research_proposal: Record<Id, ResearchProposal>;
+  context_ref: Record<Id, ContextRef>;
 }
 
-export const SCHEMA_VERSION = 1;
+// ---------- Research og handlingsrom (skjema §6, §7) ----------
+
+export type AreaKind = 'new_project' | 'new_knowledge' | 'revision_only';
+
+export type ResultType =
+  | 'game_identity' | 'catalog_subject' | 'palette_entry' | 'project_method'
+  | 'reference_selection' | 'paint_plan' | 'recipe' | 'technique' | 'plan_revision';
+
+export interface ResearchTask {
+  id: Id;
+  workspace_id: Id;
+  status: 'open' | 'closed';
+  created_at: Timestamp;
+}
+
+/** Keyed by task_id. The agent has no write path to this row. */
+export interface TaskScope {
+  task_id: Id;
+  area_kind: AreaKind;
+  work_project_id: Id | null;
+  allow_new_knowledge: boolean;
+}
+
+export interface TaskResultType {
+  task_id: Id;
+  result_type: ResultType;
+}
+
+export interface TaskRevisionTarget {
+  id: Id;
+  task_id: Id;
+  target_type: 'paint_plan';
+  /** For paint_plan: the subject whose plan is opened for revision. */
+  target_id: Id;
+  base_version_id: Id;
+  opened_at: Timestamp;
+}
+
+export interface ResearchMessage {
+  id: Id;
+  task_id: Id;
+  role: 'user' | 'assistant' | 'system';
+  body: string;
+  created_at: Timestamp;
+  /** PROTOTYPE: which model answered (skjema stores provider/model on proposals only). */
+  model_id?: string | null;
+}
+
+export type Evidence = 'documented' | 'synthesized' | 'unresolved';
+
+export interface Uncertainty {
+  path: string;
+  reason: string;
+}
+
+export interface ResearchProposal {
+  id: Id;
+  task_id: Id;
+  result_type: ResultType;
+  payload: unknown;
+  evidence: Evidence;
+  uncertainty: Uncertainty[];
+  decision: 'pending' | 'approved' | 'rejected';
+  base_version_id: Id | null;
+  provider: string;
+  model_id: string;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+  /** PROTOTYPE: short label shown to the agent so it can refer to its own drafts. */
+  ref: string;
+  /** PROTOTYPE: why approval failed last time, shown on the card. */
+  last_error?: string | null;
+}
+
+export interface ContextRef {
+  id: Id;
+  task_id: Id;
+  target_type: 'project' | 'paint_plan';
+  target_id: Id;
+  /** Version id for plans, content_revision for the project. */
+  revision: string;
+  captured_at: Timestamp;
+}
+
+export const SCHEMA_VERSION = 2;
