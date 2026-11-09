@@ -9,9 +9,23 @@ export interface AiCredentialView {
   label: string;
   base_url: string;
   default_model: string | null;
+  /** UiB's built-in web search tool, or off. */
+  hosted_search: HostedSearchSetting;
   key_hint: string;
   created_at: string;
   updated_at: string;
+}
+
+export type HostedSearchSetting = 'off' | 'web_search' | 'web_search_preview';
+
+export interface HostedSearchTest {
+  ok: true;
+  tool: string;
+  model: string;
+  latency_ms: number;
+  searches: string[];
+  citations: { url: string; title: string }[];
+  text: string;
 }
 
 export interface AiSettingsInput {
@@ -20,6 +34,7 @@ export interface AiSettingsInput {
   /** Leave out to keep the stored key. */
   api_key?: string;
   default_model: string | null;
+  hosted_search?: HostedSearchSetting;
 }
 
 export interface AiTestResult {
@@ -69,6 +84,8 @@ export interface AiGateway {
   deleteCredential(): Promise<void>;
   listModels(): Promise<string[]>;
   test(model?: string): Promise<AiTestResult>;
+  /** Asks UiB a question with the built-in web_search tool on. */
+  testHostedSearch(model?: string, tool?: HostedSearchSetting): Promise<HostedSearchTest>;
   /** Runs one research turn; `onEvent` receives each step as it happens. */
   runAgent(input: AgentTurnInput, onEvent: (e: ResearchEvent) => void, signal?: AbortSignal): Promise<FinalEvent>;
   /** Address the browser can use to show an image found on the web (fetched by the server). */

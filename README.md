@@ -51,7 +51,7 @@ Panelet til høyre i hvert prosjekt. Det bruker nøkkelen og standardmodellen fr
 
 ## Research på nettet
 
-Under «⋯ → AI og nettsøk» legger du inn en nøkkel for **Tavily** (anbefalt, har en gratis månedskvote) eller **Brave Search**. Da kan agenten:
+Agenten bruker først **nettsøket som er bygget inn i UiB sitt API** (OpenAIs `web_search`-verktøy i Responses API). Det står på som standard under «⋯ → AI og nettsøk», og «Test nettsøk via UiB» viser om det virker for modellen din. Avviser UiB verktøyet, går agenten automatisk over til **Tavily** eller **Brave Search** hvis du har lagt inn en nøkkel, ellers svarer den uten nettsøk. Sidene og bildene leses uansett av Paintrest-serveren, uten nøkkel. Da kan agenten:
 
 - søke på nettet og lese sider (serveren henter dem og trekker ut tekst og bilder)
 - foreslå **miniatyrer med kilder** (`catalog_subject` med `sources`)

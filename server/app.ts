@@ -6,6 +6,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { CredentialStore } from './credential-store.ts';
 import { UserError } from './credential-store.ts';
 import type { PageResult } from './fetch-page.ts';
+import { hostedSearchOf } from './provider.ts';
 import type { ResponsesProvider } from './provider.ts';
 import { runResearch } from './research-agent.ts';
 import type { ResearchEvent, ResearchInput } from './research-agent.ts';
@@ -37,7 +38,7 @@ export function createHandler(d: AppDeps) {
 
         // ---------- AI-nøkkel ----------
         case 'GET /api/ai/credential':
-          return json(res, 200, { credential: d.aiStore.get() });
+          return json(res, 200, { credential: withHosted(d.aiStore.get()) });
 
         case 'PUT /api/ai/credential': {
           const body = await readJson(req);
@@ -47,8 +48,9 @@ export function createHandler(d: AppDeps) {
             base_url: normaliseBaseUrl(str(body.base_url)),
             api_key: typeof body.api_key === 'string' ? body.api_key : undefined,
             default_model: str(body.default_model).trim() || null,
+            ...(typeof body.hosted_search === 'string' ? { hosted_search: hostedSearchOf(body.hosted_search) ?? 'off' } : {}),
           });
-          return json(res, 200, { credential });
+          return json(res, 200, { credential: withHosted(credential) });
         }
 
         case 'DELETE /api/ai/credential':
@@ -63,6 +65,21 @@ export function createHandler(d: AppDeps) {
           const started = Date.now();
           const r = await d.provider.respond('Svar bare med ordet OK.', { model: str(body.model) || undefined });
           return json(res, 200, { ok: true, model: r.model, text: r.text, latency_ms: Date.now() - started });
+        }
+
+        case 'POST /api/ai/test-search': {
+          // Checks whether UiB accepts the built-in web_search tool for the chosen model.
+          const body = await readJson(req);
+          const hosted = hostedSearchOf(str(body.hosted_search) || d.aiStore.get()?.hosted_search) ?? 'web_search';
+          const started = Date.now();
+          const r = await d.provider.respond(
+            'Which miniatures are included in the board game Zombicide 2nd Edition core box? Answer in two sentences and cite your sources.',
+            { model: str(body.model) || undefined, hostedSearch: hosted, timeoutMs: 120_000 },
+          );
+          return json(res, 200, {
+            ok: true, tool: hosted, model: r.model, latency_ms: Date.now() - started,
+            searches: r.searches, citations: r.citations.slice(0, 5), text: r.text.slice(0, 400),
+          });
         }
 
         // ---------- Nettsøk ----------
@@ -133,7 +150,8 @@ async function streamResearch(req: IncomingMessage, res: ServerResponse, d: AppD
   res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
   const emit = (e: ResearchEvent) => { if (!res.writableEnded) res.write(`${JSON.stringify(e)}\n`); };
   try {
-    await runResearch({ provider: d.provider, search: d.search, openPage: d.openPage, signal: ac.signal }, input, emit);
+    const hostedSearch = hostedSearchOf(d.aiStore.get()?.hosted_search);
+    await runResearch({ provider: d.provider, search: d.search, hostedSearch, openPage: d.openPage, signal: ac.signal }, input, emit);
   } catch (err) {
     const msg = err instanceof UserError ? err.message : 'Noe gikk galt under researchen';
     if (!(err instanceof UserError)) console.error('[api] agent/run feilet:', err instanceof Error ? err.message : err);
@@ -141,6 +159,11 @@ async function streamResearch(req: IncomingMessage, res: ServerResponse, d: AppD
   }
   void req;
   res.end();
+}
+
+/** The public view always states the search mode, also for keys saved before the setting existed. */
+function withHosted<T extends { hosted_search?: string | null } | null>(c: T): T {
+  return c ? { ...c, hosted_search: hostedSearchOf(c.hosted_search) ?? 'off' } : c;
 }
 
 /** https only, except localhost for testing. Trailing slash removed. */

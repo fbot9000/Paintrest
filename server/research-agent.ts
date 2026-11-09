@@ -12,7 +12,8 @@
  */
 import { UserError } from './credential-store.ts';
 import type { PageResult } from './fetch-page.ts';
-import type { ResponsesProvider } from './provider.ts';
+import { HostedToolError } from './provider.ts';
+import type { HostedSearch, ResponsesProvider } from './provider.ts';
 import type { SearchHit, WebSearch } from './search.ts';
 
 export type ResearchEvent =
@@ -41,30 +42,48 @@ export interface ResearchInput {
 export interface ResearchDeps {
   provider: ResponsesProvider;
   search: WebSearch | null;
+  /** UiB's built-in search tool in the Responses API, or null when switched off. */
+  hostedSearch?: HostedSearch | null;
   openPage: (url: string) => Promise<PageResult>;
   signal?: AbortSignal;
 }
 
+/** hosted: the model searches through UiB itself; search: Paintrest searches (Tavily/Brave); none: no web. */
+export type WebMode = 'hosted' | 'search' | 'none';
+
 export const MAX_TOOL_STEPS = 12;
 const MAX_MESSAGES = 30;
 
-export function researchInstructions(context: unknown, resultTypes: string[], web: boolean): string {
-  return `Du er researchagenten i Paintrest, et personlig arbeidsverktøy for miniatyrmaling.
-Du hjelper brukeren å kartlegge miniatyrer i brettspillprosjekter, finne referansebilder og lage maleplaner med eksakte malingsprodukter.
-Svar alltid på norsk bokmål.
+export function researchInstructions(context: unknown, resultTypes: string[], mode: WebMode): string {
+  const sourceRules = `Kildekrav (viktig):
+- Påstander om hvilke miniatyrer og hvor mange som finnes, skal bygge på kilder. Oppgi dem i "sources" med eksakt URL.
+- Bilder du foreslår, må være fra bildelisten på en side du har åpnet med "open". Bruk eksakt bilde-URL og sidens URL. Ikke gjett eller lag bilde-URL-er.
+- Står det ikke i kildene, skriv det i "uncertainty". Bruk "documented" bare når en kilde sier det.`;
+  const web = mode === 'hosted'
+    ? `Du har nettilgang. Du har et innebygd nettsøk-verktøy (web_search) som du bruker direkte når du trenger det; bruk gjerne engelske søkeord.
+I tillegg kan Paintrest åpne sider for deg, slik at du får sidens tekst og en liste over bildene på siden. Du arbeider i steg. Hvert svar fra deg er ETT JSON-objekt:
+  {"action": "open", "url": "https://…", "why": "kort grunn"} – Paintrest leser siden og gir deg tekst og bildeliste
+  {"action": "final", "message": "…", "proposals": [ … ]}     – ferdig svar til brukeren
+Søk med web_search, og åpne deretter de 2–5 mest lovende sidene (utgiverens produktside, regelbok eller komponentliste, BoardGameGeek, malegallerier og maleblogger) med "open".
+Du har høyst ${MAX_TOOL_STEPS} åpne-steg per svar.
 
-${web ? `Du har nettilgang gjennom to verktøy. Du arbeider i steg. Hvert svar fra deg er ETT JSON-objekt:
+${sourceRules}`
+    : mode === 'search'
+      ? `Du har nettilgang gjennom to verktøy. Du arbeider i steg. Hvert svar fra deg er ETT JSON-objekt:
   {"action": "search", "query": "…", "why": "kort grunn"}   – nettsøk (bruk gjerne engelske søkeord)
   {"action": "open", "url": "https://…", "why": "kort grunn"} – les én side og få tekst og bildeliste
   {"action": "final", "message": "…", "proposals": [ … ]}     – ferdig svar til brukeren
 Du får resultatet av hvert verktøy som neste melding. Du har høyst ${MAX_TOOL_STEPS} verktøysteg per svar. Bruk dem målrettet:
 søk først, åpne de 2–5 mest lovende sidene (utgiverens produktside, regelbok eller komponentliste, BoardGameGeek, malegallerier og maleblogger), og avslutt med final.
 
-Kildekrav (viktig):
-- Påstander om hvilke miniatyrer og hvor mange som finnes, skal bygge på sider du har åpnet. Oppgi dem i "sources" med eksakt URL.
-- Bilder du foreslår, må være fra bildelisten på en side du har åpnet. Bruk eksakt bilde-URL og sidens URL. Ikke gjett eller lag bilde-URL-er.
-- Står det ikke i kildene, skriv det i "uncertainty". Bruk "documented" bare når en åpnet kilde sier det.` : `Du har ikke nettilgang i dette oppsettet. Svar direkte med ett JSON-objekt {"action": "final", "message": "…", "proposals": [ … ]}.
-Det du vet fra opplæringen, merkes "synthesized". Ikke foreslå bilder.`}
+${sourceRules}`
+      : `Du har ikke nettilgang i dette oppsettet. Svar direkte med ett JSON-objekt {"action": "final", "message": "…", "proposals": [ … ]}.
+Det du vet fra opplæringen, merkes "synthesized". Ikke foreslå bilder.`;
+  return `Du er researchagenten i Paintrest, et personlig arbeidsverktøy for miniatyrmaling.
+Du hjelper brukeren å kartlegge miniatyrer i brettspillprosjekter, finne referansebilder og lage maleplaner med eksakte malingsprodukter.
+Svar alltid på norsk bokmål.
+
+${web}
 
 Regler for forslag:
 - Du foreslår. Brukeren godkjenner. Du kan ikke endre godkjente data.
@@ -127,8 +146,8 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
     .slice(-MAX_MESSAGES);
   if (!history.length || history.at(-1)!.role !== 'user') throw new UserError('Siste melding må være fra brukeren');
 
-  const web = !!deps.search?.configured();
-  const instructions = researchInstructions(input.context, input.result_types, web);
+  let mode: WebMode = deps.hostedSearch ? 'hosted' : deps.search?.configured() ? 'search' : 'none';
+  let instructions = researchInstructions(input.context, input.result_types, mode);
   const work: { role: 'user' | 'assistant'; content: string }[] = [];
   const opened = new Map<string, PageResult>();
   const searched = new Map<string, SearchHit>();
@@ -136,12 +155,35 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   let steps = 0;
   let model = input.model ?? '';
 
-  emit({ type: 'status', text: web ? 'Agenten planlegger søket' : 'Agenten svarer uten nettilgang' });
+  emit({ type: 'status', text: mode === 'hosted' ? 'Agenten søker via UiB' : mode === 'search' ? 'Agenten planlegger søket' : 'Agenten svarer uten nettilgang' });
 
   for (let round = 0; round < MAX_TOOL_STEPS + 3; round++) {
     if (deps.signal?.aborted) throw new UserError('Avbrutt');
-    const out = await deps.provider.respond([...history, ...work], { model: input.model, instructions, timeoutMs: 180_000 });
+    let out;
+    try {
+      out = await deps.provider.respond([...history, ...work], {
+        model: input.model, instructions, timeoutMs: 180_000, hostedSearch: mode === 'hosted' ? deps.hostedSearch : null,
+      });
+    } catch (e) {
+      if (!(e instanceof HostedToolError) || mode !== 'hosted') throw e;
+      // UiB rejected the built-in search: fall back to Paintrest's search, or none.
+      mode = deps.search?.configured() ? 'search' : 'none';
+      instructions = researchInstructions(input.context, input.result_types, mode);
+      emit({ type: 'tool_error', action: 'search', target: 'UiB nettsøk', error: `${e.message} Fortsetter ${mode === 'search' ? 'med Tavily/Brave' : 'uten nettsøk'}.` });
+      trace.push({ action: 'search', target: 'UiB nettsøk', result: 'Ikke støttet, byttet modus' });
+      round--;
+      continue;
+    }
     model = out.model;
+    // Hosted search happens inside the response; report it as steps and count the cited pages as found.
+    for (const q of out.searches ?? []) {
+      emit({ type: 'search', query: q, why: 'via UiB' });
+      trace.push({ action: 'search', target: q, result: 'via UiB' });
+    }
+    for (const c of out.citations ?? []) searched.set(normUrl(c.url), { title: c.title, url: c.url, snippet: '' });
+    if (out.searches?.length || out.citations?.length) {
+      emit({ type: 'search_done', query: (out.searches ?? []).join(' · ') || 'UiB nettsøk', hits: out.citations ?? [] });
+    }
     const action = parseAction(out.text);
     work.push({ role: 'assistant', content: out.text });
 
@@ -154,10 +196,13 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       emit(finalEvent(action.message, checked.proposals, model, checked.warnings, trace));
       return;
     }
-    if (!web || steps >= MAX_TOOL_STEPS) {
-      work.push({ role: 'user', content: web
-        ? `Du har brukt alle ${MAX_TOOL_STEPS} verktøystegene. Svar nå med {"action": "final", …} basert på det du har funnet.`
-        : 'Nettilgang er ikke tilgjengelig. Svar nå med {"action": "final", …}.' });
+    const allowed = mode === 'search' || (mode === 'hosted' && action.action === 'open');
+    if (!allowed || steps >= MAX_TOOL_STEPS) {
+      work.push({ role: 'user', content: mode === 'none'
+        ? 'Nettilgang er ikke tilgjengelig. Svar nå med {"action": "final", …}.'
+        : steps >= MAX_TOOL_STEPS
+          ? `Du har brukt alle ${MAX_TOOL_STEPS} verktøystegene. Svar nå med {"action": "final", …} basert på det du har funnet.`
+          : 'Bruk det innebygde web_search-verktøyet til å søke. Svar med {"action": "open", …} eller {"action": "final", …}.' });
       continue;
     }
     steps++;

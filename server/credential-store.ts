@@ -18,6 +18,8 @@ interface AiCredentialRow {
   base_url: string;
   secret_ciphertext: string;
   default_model: string | null;
+  /** AI credential only: 'off' | 'web_search' | 'web_search_preview' (missing means default on). */
+  hosted_search?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -31,6 +33,7 @@ export interface CredentialInput {
   /** Omitted on update keeps the stored key. */
   api_key?: string;
   default_model: string | null;
+  hosted_search?: string | null;
 }
 
 export class CredentialStore {
@@ -77,6 +80,7 @@ export class CredentialStore {
       base_url: input.base_url,
       secret_ciphertext: key ? encrypt(this.masterKey, key) : existing!.secret_ciphertext,
       default_model: input.default_model,
+      ...(input.hosted_search !== undefined ? { hosted_search: input.hosted_search } : existing?.hosted_search !== undefined ? { hosted_search: existing.hosted_search } : {}),
       created_at: existing?.created_at ?? now,
       updated_at: now,
     };

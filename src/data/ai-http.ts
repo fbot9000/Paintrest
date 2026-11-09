@@ -1,4 +1,4 @@
-import type { AiCredentialView, AiGateway, AiTestResult, FinalEvent, ResearchEvent, SearchCredentialView } from '../domain/ai';
+import type { AiCredentialView, AiGateway, AiTestResult, FinalEvent, HostedSearchTest, ResearchEvent, SearchCredentialView } from '../domain/ai';
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
@@ -40,6 +40,9 @@ export function httpAiGateway(): AiGateway {
     },
     async test(model) {
       return request<AiTestResult>('POST', '/api/ai/test', { model });
+    },
+    async testHostedSearch(model, tool) {
+      return request<HostedSearchTest>('POST', '/api/ai/test-search', { model, hosted_search: tool });
     },
     async runAgent(input, onEvent, signal) {
       const res = await fetch('/api/agent/run', {

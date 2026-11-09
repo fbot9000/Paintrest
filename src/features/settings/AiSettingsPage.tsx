@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useAi } from '../../app/context';
-import type { AiCredentialView, AiTestResult, SearchCredentialView } from '../../domain/ai';
+import type { AiCredentialView, AiTestResult, HostedSearchSetting, HostedSearchTest, SearchCredentialView } from '../../domain/ai';
 import { Badge, Button, Card, Dialog, ErrorNote, Field, Segmented } from '../../ui/components';
 import './settings.css';
 
@@ -23,6 +23,8 @@ export function AiSettingsPage() {
   const [baseUrl, setBaseUrl] = useState(UIB_BASE_URL);
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState('');
+  const [hosted, setHosted] = useState<HostedSearchSetting>('web_search');
+  const [hostedTest, setHostedTest] = useState<HostedSearchTest | null>(null);
   const [models, setModels] = useState<string[] | null>(null);
   const [busy, setBusy] = useState<null | 'save' | 'models' | 'test' | 'delete'>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +36,7 @@ export function AiSettingsPage() {
     setLabel(c?.label ?? 'UiB');
     setBaseUrl(c?.base_url ?? UIB_BASE_URL);
     setModel(c?.default_model ?? '');
+    setHosted(c?.hosted_search ?? 'web_search');
   };
 
   const refresh = useCallback(async () => {
@@ -68,7 +71,7 @@ export function AiSettingsPage() {
 
   const save = () => run('save', async () => {
     const c = await ai.saveCredential({
-      label, base_url: baseUrl, default_model: model || null,
+      label, base_url: baseUrl, default_model: model || null, hosted_search: hosted,
       ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
     });
     setApiKey('');
@@ -156,6 +159,19 @@ export function AiSettingsPage() {
                   />
                 )}
               </Field>
+              <div className="field">
+                <span className="field-label">Nettsøk via UiB</span>
+                <Segmented
+                  label="Nettsøk via UiB"
+                  value={hosted}
+                  onChange={(v) => { setHosted(v); setHostedTest(null); }}
+                  options={[{ value: 'web_search', label: 'web_search' }, { value: 'web_search_preview', label: 'web_search_preview' }, { value: 'off', label: 'Av' }]}
+                />
+                <p className="small muted">
+                  Lar modellen søke selv gjennom UiB sitt API (OpenAIs innebygde søkeverktøy). Virker det ikke for modellen,
+                  bruker agenten Tavily eller Brave hvis det er satt opp nedenfor, ellers svarer den uten nettsøk.
+                </p>
+              </div>
               <Field label="Standardmodell" hint="Modellen agenten bruker hvis ikke noe annet er valgt.">
                 {(id) => models && models.length > 0 ? (
                   <select id={id} value={model} onChange={(e) => setModel(e.target.value)}>
@@ -175,9 +191,29 @@ export function AiSettingsPage() {
                   onClick={() => run('test', async () => setTest(await ai.test(model || undefined)))}
                   disabled={!!busy || !credential || !(model || credential.default_model)}
                 >{busy === 'test' ? 'Tester …' : 'Test tilkoblingen'}</Button>
+                <Button
+                  onClick={() => run('test', async () => { setHostedTest(null); setHostedTest(await ai.testHostedSearch(model || undefined, hosted === 'off' ? 'web_search' : hosted)); })}
+                  disabled={!!busy || !credential || !(model || credential.default_model)}
+                >{busy === 'test' ? 'Tester …' : 'Test nettsøk via UiB'}</Button>
                 {credential && <Button variant="danger" onClick={() => setConfirmDelete(true)} disabled={!!busy}>Fjern nøkkel</Button>}
               </div>
             </form>
+            {hostedTest && (
+              <div className="test-result" role="status">
+                {hostedTest.citations.length || hostedTest.searches.length
+                  ? <Badge tone="moss">Nettsøk via UiB virker</Badge>
+                  : <Badge tone="warn">Svar uten kilder</Badge>}
+                <span>
+                  {hostedTest.model} med {hostedTest.tool}: {hostedTest.searches.length} søk, {hostedTest.citations.length} kilder på {(hostedTest.latency_ms / 1000).toFixed(1)} s.
+                  {!hostedTest.citations.length && ' Modellen svarte, men uten sitater. Søket er trolig ikke slått på for denne modellen.'}
+                </span>
+                {hostedTest.citations.length > 0 && (
+                  <ul className="sources">
+                    {hostedTest.citations.map((c) => <li key={c.url}><a href={c.url} target="_blank" rel="noreferrer">{c.title}</a></li>)}
+                  </ul>
+                )}
+              </div>
+            )}
             {test && (
               <div className="test-result" role="status">
                 <Badge tone="moss">Tilkoblingen virker</Badge>
@@ -241,12 +277,12 @@ function SearchSettings() {
     <Card>
       <div className="search-settings">
         <div className="status-row">
-          <h3>Nettsøk for agenten</h3>
+          <h3>Reserve: Tavily eller Brave</h3>
           {cred ? <Badge tone="moss">{cred.label} · {cred.key_hint}</Badge> : <Badge>Ikke satt opp</Badge>}
         </div>
         <p className="small muted">
-          Med en søketjeneste kan agenten søke, lese sider og foreslå bilder fra virkelige kilder. Sidene og bildene hentes av
-          Paintrest-serveren på din maskin. Uten søketjeneste svarer agenten bare ut fra det modellen kan fra før.
+          Reserve når nettsøk via UiB er slått av eller ikke virker for modellen. Sidene og bildene hentes uansett av
+          Paintrest-serveren på din maskin, uten nøkkel.
         </p>
         <div className="field">
           <span className="field-label">Søketjeneste</span>

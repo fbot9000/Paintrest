@@ -126,8 +126,11 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
       if (r.status === 'unavailable') setAi('no-server');
       else if (!r.credential) setAi('no-key');
       else { setAi('ready'); setModel(r.credential.default_model); }
+      const uib = r.status === 'ok' && r.credential && r.credential.hosted_search !== 'off';
+      app.ai.getSearchCredential()
+        .then((c) => live && setWeb(uib ? (c ? `UiB, reserve ${c.label}` : 'UiB') : c?.label ?? null))
+        .catch(() => live && setWeb(uib ? 'UiB' : null));
     }).catch(() => live && setAi('no-server'));
-    app.ai.getSearchCredential().then((c) => live && setWeb(c?.label ?? null)).catch(() => undefined);
     return () => { live = false; };
   }, [app.ai]);
 
