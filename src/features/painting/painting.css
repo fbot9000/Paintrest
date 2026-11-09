@@ -125,3 +125,4 @@
   .pm-role { grid-column: 2; }
   .pm-plan { padding: 16px; }
 }
+.pm-ref-link { color: var(--fore); font-weight: 500; }

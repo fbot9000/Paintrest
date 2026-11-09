@@ -70,7 +70,7 @@ function TopBar() {
         {menu && (
           <div className="menu" role="menu">
             <button role="menuitem" type="button" onClick={() => { setMenu(false); navigate('/innstillinger'); }}>
-              AI-nøkkel
+              AI og nettsøk
             </button>
             <button role="menuitem" type="button" onClick={() => { setMenu(false); setConfirm(true); }}>
               Tilbakestill eksempeldata

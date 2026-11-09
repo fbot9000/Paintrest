@@ -38,11 +38,12 @@ export class CredentialStore {
   private masterKey: Buffer;
   private workspaceId: string;
 
-  constructor(dataDir: string, masterKey: Buffer, workspaceId = 'local') {
+  /** `fileName` separates the AI key from the search key; same encryption for both. */
+  constructor(dataDir: string, masterKey: Buffer, workspaceId = 'local', fileName = 'ai_credential.json') {
     this.masterKey = masterKey;
     this.workspaceId = workspaceId;
     mkdirSync(dataDir, { recursive: true, mode: 0o700 });
-    this.file = join(dataDir, 'ai_credential.json');
+    this.file = join(dataDir, fileName);
   }
 
   private read(): AiCredentialRow | null {

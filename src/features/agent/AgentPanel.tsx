@@ -8,8 +8,9 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useApp, useView } from '../../app/context';
 import { matchProduct, planProductRefs, productKey, proposalTitle } from '../../domain/agent';
-import type { CatalogSubjectPayload, PaintPlanPayload } from '../../domain/agent';
-import type { Id, ResearchProposal, Tables } from '../../domain/types';
+import type { CatalogSubjectPayload, PaintPlanPayload, ReferenceSelectionPayload, SourceRef } from '../../domain/agent';
+import type { ResearchEvent } from '../../domain/ai';
+import type { Id, ResearchMessage, ResearchProposal, Tables } from '../../domain/types';
 import { ownershipOf } from '../../domain/views';
 import { runAgentTurn } from '../../data/agent-runner';
 import { Badge, Button, Dialog, ErrorNote, Field, OwnershipFlag, ProductName, Segmented, Stepper, Swatch } from '../../ui/components';
@@ -90,7 +91,11 @@ function researchView(t: Tables, project_id: Id) {
 
 type AiState = 'checking' | 'ready' | 'no-key' | 'no-server';
 
-const PROMPTS = [
+const PROMPTS_WEB = [
+  'Finn ut hvilke miniatyrer som følger med spillet og utvidelsene våre, med kilder. Foreslå de som mangler i katalogen.',
+  'Finn referansebilder av malte versjoner av miniatyrene som mangler bilder. Bruk virkelige kilder.',
+];
+const PROMPTS_OFFLINE = [
   'Kartlegg miniatyrene i spillet. Foreslå de som mangler i katalogen.',
   'Foreslå maleplaner for miniatyrene som ikke har plan. Bruk malinger jeg eier der det går.',
 ];
@@ -104,7 +109,10 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
   const titles = useView((t) => Object.fromEntries((view?.proposals ?? []).map((p) => [p.id, proposalTitle(t, p.result_type, p.payload)])), [view]);
   const [ai, setAi] = useState<AiState>('checking');
   const [model, setModel] = useState<string | null>(null);
+  const [web, setWeb] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [live, setLive] = useState<ResearchEvent[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [review, setReview] = useState<ResearchProposal | null>(null);
   const [showDone, setShowDone] = useState(false);
@@ -119,12 +127,13 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
       else if (!r.credential) setAi('no-key');
       else { setAi('ready'); setModel(r.credential.default_model); }
     }).catch(() => live && setAi('no-server'));
+    app.ai.getSearchCredential().then((c) => live && setWeb(c?.label ?? null)).catch(() => undefined);
     return () => { live = false; };
   }, [app.ai]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [view?.messages.length, busy]);
+  }, [view?.messages.length, busy, live.length]);
 
   useEffect(() => {
     if (ctl.open && ctl.draft) inputRef.current?.focus();
@@ -134,14 +143,20 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
     if (!text.trim() || busy) return;
     setBusy(true);
     setError(null);
+    setLive([]);
+    const ac = new AbortController();
+    abortRef.current = ac;
     try {
       const task = view?.task.id ?? await app.research.startTask(projectId);
       ctl.setDraft('');
-      await runAgentTurn({ store: app.store, research: app.research, agent: app.agent, ai: app.ai }, task, text.trim());
+      await runAgentTurn({ store: app.store, research: app.research, agent: app.agent, ai: app.ai }, task, text.trim(),
+        (e) => setLive((cur) => [...cur, e]), ac.signal);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (!(e instanceof Error && e.name === 'AbortError')) setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+      setLive([]);
+      abortRef.current = null;
     }
   };
 
@@ -172,7 +187,12 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
       <header className="agent-head">
         <div>
           <h2>Researchagent</h2>
-          <span className="agent-sub">{ai === 'ready' ? `UiB · ${model ?? 'ingen standardmodell'}` : ' '}</span>
+          {ai === 'ready' && (
+            <>
+              <span className="agent-sub">UiB · {model ?? 'ingen standardmodell'}</span>
+              <span className="agent-sub">{web ? `Nettsøk: ${web}` : 'Uten nettsøk'}</span>
+            </>
+          )}
         </div>
         <div className="agent-head-actions">
           {view && (
@@ -193,14 +213,15 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
       {ai === 'no-key' && (
         <div className="agent-note">
           <strong>Ingen AI-nøkkel er lagret.</strong>
-          <p>Legg inn UiB-nøkkelen under <Link to="/innstillinger">AI-nøkkel</Link>. Alt annet i appen virker uten AI.</p>
+          <p>Legg inn UiB-nøkkelen under <Link to="/innstillinger">AI og nettsøk</Link>. Alt annet i appen virker uten AI.</p>
         </div>
       )}
 
       <div className="agent-scroll" ref={listRef}>
         <div className="agent-scope">
           <span className="eyebrow">Arbeidskontekst</span>
-          <span>Dette prosjektet. Agenten kan lese prosjektet, miniatyrene, maleplanene og malingene dine, og lage forslag til nye miniatyrer og nye maleplaner.</span>
+          <span>Dette prosjektet. Agenten kan lese prosjektet, miniatyrene, maleplanene og malingene dine{web ? ', søke på nettet og lese sider' : ''}, og lage forslag til nye miniatyrer, referansebilder og maleplaner.</span>
+          {ai === 'ready' && !web && <span>Uten nettsøk bygger agenten bare på det modellen kan fra før. Legg inn en søketjeneste under <Link to="/innstillinger">AI og nettsøk</Link>.</span>}
           {view?.targets.map((r) => (
             <Badge key={r.id} tone={r.stale ? 'warn' : 'moss'}>
               Åpnet for revisjon: {r.subject} v{r.version}{r.stale ? ' (utdatert)' : ''}
@@ -214,13 +235,8 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
           </div>
         )}
 
-        {view?.messages.map((m) => (
-          <div key={m.id} className={`msg msg-${m.role}`}>
-            <span className="msg-who">{m.role === 'user' ? 'Du' : m.role === 'assistant' ? 'Agenten' : 'Paintrest'}</span>
-            <p>{m.body}</p>
-          </div>
-        ))}
-        {busy && <div className="msg msg-assistant msg-busy"><span className="msg-who">Agenten</span><p>Tenker …</p></div>}
+        {view?.messages.map((m) => <Message key={m.id} m={m} />)}
+        {busy && <LiveSteps events={live} onStop={() => abortRef.current?.abort()} />}
 
         {pending.length > 0 && (
           <section className="agent-proposals">
@@ -256,9 +272,9 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
       <ErrorNote error={error} onClose={() => setError(null)} />
 
       <form className="agent-input" onSubmit={(e) => { e.preventDefault(); send(ctl.draft); }}>
-        {ai === 'ready' && !busy && (
+        {ai === 'ready' && !busy && !view?.messages.length && (
           <div className="agent-prompts">
-            {PROMPTS.map((p) => (
+            {(web ? PROMPTS_WEB : PROMPTS_OFFLINE).map((p) => (
               <button key={p} type="button" onClick={() => send(p)}>{p}</button>
             ))}
           </div>
@@ -299,16 +315,19 @@ const EVIDENCE_LABEL = { documented: 'Dokumentert', synthesized: 'Foreslått av 
 function ProposalCard({ p, title, onReview, onReject, onApprove }: {
   p: ResearchProposal; title: string; onReview: () => void; onReject: () => void; onApprove: () => void;
 }) {
-  const isPlan = p.result_type !== 'catalog_subject';
+  const isPlan = p.result_type === 'paint_plan' || p.result_type === 'plan_revision';
+  const isRefs = p.result_type === 'reference_selection';
   const needsProducts = useView((t) => isPlan && planProductRefs(p.payload as PaintPlanPayload).some((r) => !matchProduct(t, r)), [p]);
   return (
     <article className="proposal">
       <div className="proposal-top">
         <span className="mono small">{p.ref}</span>
-        <Badge tone="dark">{p.result_type === 'catalog_subject' ? 'Ny miniatyr' : p.result_type === 'plan_revision' ? 'Ny planversjon' : 'Ny maleplan'}</Badge>
+        <Badge tone="dark">{KIND_LABEL[p.result_type] ?? p.result_type}</Badge>
         <Badge tone={p.evidence === 'unresolved' ? 'warn' : 'neutral'}>{EVIDENCE_LABEL[p.evidence]}</Badge>
       </div>
       <strong>{title}</strong>
+      {p.result_type === 'reference_selection' && <Thumbs payload={p.payload as ReferenceSelectionPayload} />}
+      {p.result_type === 'catalog_subject' && <SourceList sources={(p.payload as CatalogSubjectPayload).sources ?? []} compact />}
       {p.uncertainty.length > 0 && (
         <ul className="proposal-unc">
           {p.uncertainty.slice(0, 3).map((u, i) => <li key={i}>{u.reason}</li>)}
@@ -317,10 +336,10 @@ function ProposalCard({ p, title, onReview, onReject, onApprove }: {
       )}
       {p.last_error && <p className="proposal-err">{p.last_error}</p>}
       <div className="proposal-actions">
-        {isPlan || needsProducts
+        {isPlan || isRefs || needsProducts
           ? <Button variant="primary" onClick={onReview}>Se gjennom</Button>
           : <Button variant="primary" onClick={onApprove}>Godkjenn</Button>}
-        {!isPlan && <Button onClick={onReview}>Rediger</Button>}
+        {!isPlan && !isRefs && <Button onClick={onReview}>Rediger</Button>}
         <Button variant="ghost" onClick={onReject}>Avvis</Button>
       </div>
     </article>
@@ -344,6 +363,9 @@ function ReviewDialog({ proposalId, onClose, onDone }: { proposalId: Id; onClose
   );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const refsPayload = data?.p.result_type === 'reference_selection' ? (data.p.payload as ReferenceSelectionPayload) : null;
+  const [picked, setPicked] = useState<string[]>(() => refsPayload?.images.map((i) => i.image_url) ?? []);
+  const [cover, setCover] = useState(() => !!refsPayload && !data?.t.miniature_subject[refsPayload.subject_id]?.official_asset_id);
   if (!data) return null;
   const { p, t } = data;
 
@@ -352,7 +374,7 @@ function ReviewDialog({ proposalId, onClose, onDone }: { proposalId: Id; onClose
     setError(null);
     try {
       if (catalog) await app.research.editCatalogProposal(p.id, catalog);
-      await app.research.approveProposal(p.id, { product_choices: choices });
+      await app.research.approveProposal(p.id, { product_choices: choices, ...(refsPayload ? { image_urls: picked, set_cover: cover } : {}) });
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -361,7 +383,7 @@ function ReviewDialog({ proposalId, onClose, onDone }: { proposalId: Id; onClose
     }
   };
 
-  const plan = p.result_type !== 'catalog_subject' ? (p.payload as PaintPlanPayload) : null;
+  const plan = p.result_type === 'paint_plan' || p.result_type === 'plan_revision' ? (p.payload as PaintPlanPayload) : null;
   const refs = plan ? planProductRefs(plan) : [];
   const unresolved = refs.filter((r) => !matchProduct(t, r) && !choices[productKey(r)]);
 
@@ -374,8 +396,8 @@ function ReviewDialog({ proposalId, onClose, onDone }: { proposalId: Id; onClose
       footer={<>
         <Button variant="ghost" className="push-left" onClick={async () => { await app.research.rejectProposal(p.id); onDone(); }}>Avvis</Button>
         <Button onClick={onClose}>Lukk</Button>
-        <Button variant="primary" disabled={busy || unresolved.length > 0} onClick={approve}>
-          {busy ? 'Godkjenner …' : p.result_type === 'plan_revision' ? 'Godkjenn ny versjon' : 'Godkjenn'}
+        <Button variant="primary" disabled={busy || unresolved.length > 0 || (!!refsPayload && !picked.length)} onClick={approve}>
+          {busy ? (refsPayload ? 'Henter bilder …' : 'Godkjenner …') : p.result_type === 'plan_revision' ? 'Godkjenn ny versjon' : refsPayload ? `Lagre ${picked.length} bilde${picked.length === 1 ? '' : 'r'}` : 'Godkjenn'}
         </Button>
       </>}
     >
@@ -409,12 +431,42 @@ function ReviewDialog({ proposalId, onClose, onDone }: { proposalId: Id; onClose
             {catalog.count_basis && ` · Antall ${catalog.count_basis === 'documented' ? 'dokumentert' : 'utledet'}`}
           </p>
           {catalog.note && <p>{catalog.note}</p>}
+          <SourceList sources={catalog.sources ?? []} />
+        </div>
+      )}
+
+      {refsPayload && (
+        <div className="review-refs">
+          {refsPayload.note && <p>{refsPayload.note}</p>}
+          <p className="small muted">Bildene er hentet fra sidene agenten åpnet. Kryss av for dem du vil beholde. De lagres som kilder med lenke tilbake til siden.</p>
+          <div className="ref-grid">
+            {refsPayload.images.map((img) => {
+              const on = picked.includes(img.image_url);
+              return (
+                <label key={img.image_url} className={`ref-tile ${on ? 'on' : ''}`}>
+                  <img src={app.ai.imageProxyUrl(img.image_url)} alt={img.caption ?? ''} loading="lazy" />
+                  <span className="ref-cap">
+                    <input type="checkbox" checked={on} onChange={(e) => setPicked((cur) => e.target.checked ? [...cur, img.image_url] : cur.filter((u) => u !== img.image_url))} />
+                    <span>{img.caption ?? 'Uten bildetekst'}</span>
+                  </span>
+                  <a href={img.page_url} target="_blank" rel="noreferrer" className="small" onClick={(e) => e.stopPropagation()}>{img.creator ?? img.site} ↗</a>
+                </label>
+              );
+            })}
+          </div>
+          {!t.miniature_subject[refsPayload.subject_id]?.official_asset_id && (
+            <label className="replace">
+              <input type="checkbox" checked={cover} onChange={(e) => setCover(e.target.checked)} />
+              Bruk det første valgte bildet som bilde for miniatyren
+            </label>
+          )}
         </div>
       )}
 
       {plan && (
         <>
           {plan.note && <p>{plan.note}</p>}
+          <SourceList sources={plan.sources ?? []} />
           <div className="review-products">
             <span className="eyebrow">Malinger i planen</span>
             <p className="small muted">Malinger som ikke finnes i katalogen, må kobles til et produkt eller opprettes som ubekreftet før planen kan godkjennes.</p>
@@ -475,4 +527,99 @@ function ReviewDialog({ proposalId, onClose, onDone }: { proposalId: Id; onClose
       <ErrorNote error={error ?? p.last_error ?? null} />
     </Dialog>
   );
+}
+
+// ---------- Små visninger ----------
+
+const KIND_LABEL: Record<string, string> = {
+  catalog_subject: 'Ny miniatyr', paint_plan: 'Ny maleplan', plan_revision: 'Ny planversjon', reference_selection: 'Referansebilder',
+};
+
+function Message({ m }: { m: ResearchMessage }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`msg msg-${m.role}`}>
+      <span className="msg-who">{m.role === 'user' ? 'Du' : m.role === 'assistant' ? 'Agenten' : 'Paintrest'}</span>
+      <p>{m.body}</p>
+      {m.trace && m.trace.length > 0 && (
+        <div className="trace">
+          <button type="button" className="agent-link small" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+            {open ? 'Skjul' : 'Vis'} hvordan agenten fant dette ({m.trace.length} steg)
+          </button>
+          {open && (
+            <ol>
+              {m.trace.map((s, i) => (
+                <li key={i}>
+                  <span className="mono">{s.action === 'search' ? 'Søk' : 'Les'}</span>{' '}
+                  {s.action === 'open' ? <a href={s.target} target="_blank" rel="noreferrer">{shortUrl(s.target)}</a> : <em>«{s.target}»</em>}
+                  <span className="trace-res"> — {s.result}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LiveSteps({ events, onStop }: { events: ResearchEvent[]; onStop: () => void }) {
+  const lines = events.flatMap((e): { key: string; text: ReactNode; state: 'run' | 'ok' | 'err' }[] => {
+    switch (e.type) {
+      case 'status': return [{ key: 's' + e.text, text: e.text, state: 'ok' }];
+      case 'search': return [{ key: 'q' + e.query, text: <>Søker: <em>«{e.query}»</em></>, state: 'run' }];
+      case 'search_done': return [{ key: 'qd' + e.query, text: <>{e.hits.length} treff for «{e.query}»</>, state: 'ok' }];
+      case 'open': return [{ key: 'o' + e.url, text: <>Leser {shortUrl(e.url)}</>, state: 'run' }];
+      case 'open_done': return [{ key: 'od' + e.url, text: <>{e.title} · {e.image_count} bilder</>, state: 'ok' }];
+      case 'tool_error': return [{ key: 'e' + e.target, text: <>{e.action === 'search' ? 'Søk' : 'Lesing'} feilet: {e.error}</>, state: 'err' }];
+      default: return [];
+    }
+  });
+  return (
+    <div className="msg msg-assistant live">
+      <div className="live-head">
+        <span className="msg-who">Agenten jobber</span>
+        <button type="button" className="agent-link small" onClick={onStop}>Stopp</button>
+      </div>
+      <ol className="live-steps">
+        {lines.length === 0 && <li className="run">Starter …</li>}
+        {lines.map((l, i) => <li key={l.key + i} className={i === lines.length - 1 && l.state === 'run' ? 'run' : l.state}>{l.text}</li>)}
+      </ol>
+    </div>
+  );
+}
+
+function Thumbs({ payload }: { payload: ReferenceSelectionPayload }) {
+  const { ai } = useApp();
+  return (
+    <div className="thumbs">
+      {payload.images.slice(0, 4).map((i) => <img key={i.image_url} src={ai.imageProxyUrl(i.image_url)} alt={i.caption ?? ''} loading="lazy" />)}
+      {payload.images.length > 4 && <span className="small">+{payload.images.length - 4}</span>}
+    </div>
+  );
+}
+
+function SourceList({ sources, compact }: { sources: SourceRef[]; compact?: boolean }) {
+  if (!sources.length) return compact ? null : <p className="small muted">Ingen kilder oppgitt.</p>;
+  return (
+    <ul className={`sources ${compact ? 'compact' : ''}`}>
+      {sources.slice(0, compact ? 2 : 20).map((s) => (
+        <li key={s.url}>
+          <a href={s.url} target="_blank" rel="noreferrer">{s.title}</a>
+          {!compact && <span className="small muted"> · {shortUrl(s.url)}{s.opened ? '' : ' · bare sett i søkeresultat'}</span>}
+        </li>
+      ))}
+      {compact && sources.length > 2 && <li className="small">+{sources.length - 2} kilder</li>}
+    </ul>
+  );
+}
+
+function shortUrl(u: string): string {
+  try {
+    const x = new URL(u);
+    const path = x.pathname.length > 32 ? `${x.pathname.slice(0, 30)}…` : x.pathname;
+    return `${x.hostname.replace(/^www\./, '')}${path === '/' ? '' : path}`;
+  } catch {
+    return u;
+  }
 }

@@ -1,14 +1,14 @@
 import { CommandError } from '../domain/commands';
 import { newId, now } from '../domain/ids';
 import { matchProduct, planProductRefs, productKey } from '../domain/agent';
-import type { CatalogSubjectPayload, NormalisedProposal, PaintPlanPayload, ProductRef } from '../domain/agent';
+import type { CatalogSubjectPayload, NormalisedProposal, PaintPlanPayload, ProductRef, ProposalKind, ReferenceSelectionPayload, SourceRef } from '../domain/agent';
 import type { AgentCommands, ApproveOptions, ProposalWrite, ResearchCommands } from '../domain/research';
 import type { ChangeAction, Id, ResearchProposal, ResultType, Tables } from '../domain/types';
 import { attachedExpansions } from '../domain/views';
 import type { Store } from './store';
 
 /** Result types implemented in this version. See docs/AVVIK.md. */
-export const IMPLEMENTED_TYPES: ResultType[] = ['catalog_subject', 'paint_plan'];
+export const IMPLEMENTED_TYPES: ResultType[] = ['catalog_subject', 'paint_plan', 'reference_selection'];
 
 type Who = { initiated_by: 'user' | 'agent'; task_id?: Id | null; proposal_id?: Id | null };
 
@@ -35,7 +35,7 @@ type ScopeOk = { result_type: ResultType; base_version_id: Id | null };
  * Runs before every agent write and again inside approval.
  * Returns the stored result type (paint_plan or plan_revision) and the base version.
  */
-export function checkScope(t: Tables, task_id: Id, p: { result_type: 'catalog_subject' | 'paint_plan'; payload: unknown }): ScopeOk {
+export function checkScope(t: Tables, task_id: Id, p: { result_type: ProposalKind; payload: unknown }): ScopeOk {
   const task = must(t.research_task[task_id], 'Oppgaven');
   if (task.status !== 'open') throw new CommandError('Oppgaven er lukket');
   const scope = must(t.task_scope[task_id], 'Omfanget');
@@ -48,11 +48,16 @@ export function checkScope(t: Tables, task_id: Id, p: { result_type: 'catalog_su
     return { result_type: 'catalog_subject', base_version_id: null };
   }
 
-  const payload = p.payload as PaintPlanPayload;
+  const payload = p.payload as PaintPlanPayload | ReferenceSelectionPayload;
   const subject = t.miniature_subject[payload.subject_id];
   // Payload may not carry another project's subject (skjema §7).
   if (!subject || subject.deleted_at || subject.project_id !== project.id) {
-    throw new CommandError('Maleplanen gjelder en miniatyr utenfor prosjektet');
+    throw new CommandError('Forslaget gjelder en miniatyr utenfor prosjektet');
+  }
+  if (p.result_type === 'reference_selection') {
+    // New source links on a subject inside the work project (datamodell v3 §12).
+    if (!types.has('reference_selection')) throw new CommandError('Oppgaven tillater ikke bildeutvalg');
+    return { result_type: 'reference_selection', base_version_id: null };
   }
   if (!subject.current_plan_version_id) {
     if (!types.has('paint_plan')) throw new CommandError('Oppgaven tillater ikke nye maleplaner');
@@ -73,11 +78,11 @@ export function checkScope(t: Tables, task_id: Id, p: { result_type: 'catalog_su
 export function createAgentCommands(store: Store): AgentCommands {
   const tx = store.transaction.bind(store);
   return {
-    addAssistantMessage(task_id, body, model_id) {
+    addAssistantMessage(task_id, body, model_id, trace) {
       return tx((t) => {
         must(t.research_task[task_id], 'Oppgaven');
         const id = newId();
-        t.research_message[id] = { id, task_id, role: 'assistant', body, created_at: now(), model_id };
+        t.research_message[id] = { id, task_id, role: 'assistant', body, created_at: now(), model_id, ...(trace?.length ? { trace } : {}) };
         return id;
       });
     },
@@ -134,7 +139,12 @@ export function createAgentCommands(store: Store): AgentCommands {
 
 // ---------- Brukerens kommandoer ----------
 
-export function createResearchCommands(store: Store): ResearchCommands {
+export interface ResearchDeps {
+  /** Downloads an image found by the agent (through the server, which checks the address). */
+  fetchImage?: (url: string) => Promise<Blob>;
+}
+
+export function createResearchCommands(store: Store, deps: ResearchDeps = {}): ResearchCommands {
   const tx = store.transaction.bind(store);
 
   return {
@@ -212,7 +222,8 @@ export function createResearchCommands(store: Store): ResearchCommands {
 
     async approveProposal(proposal_id, opts: ApproveOptions = {}) {
       try {
-        tx((t, ws) => approve(t, ws, proposal_id, opts));
+        const files = await downloadSelected(store, deps, proposal_id, opts);
+        tx((t, ws) => approve(t, ws, proposal_id, opts, files));
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         tx((t) => {
@@ -236,11 +247,69 @@ export function createResearchCommands(store: Store): ResearchCommands {
 }
 
 /** Godkjenning (skjema §8). One proposal, one transaction. */
-function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions): void {
+type Downloaded = Record<string, { file_id: Id; media_type: string; byte_size: number }>;
+
+/**
+ * Images are fetched before the transaction so that the transaction itself
+ * stays synchronous and all-or-nothing. A failed download stops approval
+ * and names the image, so the user can deselect it.
+ */
+async function downloadSelected(store: Store, deps: ResearchDeps, proposal_id: Id, opts: ApproveOptions): Promise<Downloaded> {
+  const p = store.getTables().research_proposal[proposal_id];
+  if (!p || p.result_type !== 'reference_selection') return {};
+  if (!deps.fetchImage) throw new CommandError('Bildene kan ikke hentes uten Paintrest-serveren');
+  const payload = p.payload as ReferenceSelectionPayload;
+  const wanted = payload.images.filter((i) => !opts.image_urls || opts.image_urls.includes(i.image_url));
+  if (!wanted.length) throw new CommandError('Velg minst ett bilde');
+  const out: Downloaded = {};
+  const failed: string[] = [];
+  for (const img of wanted) {
+    try {
+      const blob = await deps.fetchImage(img.image_url);
+      const file_id = newId();
+      await store.persistence.putBlob(file_id, blob);
+      out[img.image_url] = { file_id, media_type: blob.type, byte_size: blob.size };
+    } catch (e) {
+      failed.push(`${img.caption ?? img.image_url} (${e instanceof Error ? e.message : String(e)})`);
+    }
+  }
+  if (failed.length) {
+    await Promise.all(Object.values(out).map((f) => store.persistence.deleteBlob(f.file_id)));
+    throw new CommandError(`Kunne ikke hente ${failed.length} bilde(r): ${failed.join('; ')}. Fjern haken og prøv igjen.`);
+  }
+  return out;
+}
+
+/** Reuses a kept source with the same URL, otherwise creates one (retention kept on approval, skjema §8 step 6). */
+function sourceFor(t: Tables, ws: Id, ref: { url: string; title: string; creator: string | null; kind: 'gallery' | 'article' }, who: Who): Id {
+  const existing = Object.values(t.source).find((x) => !x.deleted_at && x.url === ref.url);
+  if (existing) {
+    existing.retention = 'kept';
+    return existing.id;
+  }
+  const id = newId();
+  t.source[id] = {
+    id, workspace_id: ws, kind: ref.kind, title: ref.title, creator: ref.creator, url: ref.url, locator: null,
+    analysis_state: 'stored', retention: 'kept', created_by_task_id: who.task_id ?? null, created_at: now(), deleted_at: null,
+  };
+  record(t, ws, 'source', id, 'create', who);
+  return id;
+}
+
+function linkEvidence(t: Tables, ws: Id, sources: SourceRef[], subject_id: Id, who: Who) {
+  for (const s of sources) {
+    const source_id = sourceFor(t, ws, { url: s.url, title: s.title, creator: s.author, kind: 'article' }, who);
+    const id = newId();
+    t.source_link[id] = { id, source_id, target_type: 'subject', target_id: subject_id, use: 'evidence', layer_id: null, deleted_at: null };
+    record(t, ws, 'source_link', id, 'attach', who);
+  }
+}
+
+function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions, files: Downloaded = {}): void {
   const p = must(t.research_proposal[proposal_id], 'Forslaget');
   if (p.decision !== 'pending') throw new CommandError('Forslaget er allerede behandlet');
   const who: Who = { initiated_by: 'agent', task_id: p.task_id, proposal_id };
-  const kind = p.result_type === 'catalog_subject' ? 'catalog_subject' : 'paint_plan';
+  const kind: ProposalKind = p.result_type === 'catalog_subject' || p.result_type === 'reference_selection' ? p.result_type : 'paint_plan';
   const scope = checkScope(t, p.task_id, { result_type: kind, payload: p.payload });
   const project_id = t.task_scope[p.task_id]!.work_project_id!;
 
@@ -262,6 +331,35 @@ function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions): void
       current_plan_version_id: null, deleted_at: null,
     };
     record(t, ws, 'miniature_subject', id, 'create', who);
+    linkEvidence(t, ws, c.sources ?? [], id, who);
+  } else if (kind === 'reference_selection') {
+    const r = p.payload as ReferenceSelectionPayload;
+    const s = t.miniature_subject[r.subject_id]!;
+    const chosen = r.images.filter((i) => files[i.image_url]);
+    const byPage = new Map<string, typeof chosen>();
+    for (const img of chosen) byPage.set(img.page_url, [...(byPage.get(img.page_url) ?? []), img]);
+    let firstAsset: Id | null = null;
+    for (const [page_url, imgs] of byPage) {
+      const first = imgs[0]!;
+      const source_id = sourceFor(t, ws, { url: page_url, title: first.page_title, creator: first.creator ?? first.site, kind: 'gallery' }, who);
+      const link_id = newId();
+      t.source_link[link_id] = { id: link_id, source_id, target_type: 'subject', target_id: s.id, use: 'visual_reference', layer_id: null, deleted_at: null };
+      const startPos = Object.values(t.source_asset).filter((a) => a.source_id === source_id).length;
+      imgs.forEach((img, i) => {
+        const f = files[img.image_url]!;
+        t.stored_file[f.file_id] = {
+          id: f.file_id, workspace_id: ws, purpose: 'source_asset', storage_key: f.file_id,
+          media_type: f.media_type, byte_size: f.byte_size, created_at: now(), deleted_at: null,
+        };
+        const asset_id = newId();
+        // locator keeps the original image address, so the picture can be traced back.
+        t.source_asset[asset_id] = { id: asset_id, source_id, position: startPos + i, locator: img.image_url, caption: img.caption, file_id: f.file_id, deleted_at: null };
+        t.source_link_asset.push({ link_id, source_asset_id: asset_id });
+        firstAsset ??= asset_id;
+      });
+      record(t, ws, 'source_link', link_id, 'attach', who);
+    }
+    if (opts.set_cover && firstAsset && !s.official_asset_id) s.official_asset_id = firstAsset;
   } else {
     const plan = p.payload as PaintPlanPayload;
     const s = t.miniature_subject[plan.subject_id]!;

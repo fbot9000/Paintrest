@@ -12,6 +12,10 @@ import type { Id } from './types';
 export interface ApproveOptions {
   /** productKey → existing product id, or 'create' to create an unconfirmed product. */
   product_choices?: Record<string, Id | 'create'>;
+  /** reference_selection: the images the user kept (default: all). */
+  image_urls?: string[];
+  /** reference_selection: use the first image as the miniature's picture if it has none. */
+  set_cover?: boolean;
 }
 
 export interface ResearchCommands {
@@ -27,7 +31,7 @@ export interface ResearchCommands {
 export type ProposalWrite = { ok: true; id: Id; ref: string; updated: boolean } | { ok: false; reason: string };
 
 export interface AgentCommands {
-  addAssistantMessage(task_id: Id, body: string, model_id: string | null): Id;
+  addAssistantMessage(task_id: Id, body: string, model_id: string | null, trace?: { action: 'search' | 'open'; target: string; result: string }[]): Id;
   addSystemMessage(task_id: Id, body: string): Id;
   /** Creates a draft, or updates the agent's own pending draft when `update_of` names one. */
   writeProposal(task_id: Id, p: NormalisedProposal, provider: string, model_id: string): ProposalWrite;

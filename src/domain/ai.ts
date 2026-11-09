@@ -36,12 +36,30 @@ export interface AgentTurnInput {
   model?: string;
 }
 
-export interface AgentTurnResult {
-  message: string;
-  /** Raw proposals from the model; validated on the client against the task scope. */
-  proposals: unknown[];
-  model: string;
-  parse_warning: string | null;
+export interface TraceStep {
+  action: 'search' | 'open';
+  target: string;
+  result: string;
+}
+
+/** One line of the research stream (server/research-agent.ts). */
+export type ResearchEvent =
+  | { type: 'status'; text: string }
+  | { type: 'search'; query: string; why: string | null }
+  | { type: 'search_done'; query: string; hits: { title: string; url: string }[] }
+  | { type: 'open'; url: string; why: string | null }
+  | { type: 'open_done'; url: string; title: string; image_count: number }
+  | { type: 'tool_error'; action: string; target: string; error: string }
+  | { type: 'final'; message: string; proposals: unknown[]; model: string; warnings: string[]; trace: TraceStep[] }
+  | { type: 'error'; error: string };
+
+export type FinalEvent = Extract<ResearchEvent, { type: 'final' }>;
+
+export interface SearchCredentialView {
+  provider: 'tavily' | 'brave';
+  label: string;
+  key_hint: string;
+  updated_at: string;
 }
 
 export interface AiGateway {
@@ -51,5 +69,14 @@ export interface AiGateway {
   deleteCredential(): Promise<void>;
   listModels(): Promise<string[]>;
   test(model?: string): Promise<AiTestResult>;
-  agentTurn(input: AgentTurnInput): Promise<AgentTurnResult>;
+  /** Runs one research turn; `onEvent` receives each step as it happens. */
+  runAgent(input: AgentTurnInput, onEvent: (e: ResearchEvent) => void, signal?: AbortSignal): Promise<FinalEvent>;
+  /** Address the browser can use to show an image found on the web (fetched by the server). */
+  imageProxyUrl(url: string): string;
+  fetchImage(url: string): Promise<Blob>;
+
+  getSearchCredential(): Promise<SearchCredentialView | null>;
+  saveSearchCredential(input: { provider: 'tavily' | 'brave'; api_key?: string }): Promise<SearchCredentialView>;
+  deleteSearchCredential(): Promise<void>;
+  testSearch(query?: string): Promise<{ count: number; first: { title: string; url: string } | null; latency_ms: number }>;
 }

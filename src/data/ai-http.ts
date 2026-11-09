@@ -1,4 +1,4 @@
-import type { AgentTurnResult, AiCredentialView, AiGateway, AiTestResult } from '../domain/ai';
+import type { AiCredentialView, AiGateway, AiTestResult, FinalEvent, ResearchEvent, SearchCredentialView } from '../domain/ai';
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
@@ -41,8 +41,58 @@ export function httpAiGateway(): AiGateway {
     async test(model) {
       return request<AiTestResult>('POST', '/api/ai/test', { model });
     },
-    async agentTurn(input) {
-      return request<AgentTurnResult>('POST', '/api/agent/turn', input);
+    async runAgent(input, onEvent, signal) {
+      const res = await fetch('/api/agent/run', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal,
+      });
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error ?? `Feil ${res.status}`);
+      }
+      // NDJSON: one event per line.
+      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+      let buf = '';
+      let final: FinalEvent | null = null;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (value) buf += value;
+        let nl: number;
+        while ((nl = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (!line) continue;
+          const e = JSON.parse(line) as ResearchEvent;
+          if (e.type === 'error') throw new Error(e.error);
+          if (e.type === 'final') final = e;
+          onEvent(e);
+        }
+        if (done) break;
+      }
+      if (!final) throw new Error('Agenten avsluttet uten svar');
+      return final;
+    },
+    imageProxyUrl(url) {
+      return `/api/research/image?${new URLSearchParams({ url })}`;
+    },
+    async fetchImage(url) {
+      const res = await fetch(`/api/research/image?${new URLSearchParams({ url })}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error ?? `Feil ${res.status}`);
+      }
+      return res.blob();
+    },
+    async getSearchCredential() {
+      return (await request<{ credential: SearchCredentialView | null }>('GET', '/api/search/credential')).credential;
+    },
+    async saveSearchCredential(input) {
+      return (await request<{ credential: SearchCredentialView }>('PUT', '/api/search/credential', input)).credential;
+    },
+    async deleteSearchCredential() {
+      await request('DELETE', '/api/search/credential');
+    },
+    async testSearch(query) {
+      return request('POST', '/api/search/test', { query });
     },
   };
 }

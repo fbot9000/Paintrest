@@ -173,6 +173,7 @@ function References({ view, index, onIndex, onZoom }:
           <p className="pm-ref-caption">
             <strong>{cur.label}</strong>
             <span className="small muted">{cur.source.title}{cur.source.creator ? ` · ${cur.source.creator}` : ''}</span>
+            {cur.source.url && <a className="small pm-ref-link" href={cur.source.url} target="_blank" rel="noreferrer">Åpne kilden ↗</a>}
           </p>
           {refs.length > 1 && (
             <div className="pm-thumbs">

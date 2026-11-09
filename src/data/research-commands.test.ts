@@ -12,7 +12,12 @@ async function setup() {
   const store = new Store(await buildSampleData(p), p);
   const t0 = store.getTables();
   const project = Object.values(t0.project).find((x) => t0.game[x.game_id]!.primary_name.startsWith('Avalon'))!;
-  const research = createResearchCommands(store);
+  const research = createResearchCommands(store, {
+    fetchImage: async (url) => {
+      if (url.includes('broken')) throw new Error('404');
+      return new Blob(['img'], { type: 'image/jpeg' });
+    },
+  });
   const agent = createAgentCommands(store);
   const task = await research.startTask(project.id);
   const subject = (name: string) => Object.values(store.getTables().miniature_subject).find((s) => s.name === name)!;
@@ -41,7 +46,7 @@ describe('normalisering av modellsvar', () => {
 describe('agentens omfang (skjema §7)', () => {
   it('kan foreslå miniatyrer og plan for figur uten plan', async () => {
     const { agent, task, subject } = await setup();
-    expect(agent.writeProposal(task, { result_type: 'catalog_subject', update_of: null, evidence: 'synthesized', uncertainty: [], payload: { name: 'Tåkeulv', grouping: 'group', physical_count: 4, expansion_name: 'Myths & Monsters', category_label: null, count_basis: null, grouping_basis: 'inferred', note: null } }, 'uib', 'm').ok).toBe(true);
+    expect(agent.writeProposal(task, { result_type: 'catalog_subject', update_of: null, evidence: 'synthesized', uncertainty: [], payload: { name: 'Tåkeulv', grouping: 'group', physical_count: 4, expansion_name: 'Myths & Monsters', category_label: null, count_basis: null, grouping_basis: 'inferred', note: null, sources: [] } }, 'uib', 'm').ok).toBe(true);
     expect(agent.writeProposal(task, plan(subject('The Ancient One').id), 'uib', 'm').ok).toBe(true);
   });
 
@@ -111,13 +116,53 @@ describe('godkjenning (skjema §8)', () => {
   });
 });
 
+describe('bildeutvalg fra nettet', () => {
+  const sel = (subject_id: string, extra: { image_url: string }[] = []): NormalisedProposal => ({
+    result_type: 'reference_selection', update_of: null, evidence: 'documented', uncertainty: [],
+    payload: { subject_id, note: null, images: [
+      { image_url: 'https://gallery.example/a.jpg', page_url: 'https://gallery.example/druids', page_title: 'Druids painted', site: 'gallery.example', creator: 'Painter Pete', caption: 'Forfra' },
+      { image_url: 'https://gallery.example/b.jpg', page_url: 'https://gallery.example/druids', page_title: 'Druids painted', site: 'gallery.example', creator: 'Painter Pete', caption: 'Bakfra' },
+      ...extra.map((e) => ({ ...e, page_url: 'https://other.example/p', page_title: 'Other', site: 'other.example', creator: null, caption: null })),
+    ] },
+  });
+
+  it('lagrer kilde, bilder og lenke til miniatyren, og kan sette miniatyrbilde', async () => {
+    const { store, agent, research, task, subject } = await setup();
+    const id = (await import('./research-commands')).IMPLEMENTED_TYPES;
+    expect(id).toContain('reference_selection');
+    const w = agent.writeProposal(task, sel(subject('Druid Mistwalker').id), 'uib', 'm');
+    if (!w.ok) throw new Error(w.reason);
+    await research.approveProposal(w.id, { image_urls: ['https://gallery.example/a.jpg'], set_cover: false });
+    const t = store.getTables();
+    const src = Object.values(t.source).find((x) => x.url === 'https://gallery.example/druids')!;
+    expect(src).toMatchObject({ retention: 'kept', creator: 'Painter Pete', title: 'Druids painted' });
+    const assets = Object.values(t.source_asset).filter((a) => a.source_id === src.id);
+    expect(assets).toHaveLength(1);
+    expect(assets[0]!.locator).toBe('https://gallery.example/a.jpg');
+    expect(Object.values(t.source_link).some((l) => l.source_id === src.id && l.target_id === subject('Druid Mistwalker').id && l.use === 'visual_reference')).toBe(true);
+  });
+
+  it('feilet nedlasting stopper godkjenningen og lagrer ingenting', async () => {
+    const { store, agent, research, task, subject, cmd, project } = await setup();
+    await cmd.createSubject(project.id, { name: 'Tåkeulv' });
+    const w = agent.writeProposal(task, sel(subject('Tåkeulv').id, [{ image_url: 'https://other.example/broken.jpg' }]), 'uib', 'm');
+    if (!w.ok) throw new Error(w.reason);
+    const before = Object.keys(store.getTables().source).length;
+    await expect(research.approveProposal(w.id)).rejects.toThrow(/Kunne ikke hente 1 bilde/);
+    expect(Object.keys(store.getTables().source).length).toBe(before);
+    await research.approveProposal(w.id, { image_urls: ['https://gallery.example/a.jpg', 'https://gallery.example/b.jpg'], set_cover: true });
+    const s = subject('Tåkeulv');
+    expect(store.getTables().source_asset[s.official_asset_id!]!.locator).toBe('https://gallery.example/a.jpg');
+  });
+});
+
 describe('kontekst og migrering', () => {
   it('konteksten viser figurer med korte referanser og eide malinger', async () => {
     const { store, task } = await setup();
     const ctx = buildAgentContext(store.getTables(), task);
     expect(Object.keys(ctx.subjectRefs)).toContain('M1');
     expect(JSON.stringify(ctx.data)).toContain('Caliban Green');
-    expect(ctx.allowedTypes).toEqual(['catalog_subject', 'paint_plan']);
+    expect(ctx.allowedTypes).toEqual(['catalog_subject', 'paint_plan', 'reference_selection']);
   });
 
   it('migrerer v1-data uten å miste prosjekter', async () => {

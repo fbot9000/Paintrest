@@ -8,6 +8,7 @@ import { createHandler, normaliseBaseUrl } from './app.ts';
 import { CredentialStore } from './credential-store.ts';
 import { decrypt, encrypt, loadOrCreateMasterKey } from './crypto.ts';
 import { ResponsesProvider } from './provider.ts';
+import { WebSearch } from './search.ts';
 
 const SECRET = 'sk-test-HEMMELIG-1234567890';
 
@@ -46,8 +47,13 @@ beforeAll(async () => {
   await new Promise<void>((r) => upstream.listen(0, '127.0.0.1', r));
   upstreamUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/v1`;
   dataDir = mkdtempSync(join(tmpdir(), 'paintrest-'));
-  const store = new CredentialStore(dataDir, loadOrCreateMasterKey(dataDir));
-  app.on('request', createHandler(store, new ResponsesProvider(store)));
+  const key = loadOrCreateMasterKey(dataDir);
+  const store = new CredentialStore(dataDir, key);
+  const searchStore = new CredentialStore(dataDir, key, 'local', 'search_credential.json');
+  app.on('request', createHandler({
+    aiStore: store, provider: new ResponsesProvider(store), searchStore, search: new WebSearch(searchStore),
+    openPage: async () => { throw new Error('not used'); }, getImage: async () => { throw new Error('not used'); },
+  }));
   await new Promise<void>((r) => app.listen(0, '127.0.0.1', r));
   api = `http://127.0.0.1:${(app.address() as AddressInfo).port}`;
 });
@@ -123,5 +129,19 @@ describe('nøkkel-API', () => {
     await call('DELETE', '/api/ai/credential');
     expect((await call('GET', '/api/ai/credential')).json.credential).toBeNull();
     expect((await call('POST', '/api/ai/test', {})).status).toBe(400);
+  });
+});
+
+describe('søkenøkkel', () => {
+  it('lagres separat og returneres aldri', async () => {
+    const r = await call('PUT', '/api/search/credential', { provider: 'tavily', api_key: 'tvly-HEMMELIG-9999' });
+    expect(r.status).toBe(200);
+    expect(r.text).not.toContain('tvly-HEMMELIG-9999');
+    expect(r.json.credential.provider).toBe('tavily');
+    expect(readFileSync(join(dataDir, 'search_credential.json'), 'utf8')).not.toContain('tvly-HEMMELIG-9999');
+  });
+
+  it('bytte av tjeneste krever ny nøkkel', async () => {
+    expect((await call('PUT', '/api/search/credential', { provider: 'brave' })).status).toBe(400);
   });
 });

@@ -27,10 +27,11 @@ async function boot() {
   const store = new Store(state, persistence);
   if (!migrated || migrated !== loaded) await persistence.save(state).catch(() => undefined);
   const cmd = createLocalCommands(store);
+  const ai = httpAiGateway();
 
   root.render(
     <StrictMode>
-      <AppProvider store={store} cmd={cmd} ai={httpAiGateway()} research={createResearchCommands(store)} agent={createAgentCommands(store)}>
+      <AppProvider store={store} cmd={cmd} ai={ai} research={createResearchCommands(store, { fetchImage: ai.fetchImage })} agent={createAgentCommands(store)}>
         <App />
       </AppProvider>
     </StrictMode>,

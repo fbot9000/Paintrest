@@ -417,6 +417,8 @@ export interface ResearchMessage {
   created_at: Timestamp;
   /** PROTOTYPE: which model answered (skjema stores provider/model on proposals only). */
   model_id?: string | null;
+  /** PROTOTYPE: the searches and pages behind an answer, shown as «Slik fant agenten dette». */
+  trace?: { action: 'search' | 'open'; target: string; result: string }[];
 }
 
 export type Evidence = 'documented' | 'synthesized' | 'unresolved';

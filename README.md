@@ -49,6 +49,16 @@ Panelet til høyre i hvert prosjekt. Det bruker nøkkelen og standardmodellen fr
 - Hvert forslag godkjennes for seg i én transaksjon. Maling som ikke finnes i katalogen, må du koble til et produkt eller opprette som ubekreftet før planen kan godkjennes. Er planen endret siden forslaget ble laget, stopper godkjenningen.
 - Forslag som bryter omfanget, avvises før de lagres, og panelet sier hvorfor.
 
+## Research på nettet
+
+Under «⋯ → AI og nettsøk» legger du inn en nøkkel for **Tavily** (anbefalt, har en gratis månedskvote) eller **Brave Search**. Da kan agenten:
+
+- søke på nettet og lese sider (serveren henter dem og trekker ut tekst og bilder)
+- foreslå **miniatyrer med kilder** (`catalog_subject` med `sources`)
+- foreslå **referansebilder** (`reference_selection`) som du krysser av for. Bildene lagres som kilder med lenke tilbake til siden, og vises i Painting Mode med «Åpne kilden ↗».
+
+Panelet viser hvert søk og hver side mens agenten jobber, og du kan stoppe den. Under svaret kan du se hvordan agenten fant det. Serveren fjerner bilder og kilder agenten ikke faktisk har åpnet, og sier fra i panelet.
+
 ## Dette er med
 
 | Bit | Innhold |

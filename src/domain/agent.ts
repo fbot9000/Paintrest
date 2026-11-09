@@ -16,6 +16,30 @@ export interface ProductRef {
   name: string;
 }
 
+/** A web page the agent searched or opened (verified on the server). */
+export interface SourceRef {
+  url: string;
+  title: string;
+  author: string | null;
+  /** True when the agent opened the page, not only saw it in search results. */
+  opened: boolean;
+}
+
+export interface ReferenceImage {
+  image_url: string;
+  page_url: string;
+  page_title: string;
+  site: string;
+  creator: string | null;
+  caption: string | null;
+}
+
+export interface ReferenceSelectionPayload {
+  subject_id: Id;
+  note: string | null;
+  images: ReferenceImage[];
+}
+
 export interface CatalogSubjectPayload {
   name: string;
   grouping: Grouping;
@@ -25,6 +49,7 @@ export interface CatalogSubjectPayload {
   count_basis: 'documented' | 'inferred' | null;
   grouping_basis: 'documented' | 'inferred' | null;
   note: string | null;
+  sources: SourceRef[];
 }
 
 export interface PlanMaterialPayload {
@@ -49,6 +74,7 @@ export interface PaintPlanPayload {
   subject_id: Id;
   elements: PlanElementPayload[];
   note: string | null;
+  sources?: SourceRef[];
 }
 
 /** What the server hands back for each proposal, before validation. */
@@ -61,12 +87,14 @@ export interface RawProposal {
 }
 
 export interface NormalisedProposal {
-  result_type: 'catalog_subject' | 'paint_plan';
+  result_type: ProposalKind;
   update_of: string | null;
   evidence: Evidence;
   uncertainty: Uncertainty[];
-  payload: CatalogSubjectPayload | PaintPlanPayload;
+  payload: CatalogSubjectPayload | PaintPlanPayload | ReferenceSelectionPayload;
 }
+
+export type ProposalKind = 'catalog_subject' | 'paint_plan' | 'reference_selection';
 
 const ROLES: MaterialRole[] = ['base', 'shade', 'layer', 'highlight', 'wash', 'glaze', 'mix', 'other'];
 const EVIDENCE: Evidence[] = ['documented', 'synthesized', 'unresolved'];
@@ -107,6 +135,7 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
           count_basis: basis(o.count_basis),
           grouping_basis: basis(o.grouping_basis),
           note: str(o.note).trim() || null,
+          sources: sourceRefs(o.sources),
         },
       },
     };
@@ -144,7 +173,28 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
       };
     });
     if (!elements.length) return { ok: false, reason: 'Maleplanen har ingen deler' };
-    return { ok: true, value: { ...common, result_type: 'paint_plan', payload: { subject_id, elements, note: str(o.note).trim() || null } } };
+    return { ok: true, value: { ...common, result_type: 'paint_plan', payload: { subject_id, elements, note: str(o.note).trim() || null, sources: sourceRefs(o.sources) } } };
+  }
+
+  if (raw.type === 'reference_selection') {
+    const ref = str(o.subject).trim();
+    const subject_id = subjectRefs[ref] ?? subjectRefs[ref.toUpperCase()];
+    if (!subject_id) return { ok: false, reason: `Bildeutvalget viser til en ukjent miniatyr (${ref || 'ingen'})` };
+    const images: ReferenceImage[] = arr(o.images).flatMap((i) => {
+      const io = obj(i);
+      const image_url = str(io.image_url).trim();
+      const page_url = str(io.page_url).trim();
+      if (!/^https?:\/\//.test(image_url) || !/^https?:\/\//.test(page_url)) return [];
+      return [{
+        image_url, page_url,
+        page_title: str(io.page_title).trim() || page_url,
+        site: str(io.site).trim() || hostOf(page_url),
+        creator: str(io.creator).trim() || null,
+        caption: str(io.caption).trim() || null,
+      }];
+    });
+    if (!images.length) return { ok: false, reason: 'Bildeutvalget har ingen gyldige bilder' };
+    return { ok: true, value: { ...common, result_type: 'reference_selection', payload: { subject_id, images, note: str(o.note).trim() || null } } };
   }
 
   return { ok: false, reason: `Ukjent forslagstype (${String(raw.type)})` };
@@ -216,6 +266,8 @@ export function buildAgentContext(t: Tables, task_id: Id): AgentContext {
       physical_count: s.physical_count,
       expansion: expansions.find((e) => e.id === s.expansion_id)?.name ?? null,
       category: s.category_label,
+      reference_images: Object.values(t.source_link).filter((l) => !l.deleted_at && l.target_type === 'subject' && l.target_id === s.id && l.use === 'visual_reference').length
+        + (s.official_asset_id ? 1 : 0),
       plan: pv
         ? {
             version: pv.version_number,
@@ -268,6 +320,10 @@ export function proposalTitle(t: Tables, type: ResultType, payload: unknown): st
     const p = payload as CatalogSubjectPayload;
     return `${p.name} (${p.grouping === 'group' ? `gruppe, ${p.physical_count}` : 'enkeltfigur'})`;
   }
+  if (type === 'reference_selection') {
+    const p = payload as ReferenceSelectionPayload;
+    return `${p.images.length} referansebilde${p.images.length === 1 ? '' : 'r'} for ${t.miniature_subject[p.subject_id]?.name ?? 'ukjent miniatyr'}`;
+  }
   if (type === 'paint_plan' || type === 'plan_revision') {
     const p = payload as PaintPlanPayload;
     return `Maleplan for ${t.miniature_subject[p.subject_id]?.name ?? 'ukjent miniatyr'}`;
@@ -289,6 +345,17 @@ function arr(v: unknown): unknown[] {
 }
 function str(v: unknown): string {
   return typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
+}
+function sourceRefs(v: unknown): SourceRef[] {
+  return arr(v).flatMap((x) => {
+    const o = obj(x);
+    const url = str(o.url).trim();
+    if (!/^https?:\/\//.test(url)) return [];
+    return [{ url, title: str(o.title).trim() || url, author: str(o.author).trim() || null, opened: o.opened === true }];
+  });
+}
+function hostOf(u: string): string {
+  try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; }
 }
 function basis(v: unknown): 'documented' | 'inferred' | null {
   return v === 'documented' || v === 'inferred' ? v : null;

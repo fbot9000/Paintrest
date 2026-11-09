@@ -4,8 +4,8 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useAi } from '../../app/context';
-import type { AiCredentialView, AiTestResult } from '../../domain/ai';
-import { Badge, Button, Card, Dialog, ErrorNote, Field } from '../../ui/components';
+import type { AiCredentialView, AiTestResult, SearchCredentialView } from '../../domain/ai';
+import { Badge, Button, Card, Dialog, ErrorNote, Field, Segmented } from '../../ui/components';
 import './settings.css';
 
 /** UiB's Responses API (oppgitt av brukeren 9. november 2026). */
@@ -98,7 +98,7 @@ export function AiSettingsPage() {
       <div className="page-head">
         <div>
           <span className="eyebrow">Innstillinger</span>
-          <h1>AI-nøkkel</h1>
+          <h1>AI og nettsøk</h1>
           <p className="muted">Paintrest virker fullt ut uten AI. Nøkkelen trengs bare for researchagenten.</p>
         </div>
       </div>
@@ -188,6 +188,8 @@ export function AiSettingsPage() {
         </>
       )}
 
+      {load.state === 'ready' && <SearchSettings />}
+
       <Dialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
@@ -214,4 +216,61 @@ export function AiSettingsPage() {
 
 function msg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+/** Search key for the agent's web research. Stored and encrypted on the server like the AI key. */
+function SearchSettings() {
+  const ai = useAi();
+  const [cred, setCred] = useState<SearchCredentialView | null | undefined>(undefined);
+  const [provider, setProvider] = useState<'tavily' | 'brave'>('tavily');
+  const [key, setKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    ai.getSearchCredential().then((c) => { setCred(c); if (c) setProvider(c.provider); }).catch((e) => setError(msg(e)));
+  }, [ai]);
+
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true); setError(null); setResult(null);
+    try { await fn(); } catch (e) { setError(msg(e)); } finally { setBusy(false); }
+  };
+
+  return (
+    <Card>
+      <div className="search-settings">
+        <div className="status-row">
+          <h3>Nettsøk for agenten</h3>
+          {cred ? <Badge tone="moss">{cred.label} · {cred.key_hint}</Badge> : <Badge>Ikke satt opp</Badge>}
+        </div>
+        <p className="small muted">
+          Med en søketjeneste kan agenten søke, lese sider og foreslå bilder fra virkelige kilder. Sidene og bildene hentes av
+          Paintrest-serveren på din maskin. Uten søketjeneste svarer agenten bare ut fra det modellen kan fra før.
+        </p>
+        <div className="field">
+          <span className="field-label">Søketjeneste</span>
+          <Segmented label="Søketjeneste" value={provider} onChange={setProvider}
+            options={[{ value: 'tavily', label: 'Tavily' }, { value: 'brave', label: 'Brave Search' }]} />
+        </div>
+        <Field label="Nøkkel" hint={cred && cred.provider === provider ? `En nøkkel er lagret (${cred.key_hint}). La feltet stå tomt for å beholde den.` : 'Lim inn API-nøkkelen fra søketjenesten.'}>
+          {(id) => <input id={id} type="password" value={key} onChange={(e) => setKey(e.target.value)} autoComplete="off" spellCheck={false} placeholder="Lim inn nøkkelen" />}
+        </Field>
+        <div className="settings-actions">
+          <Button variant="primary" disabled={busy || (!key.trim() && (!cred || cred.provider !== provider))} onClick={() => run(async () => {
+            setCred(await ai.saveSearchCredential({ provider, ...(key.trim() ? { api_key: key.trim() } : {}) }));
+            setKey('');
+            setResult('Lagret.');
+          })}>Lagre</Button>
+          <Button disabled={busy || !cred} onClick={() => run(async () => {
+            const r = await ai.testSearch('Zombicide miniatures painted');
+            setResult(`Søket virker: ${r.count} treff på ${(r.latency_ms / 1000).toFixed(1)} s${r.first ? `, første: ${r.first.title}` : ''}.`);
+          })}>{busy ? 'Vent …' : 'Test søket'}</Button>
+          {cred && <Button variant="danger" disabled={busy} onClick={() => run(async () => { await ai.deleteSearchCredential(); setCred(null); })}>Fjern</Button>}
+        </div>
+        {result && <p className="notice" role="status">{result}</p>}
+        <ErrorNote error={error} onClose={() => setError(null)} />
+      </div>
+    </Card>
+  );
 }

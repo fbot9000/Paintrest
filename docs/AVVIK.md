@@ -18,6 +18,9 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 12. **Omfanget sjekkes i klienten.** Prosjektdataene ligger i nettleseren, så sjekkene i §7 og godkjenningen i §8 kjører i det lokale kommandolaget (`src/data/research-commands.ts`). Serveren kaller bare modellen og skriver ingenting. Når databasen kommer, flyttes sjekkene dit, med samme regler.
 13. **Ekstra felt på forslag og meldinger.** `research_proposal.ref` (F1, F2 …) lar agenten vise til egne utkast. `research_proposal.last_error` viser hvorfor en godkjenning stoppet. `research_message.model_id` viser hvilken modell som svarte.
 14. **Én åpen oppgave per prosjekt i panelet.** «Ny oppgave» lukker den åpne og starter en ny.
+15. **Kilder lagres først ved godkjenning.** Skjemaet beskriver utkast-kilder med `retention = draft`. Prototypen holder kildene i forslagets nyttelast og oppretter `source`-rader med `retention = kept` først når forslaget godkjennes. En kilde med samme URL gjenbrukes.
+16. **Bilder lastes ned ved godkjenning.** Bilder fra nettet hentes gjennom serveren og lagres lokalt som `stored_file`. Den opprinnelige bildeadressen står i `source_asset.locator`, og sidens adresse står i `source.url`.
+17. **Testbrytere på serveren.** `PAINTREST_ALLOW_LOCAL_FETCH=1` og `PAINTREST_SEARCH_BASE_URL` brukes bare i tester mot simulerte tjenester. De skal ikke settes ved vanlig bruk.
 
 ## Antakelser
 
@@ -25,7 +28,12 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 - **Lagring:** All data ligger lokalt i nettleseren (IndexedDB). Det finnes ingen synkronisering mellom enheter.
 - **UiB-API-et:** Adresse, endepunkter og Bearer-autentisering er oppgitt av brukeren. Svarformatet (`data[].id` fra `/models`, og `output[].content[].text` eller `output_text` fra `/responses`) følger OpenAI-konvensjonen. Det er ikke testet mot UiB, fordi nettverket i utviklingsmiljøet blokkerte adressen. Testene bruker en simulert tjeneste.
 - **Agentens svarformat:** Modellen blir bedt om å svare med ett JSON-objekt. Formatet er ikke lagt inn som `text.format`/`json_schema`, fordi det er ukjent om alle modellene hos UiB støtter det. Svar som ikke kan tolkes, vises som vanlig tekst, og eventuelle forslag i dem leses ikke inn.
-- **Agenten har ikke nettilgang.** Den kjenner bare konteksten den får og det modellen kan fra før. Instruksen sier at slike forslag skal merkes «synthesized».
+- **Nettilgang går via en søketjeneste.** Med Tavily eller Brave lagret kan agenten søke og lese sider. Uten søketjeneste kjenner agenten bare konteksten den får og det modellen kan fra før.
+- **Verktøy gjennom JSON-handlinger, ikke funksjonskall.** Agenten svarer med `search`, `open` eller `final` som JSON i hvert steg, med høyst 12 verktøysteg per svar. Det krever bare vanlige tekstsvar, og de virker hos UiB. Det er ikke testet om UiB støtter funksjonskall i Responses API.
+- **Serveren sjekker kildene.** Bilder i et forslag må finnes i bildelisten på en side agenten åpnet i samme runde. Kilder må være søkt fram eller åpnet. Det som ikke stemmer, fjernes og meldes i panelet. «Dokumentert» uten en åpnet kilde nedgraderes.
+- **Nettvern.** Sider og bilder hentes av serveren på brukerens maskin. Bare http og https på standardporter er tillatt, private nett blokkeres, og hver omdirigering sjekkes på nytt. Det er ikke beskyttet mot DNS-rebinding mellom oppslag og tilkobling. Det er godt nok for et lokalt verktøy, men ikke for en delt server.
+- **Opphavsrett.** Bilder som lagres, er for personlig bruk som referanse. Kilden og bildeadressen lagres sammen med bildet.
+- **Søketjenestene:** Endepunktene er hentet fra dokumentasjonen til Tavily (`POST /search`, Bearer) og Brave (`GET /res/v1/web/search`, `X-Subscription-Token`). De er ikke testet mot de ekte tjenestene, fordi utviklingsmiljøet blokkerte all utgående trafikk. Prisene (Tavily: 1 000 gratis kreditter i måneden, Brave: kreditt på 5 dollar i måneden og kredittkort) er sjekket mot oppslag 9. november 2026.
 - **BGG:** Oppslaget er simulert. Navnene og thing-id-ene (9000xx) er oppdiktet.
 - **Eksempeldata:** Spillet og kildene er plassholdere hentet fra Figma. Fargene på fargeprøvene er tilnærminger. Malingsnavnene er Citadel-produkter. Det er ikke sjekket om navnene er i produksjon i dag.
 - **Skrift:** DM Serif Display, DM Sans og DM Mono, lastet fra Google Fonts. Valget er gjort ut fra skjermbildene i Figma og ikke kontrollert mot filen.
