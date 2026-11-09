@@ -1,0 +1,25 @@
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.filters-sep { width: 1px; height: 24px; background: var(--line); margin: 0 4px; }
+.chip { min-height: 38px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); cursor: pointer; font-weight: 500; }
+.chip.on { background: var(--pine); color: var(--on-dark); border-color: var(--pine); }
+
+.mini-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
+.mini-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; display: flex; flex-direction: column; }
+.mini-img-wrap { position: relative; aspect-ratio: 4 / 5; background: var(--panel); flex: none; }
+.mini-img, .mini-img-wrap .img-fallback { width: 100%; height: 100%; object-fit: cover; }
+.mini-status {
+  position: absolute; left: 10px; top: 10px; padding: 4px 8px; border-radius: 4px;
+  font: 500 11px var(--font-mono); text-transform: uppercase; letter-spacing: .04em;
+  background: rgb(247 245 237 / .92); color: var(--ink);
+}
+.status-in_progress .mini-status { background: var(--moss); color: var(--pine); }
+.status-finished .mini-status { background: var(--pine); color: var(--on-dark); }
+.mini-body { flex: 1; padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+.mini-meta { display: flex; justify-content: space-between; align-items: center; gap: 6px 8px; flex-wrap: wrap; }
+.mini-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 4px; flex-wrap: wrap; }
+.mini-actions .btn { flex: 1 1 auto; padding: 0 12px; }
+
+.field-label { font-weight: 600; font-size: 14px; }
+.field-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.field-row .field-label { margin-right: auto; }
+.push-left { margin-right: auto; }

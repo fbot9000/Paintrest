@@ -1,0 +1,367 @@
+/**
+ * Domain types, written directly from «Paintrest – databaseskjema og arkitektur» §6.
+ * Column names keep the schema's snake_case so the same shapes can be reused
+ * when the local store is replaced by the application layer + PostgreSQL.
+ *
+ * Only the tables needed by the current slices are present. Where the prototype
+ * deviates from the schema, it is marked with `PROTOTYPE:` and listed in docs/AVVIK.md.
+ */
+
+export type Id = string;
+/** ISO-8601 string; maps to `timestamptz`. */
+export type Timestamp = string;
+
+export interface Workspace {
+  id: Id;
+  display_name: string;
+  created_at: Timestamp;
+}
+
+// ---------- Filer ----------
+
+export type FilePurpose = 'cover' | 'source_asset' | 'import';
+
+export interface StoredFile {
+  id: Id;
+  workspace_id: Id;
+  purpose: FilePurpose;
+  /** Key in the blob store. */
+  storage_key: string;
+  media_type: string;
+  byte_size: number;
+  created_at: Timestamp;
+  deleted_at: Timestamp | null;
+}
+
+// ---------- Maling og inventar ----------
+
+export type ProductKind =
+  | 'primer' | 'base' | 'layer' | 'shade' | 'contrast'
+  | 'technical' | 'metallic' | 'medium' | 'other';
+
+export type IdentityStatus = 'unconfirmed' | 'confirmed';
+
+export interface PaintProduct {
+  id: Id;
+  workspace_id: Id;
+  manufacturer: string | null;
+  range_name: string | null;
+  name: string;
+  product_kind: ProductKind;
+  coverage: string | null;
+  finish: string | null;
+  identity_status: IdentityStatus;
+  /**
+   * PROTOTYPE: datamodell v3 §14 says the painting view shows a «fargeprøve»,
+   * but the schema has no column for it. Nullable hex colour.
+   */
+  swatch_hex: string | null;
+  created_at: Timestamp;
+  deleted_at: Timestamp | null;
+}
+
+export type Ownership = 'owns' | 'not_owned' | 'unknown';
+export type OwnershipSource = 'manual' | 'import' | 'purchase';
+
+export interface InventoryEntry {
+  workspace_id: Id;
+  product_id: Id;
+  ownership: Ownership;
+  ownership_source: OwnershipSource;
+  updated_at: Timestamp;
+}
+
+// ---------- Spill og prosjekt ----------
+
+export type Origin = 'manual' | 'bgg';
+
+export interface Game {
+  id: Id;
+  workspace_id: Id;
+  origin: Origin;
+  bgg_thing_id: number | null;
+  primary_name: string;
+  year_published: number | null;
+  publishers: string[];
+  cover_file_id: Id | null;
+  created_at: Timestamp;
+  deleted_at: Timestamp | null;
+}
+
+export interface Expansion {
+  id: Id;
+  game_id: Id;
+  origin: Origin;
+  bgg_thing_id: number | null;
+  name: string;
+  year_published: number | null;
+  deleted_at: Timestamp | null;
+}
+
+export interface Project {
+  id: Id;
+  workspace_id: Id;
+  game_id: Id;
+  content_revision: number;
+  created_at: Timestamp;
+  deleted_at: Timestamp | null;
+}
+
+export interface ProjectExpansion {
+  project_id: Id;
+  expansion_id: Id;
+}
+
+export type Grouping = 'single' | 'group';
+export type PlanState = 'none' | 'draft' | 'approved';
+export type Basis = 'documented' | 'inferred' | null;
+
+export interface MiniatureSubject {
+  id: Id;
+  project_id: Id;
+  expansion_id: Id | null;
+  name: string;
+  grouping: Grouping;
+  physical_count: number;
+  category_label: string | null;
+  official_asset_id: Id | null;
+  plan_state: PlanState;
+  in_progress: boolean;
+  finished_count: number;
+  count_basis: Basis;
+  grouping_basis: Basis;
+  uncertainty: unknown[] | null;
+  current_plan_version_id: Id | null;
+  deleted_at: Timestamp | null;
+}
+
+export type ScopeKind = 'project' | 'expansion' | 'category' | 'subjects';
+
+export interface PaletteEntry {
+  id: Id;
+  project_id: Id;
+  product_id: Id;
+  role_label: string | null;
+  note: string | null;
+  scope_kind: ScopeKind;
+  expansion_id: Id | null;
+  category_label: string | null;
+  deleted_at: Timestamp | null;
+}
+
+export interface PaletteEntrySubject {
+  palette_entry_id: Id;
+  subject_id: Id;
+}
+
+// ---------- Maleplan ----------
+
+export type VersionState = 'approved' | 'superseded';
+export type VersionOrigin = 'user' | 'proposal';
+
+export interface PaintPlanVersion {
+  id: Id;
+  subject_id: Id;
+  version_number: number;
+  state: VersionState;
+  origin: VersionOrigin;
+  supersedes_id: Id | null;
+  created_at: Timestamp;
+}
+
+export type ElementKind = 'operation' | 'part';
+
+export interface PlanElement {
+  id: Id;
+  plan_version_id: Id;
+  kind: ElementKind;
+  position: number;
+  name: string;
+}
+
+export interface PlanStep {
+  id: Id;
+  element_id: Id;
+  position: number;
+  instruction: string;
+  technique_version_id: Id | null;
+  recipe_version_id: Id | null;
+}
+
+export type MaterialRole =
+  | 'base' | 'shade' | 'layer' | 'highlight' | 'wash' | 'glaze' | 'mix' | 'other';
+
+export interface StepMaterial {
+  id: Id;
+  step_id: Id;
+  position: number;
+  product_id: Id;
+  role: MaterialRole;
+  role_label: string | null;
+}
+
+export interface MixGroup {
+  id: Id;
+  step_id: Id;
+  label: string | null;
+}
+
+export interface MixComponent {
+  mix_group_id: Id;
+  position: number;
+  product_id: Id;
+  parts: number;
+}
+
+export interface PlanStepAsset {
+  step_id: Id;
+  source_asset_id: Id;
+}
+
+export type DeviationKind = 'swap_product' | 'change_instruction' | 'extra_step' | 'note';
+
+export interface DeviationPayload {
+  /** swap_product */
+  from_product_id?: Id;
+  to_product_id?: Id;
+  /** change_instruction / extra_step / note */
+  text?: string;
+}
+
+export interface LocalDeviation {
+  id: Id;
+  plan_version_id: Id;
+  element_id: Id | null;
+  step_id: Id | null;
+  kind: DeviationKind;
+  payload: DeviationPayload;
+  created_at: Timestamp;
+  sealed_at: Timestamp | null;
+}
+
+export interface PartProgress {
+  subject_id: Id;
+  element_id: Id;
+  done: boolean;
+  last_opened_at: Timestamp | null;
+}
+
+export interface GroupProgress {
+  id: Id;
+  subject_id: Id;
+  plan_version_id: Id;
+  element_id: Id;
+  count: number;
+}
+
+export interface PaintCompletion {
+  id: Id;
+  subject_id: Id;
+  plan_version_id: Id;
+  deviation_snapshot: LocalDeviation[];
+  quantity: number;
+  finished_count_after: number;
+  created_at: Timestamp;
+}
+
+// ---------- Kilder ----------
+
+export type SourceKind = 'image' | 'article' | 'forum' | 'video' | 'book' | 'guide' | 'gallery';
+export type AnalysisState = 'stored' | 'extracted';
+export type Retention = 'draft' | 'kept';
+
+export interface Source {
+  id: Id;
+  workspace_id: Id;
+  kind: SourceKind;
+  title: string;
+  creator: string | null;
+  url: string | null;
+  locator: string | null;
+  analysis_state: AnalysisState;
+  retention: Retention;
+  created_by_task_id: Id | null;
+  created_at: Timestamp;
+  deleted_at: Timestamp | null;
+}
+
+export interface SourceAsset {
+  id: Id;
+  source_id: Id;
+  position: number;
+  locator: string | null;
+  caption: string | null;
+  file_id: Id | null;
+  deleted_at: Timestamp | null;
+}
+
+export type LinkTargetType = 'project' | 'subject' | 'technique' | 'recipe' | 'plan_step';
+export type LinkUse = 'evidence' | 'visual_reference' | 'method';
+
+export interface SourceLink {
+  id: Id;
+  source_id: Id;
+  target_type: LinkTargetType;
+  target_id: Id;
+  use: LinkUse;
+  layer_id: Id | null;
+  deleted_at: Timestamp | null;
+}
+
+export interface SourceLinkAsset {
+  link_id: Id;
+  source_asset_id: Id;
+}
+
+// ---------- Historikk ----------
+
+export type ChangeAction =
+  | 'create' | 'update' | 'delete' | 'attach' | 'detach' | 'restore'
+  | 'link_bgg' | 'new_version' | 'deviation' | 'completion' | 'progress';
+
+export interface ChangeRecord {
+  id: Id;
+  workspace_id: Id;
+  target_type: string;
+  target_id: Id;
+  from_version_id: Id | null;
+  to_version_id: Id | null;
+  action: ChangeAction;
+  initiated_by: 'user' | 'agent';
+  task_id: Id | null;
+  proposal_id: Id | null;
+  created_at: Timestamp;
+}
+
+/** All rows, keyed by table. Composite-key tables are plain arrays. */
+export interface Tables {
+  workspace: Record<Id, Workspace>;
+  stored_file: Record<Id, StoredFile>;
+  paint_product: Record<Id, PaintProduct>;
+  inventory_entry: InventoryEntry[];
+  game: Record<Id, Game>;
+  expansion: Record<Id, Expansion>;
+  project: Record<Id, Project>;
+  project_expansion: ProjectExpansion[];
+  miniature_subject: Record<Id, MiniatureSubject>;
+  palette_entry: Record<Id, PaletteEntry>;
+  palette_entry_subject: PaletteEntrySubject[];
+  paint_plan_version: Record<Id, PaintPlanVersion>;
+  plan_element: Record<Id, PlanElement>;
+  plan_step: Record<Id, PlanStep>;
+  step_material: Record<Id, StepMaterial>;
+  mix_group: Record<Id, MixGroup>;
+  mix_component: MixComponent[];
+  plan_step_asset: PlanStepAsset[];
+  local_deviation: Record<Id, LocalDeviation>;
+  part_progress: PartProgress[];
+  group_progress: Record<Id, GroupProgress>;
+  paint_completion: Record<Id, PaintCompletion>;
+  source: Record<Id, Source>;
+  source_asset: Record<Id, SourceAsset>;
+  source_link: Record<Id, SourceLink>;
+  source_link_asset: SourceLinkAsset[];
+  change_record: Record<Id, ChangeRecord>;
+}
+
+export const SCHEMA_VERSION = 1;

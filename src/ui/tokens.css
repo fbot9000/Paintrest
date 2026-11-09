@@ -1,0 +1,61 @@
+/* Colours from the Figma variables on «Verksted · Miniatyrer og forslag» (1:2183).
+   Fonts are an assumption based on the screenshots (serif headings, geometric sans, mono labels). */
+:root {
+  --deep: #142722;
+  --pine: #192f2b;
+  --fore: #27463e;
+  --ink: #1d2927;
+  --muted: #59635b;
+  --line: #d1cfc2;
+  --paper: #f7f5ed;
+  --card: #fcfbf6;
+  --panel: #eae8df;
+  --moss: #c3e1a3;
+  --moss-soft: #dcebc9;
+  --soft-dark: #bdd0be;
+  --on-dark: #f5f2e7;
+  --warn: #a5552b;
+  --warn-soft: #f3e1d3;
+  --info-soft: #e3ece6;
+
+  --font-serif: 'DM Serif Display', Georgia, serif;
+  --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, Menlo, monospace;
+
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --shadow: 0 1px 2px rgb(20 39 34 / 0.06), 0 8px 24px rgb(20 39 34 / 0.08);
+  --tap: 44px;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 15px/1.45 var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+h1, h2, h3 { font-family: var(--font-serif); font-weight: 400; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: 34px; line-height: 1.1; }
+h2 { font-size: 24px; line-height: 1.2; }
+h3 { font-size: 19px; line-height: 1.25; }
+p { margin: 0; }
+a { color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
+img { display: block; max-width: 100%; }
+:focus-visible { outline: 2px solid var(--fore); outline-offset: 2px; }
+
+.eyebrow {
+  font: 500 11px/1.2 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.mono { font-family: var(--font-mono); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
