@@ -6,6 +6,8 @@ import type { AgentCommands, ApproveOptions, ProposalWrite, ResearchCommands } f
 import type { ChangeAction, Id, ResearchProposal, ResultType, Tables } from '../domain/types';
 import { attachedExpansions } from '../domain/views';
 import type { Store } from './store';
+import { attachImages, downloadImages, setCover, sourceFor } from './images-tx';
+import type { Downloaded } from './images-tx';
 
 /** Result types implemented in this version. See docs/AVVIK.md. */
 export const IMPLEMENTED_TYPES: ResultType[] = ['catalog_subject', 'paint_plan', 'reference_selection'];
@@ -247,58 +249,19 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
 }
 
 /** Godkjenning (skjema §8). One proposal, one transaction. */
-type Downloaded = Record<string, { file_id: Id; media_type: string; byte_size: number }>;
-
-/**
- * Images are fetched before the transaction so that the transaction itself
- * stays synchronous and all-or-nothing. A failed download stops approval
- * and names the image, so the user can deselect it.
- */
+/** Images are fetched before the transaction (see images-tx). */
 async function downloadSelected(store: Store, deps: ResearchDeps, proposal_id: Id, opts: ApproveOptions): Promise<Downloaded> {
   const p = store.getTables().research_proposal[proposal_id];
   if (!p || p.result_type !== 'reference_selection') return {};
-  if (!deps.fetchImage) throw new CommandError('Bildene kan ikke hentes uten Paintrest-serveren');
   const payload = p.payload as ReferenceSelectionPayload;
   const wanted = payload.images.filter((i) => !opts.image_urls || opts.image_urls.includes(i.image_url));
   if (!wanted.length) throw new CommandError('Velg minst ett bilde');
-  const out: Downloaded = {};
-  const failed: string[] = [];
-  for (const img of wanted) {
-    try {
-      const blob = await deps.fetchImage(img.image_url);
-      const file_id = newId();
-      await store.persistence.putBlob(file_id, blob);
-      out[img.image_url] = { file_id, media_type: blob.type, byte_size: blob.size };
-    } catch (e) {
-      failed.push(`${img.caption ?? img.image_url} (${e instanceof Error ? e.message : String(e)})`);
-    }
-  }
-  if (failed.length) {
-    await Promise.all(Object.values(out).map((f) => store.persistence.deleteBlob(f.file_id)));
-    throw new CommandError(`Kunne ikke hente ${failed.length} bilde(r): ${failed.join('; ')}. Fjern haken og prøv igjen.`);
-  }
-  return out;
-}
-
-/** Reuses a kept source with the same URL, otherwise creates one (retention kept on approval, skjema §8 step 6). */
-function sourceFor(t: Tables, ws: Id, ref: { url: string; title: string; creator: string | null; kind: 'gallery' | 'article' }, who: Who): Id {
-  const existing = Object.values(t.source).find((x) => !x.deleted_at && x.url === ref.url);
-  if (existing) {
-    existing.retention = 'kept';
-    return existing.id;
-  }
-  const id = newId();
-  t.source[id] = {
-    id, workspace_id: ws, kind: ref.kind, title: ref.title, creator: ref.creator, url: ref.url, locator: null,
-    analysis_state: 'stored', retention: 'kept', created_by_task_id: who.task_id ?? null, created_at: now(), deleted_at: null,
-  };
-  record(t, ws, 'source', id, 'create', who);
-  return id;
+  return downloadImages(store, deps.fetchImage, wanted);
 }
 
 function linkEvidence(t: Tables, ws: Id, sources: SourceRef[], subject_id: Id, who: Who) {
   for (const s of sources) {
-    const source_id = sourceFor(t, ws, { url: s.url, title: s.title, creator: s.author, kind: 'article' }, who);
+    const source_id = sourceFor(t, ws, { url: s.url, title: s.title, creator: s.author, kind: 'article' }, who.task_id ?? null, (tt, id, a) => record(t, ws, tt, id, a, who));
     const id = newId();
     t.source_link[id] = { id, source_id, target_type: 'subject', target_id: subject_id, use: 'evidence', layer_id: null, deleted_at: null };
     record(t, ws, 'source_link', id, 'attach', who);
@@ -335,31 +298,15 @@ function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions, files
   } else if (kind === 'reference_selection') {
     const r = p.payload as ReferenceSelectionPayload;
     const s = t.miniature_subject[r.subject_id]!;
-    const chosen = r.images.filter((i) => files[i.image_url]);
-    const byPage = new Map<string, typeof chosen>();
-    for (const img of chosen) byPage.set(img.page_url, [...(byPage.get(img.page_url) ?? []), img]);
-    let firstAsset: Id | null = null;
-    for (const [page_url, imgs] of byPage) {
-      const first = imgs[0]!;
-      const source_id = sourceFor(t, ws, { url: page_url, title: first.page_title, creator: first.creator ?? first.site, kind: 'gallery' }, who);
-      const link_id = newId();
-      t.source_link[link_id] = { id: link_id, source_id, target_type: 'subject', target_id: s.id, use: 'visual_reference', layer_id: null, deleted_at: null };
-      const startPos = Object.values(t.source_asset).filter((a) => a.source_id === source_id).length;
-      imgs.forEach((img, i) => {
-        const f = files[img.image_url]!;
-        t.stored_file[f.file_id] = {
-          id: f.file_id, workspace_id: ws, purpose: 'source_asset', storage_key: f.file_id,
-          media_type: f.media_type, byte_size: f.byte_size, created_at: now(), deleted_at: null,
-        };
-        const asset_id = newId();
-        // locator keeps the original image address, so the picture can be traced back.
-        t.source_asset[asset_id] = { id: asset_id, source_id, position: startPos + i, locator: img.image_url, caption: img.caption, file_id: f.file_id, deleted_at: null };
-        t.source_link_asset.push({ link_id, source_asset_id: asset_id });
-        firstAsset ??= asset_id;
-      });
-      record(t, ws, 'source_link', link_id, 'attach', who);
+    const chosen = r.images.filter((i) => !opts.image_urls || opts.image_urls.includes(i.image_url));
+    const assets = attachImages(t, ws, s.id, chosen, files, p.task_id, (tt, id, a) => record(t, ws, tt, id, a, who));
+    const firstAsset = chosen[0] ? assets[chosen[0].image_url] : undefined;
+    if (opts.cover_image_url && assets[opts.cover_image_url]) {
+      setCover(t, s.id, assets[opts.cover_image_url]!, (tt, id, a) => record(t, ws, tt, id, a, who));
+      record(t, ws, 'miniature_subject', s.id, 'update', { ...who, initiated_by: 'user' });
+    } else if (opts.set_cover && firstAsset && !s.official_asset_id) {
+      s.official_asset_id = firstAsset;
     }
-    if (opts.set_cover && firstAsset && !s.official_asset_id) s.official_asset_id = firstAsset;
   } else {
     const plan = p.payload as PaintPlanPayload;
     const s = t.miniature_subject[plan.subject_id]!;

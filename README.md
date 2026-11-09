@@ -59,6 +59,17 @@ Agenten bruker først **nettsøket som er bygget inn i UiB sitt API** (OpenAIs `
 
 Panelet viser hvert søk og hver side mens agenten jobber, og du kan stoppe den. Under svaret kan du se hvordan agenten fant det. Serveren fjerner bilder og kilder agenten ikke faktisk har åpnet, og sier fra i panelet.
 
+## Bilder på miniatyrene
+
+Trykk på bildet på et miniatyrkort. Da åpnes «Bilder for …»:
+
+- **Lagret på miniatyren:** her velger du hvilket bilde som er illustrasjonen, fjerner bilder eller åpner kilden.
+- **Let med AI:** agenten leter etter konseptillustrasjon, offisielle bilder og malte eksempler, og ser først i kildene du har lagret for spillet. Du ser hvert steg mens den jobber.
+- **Fra lagrede kilder:** du åpner en side som er lagret for spillet, og velger bilder direkte, uten AI. Samme kilde kan gi bilder til mange miniatyrer.
+- **Last opp:** ditt eget bilde.
+
+Kryss av for bildene du vil beholde, velg ett som «Illustrasjon» og trykk «Lagre». Bildene lastes ned og lagres med kilde. En kilde eller et bilde som er lagret fra før, gjenbrukes.
+
 ## Dette er med
 
 | Bit | Innhold |

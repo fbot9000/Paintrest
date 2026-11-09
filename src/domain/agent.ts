@@ -25,6 +25,8 @@ export interface SourceRef {
   opened: boolean;
 }
 
+export type ImageKind = 'concept_art' | 'official' | 'painted' | 'other';
+
 export interface ReferenceImage {
   image_url: string;
   page_url: string;
@@ -32,6 +34,7 @@ export interface ReferenceImage {
   site: string;
   creator: string | null;
   caption: string | null;
+  kind?: ImageKind | null;
 }
 
 export interface ReferenceSelectionPayload {
@@ -191,6 +194,7 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
         site: str(io.site).trim() || hostOf(page_url),
         creator: str(io.creator).trim() || null,
         caption: str(io.caption).trim() || null,
+        kind: (['concept_art', 'official', 'painted', 'other'] as const).find((k) => k === io.kind) ?? null,
       }];
     });
     if (!images.length) return { ok: false, reason: 'Bildeutvalget har ingen gyldige bilder' };
@@ -311,8 +315,22 @@ export function buildAgentContext(t: Tables, task_id: Id): AgentContext {
       miniatures: subjectData,
       paints,
       your_pending_proposals: pending,
+      known_sources: knownSources(t, project.id).map((k) => ({ url: k.source.url, title: k.source.title, saved_images: k.asset_count })),
     },
   };
+}
+
+/** Kept web sources already linked to this project or its miniatures: reusable for the same game. */
+export function knownSources(t: Tables, project_id: Id) {
+  const subjectIds = new Set(Object.values(t.miniature_subject).filter((s) => s.project_id === project_id).map((s) => s.id));
+  const ids = new Set(Object.values(t.source_link)
+    .filter((l) => !l.deleted_at && ((l.target_type === 'subject' && subjectIds.has(l.target_id)) || (l.target_type === 'project' && l.target_id === project_id)))
+    .map((l) => l.source_id));
+  return [...ids]
+    .map((id) => t.source[id])
+    .filter((x): x is NonNullable<typeof x> => !!x && !x.deleted_at && !!x.url)
+    .map((source) => ({ source, asset_count: Object.values(t.source_asset).filter((a) => a.source_id === source.id && !a.deleted_at).length }))
+    .sort((a, b) => b.asset_count - a.asset_count);
 }
 
 export function proposalTitle(t: Tables, type: ResultType, payload: unknown): string {

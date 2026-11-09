@@ -134,3 +134,57 @@ describe('malevisning', () => {
     expect(paintingView(store.getTables(), g.id)!.elements[0]!.group_count).toBe(3);
   });
 });
+
+describe('bilder på miniatyren (brukerens egne valg)', () => {
+  const img = (n: string, page = 'https://site.example/gallery') => ({
+    image_url: `https://site.example/${n}.jpg`, page_url: page, page_title: 'Galleri', site: 'site.example', creator: 'Pete', caption: n, kind: 'painted' as const,
+  });
+
+  async function setup() {
+    const p = memoryPersistence();
+    const store = new Store({ schema_version: SCHEMA_VERSION, workspace_id: 'ws', tables: emptyTables() }, p);
+    let downloads = 0;
+    const cmd = createLocalCommands(store, { fetchImage: async () => { downloads++; return new Blob(['x'], { type: 'image/jpeg' }); } });
+    const { project_id } = await cmd.createProject();
+    const a = await cmd.createSubject(project_id, { name: 'A' });
+    const b = await cmd.createSubject(project_id, { name: 'B' });
+    return { store, cmd, a, b, downloads: () => downloads };
+  }
+
+  it('lagrer valgte bilder, setter illustrasjon og gjenbruker kilde og fil', async () => {
+    const { store, cmd, a, b, downloads } = await setup();
+    await cmd.attachWebImages(a, [img('front'), img('back')], 'https://site.example/back.jpg');
+    let t = store.getTables();
+    expect(Object.values(t.source)).toHaveLength(1);
+    expect(t.source_asset[t.miniature_subject[a]!.official_asset_id!]!.locator).toBe('https://site.example/back.jpg');
+    expect(downloads()).toBe(2);
+    // Same page and image for another miniature: no new source, no new download.
+    await cmd.attachWebImages(b, [img('front')]);
+    t = store.getTables();
+    expect(Object.values(t.source)).toHaveLength(1);
+    expect(Object.values(t.source_asset)).toHaveLength(2);
+    expect(downloads()).toBe(2);
+    expect(paintingView(t, b)!.references.map((r) => r.asset.locator)).toEqual(['https://site.example/front.jpg']);
+  });
+
+  it('ny illustrasjon beholder den gamle som referansebilde', async () => {
+    const { store, cmd, a } = await setup();
+    await cmd.setSubjectImage(a, new Blob(['eget'], { type: 'image/png' }), 'eget.png');
+    const own = store.getTables().miniature_subject[a]!.official_asset_id!;
+    await cmd.attachWebImages(a, [img('front')], 'https://site.example/front.jpg');
+    const t = store.getTables();
+    expect(t.source_asset[t.miniature_subject[a]!.official_asset_id!]!.locator).toBe('https://site.example/front.jpg');
+    expect(paintingView(t, a)!.references.map((r) => r.asset.id)).toContain(own);
+  });
+
+  it('fjerner et bilde fra miniatyren uten å slette kilden', async () => {
+    const { store, cmd, a } = await setup();
+    await cmd.attachWebImages(a, [img('front')], 'https://site.example/front.jpg');
+    const asset = store.getTables().miniature_subject[a]!.official_asset_id!;
+    await cmd.detachSubjectImage(a, asset);
+    const t = store.getTables();
+    expect(t.miniature_subject[a]!.official_asset_id).toBeNull();
+    expect(Object.values(t.source_link).every((l) => l.deleted_at)).toBe(true);
+    expect(t.source_asset[asset]!.deleted_at).toBeNull();
+  });
+});

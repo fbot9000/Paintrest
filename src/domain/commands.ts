@@ -9,6 +9,7 @@
 import type {
   DeviationKind, DeviationPayload, Grouping, Id, Ownership, ProductKind,
 } from './types';
+import type { ReferenceImage } from './agent';
 
 export interface BggCandidate {
   thing_id: number;
@@ -68,6 +69,12 @@ export interface Commands {
   deleteSubject(subject_id: Id): Promise<void>;
   restoreSubject(subject_id: Id): Promise<void>;
   setSubjectImage(subject_id: Id, file: Blob | null, filename?: string): Promise<void>;
+  /** The user picks images from a web page directly (no agent). Downloads, stores and links them. */
+  attachWebImages(subject_id: Id, images: ReferenceImage[], cover_image_url?: string): Promise<void>;
+  /** Chooses which stored image is the miniature's illustration (null clears it). */
+  setSubjectCover(subject_id: Id, asset_id: Id | null): Promise<void>;
+  /** Removes an image from the miniature. The source and the file stay, as history. */
+  detachSubjectImage(subject_id: Id, asset_id: Id): Promise<void>;
 
   // Katalog
   createProduct(input?: ProductInput): Promise<Id>;

@@ -101,13 +101,14 @@ Forslagsformer i "proposals":
   "count_basis": "documented|inferred|null", "grouping_basis": "documented|inferred|null", "note": null,
   "sources": [{"url": "https://…", "title": "…"}]}}
 {"type": "reference_selection", "evidence": "documented", "uncertainty": [],
- "payload": {"subject": "M1", "note": "hvorfor disse bildene", "images": [{"image_url": "https://…", "page_url": "https://…", "caption": "Merlin forfra, malt av …"}]}}
+ "payload": {"subject": "M1", "note": "hvorfor disse bildene", "images": [{"image_url": "https://…", "page_url": "https://…", "caption": "Merlin forfra, malt av …", "kind": "concept_art|official|painted|other"}]}}
 {"type": "paint_plan", "evidence": "synthesized", "uncertainty": [],
  "payload": {"subject": "M1", "note": "…", "sources": [], "elements": [
    {"kind": "operation|part", "name": "Grunning", "steps": [{"instruction": "…",
      "materials": [{"product": {"manufacturer": "Citadel", "range": "Base", "name": "Caliban Green"}, "role": "base|shade|layer|highlight|wash|glaze|mix|other", "role_label": null}],
      "mix": null}]}]}}
-For reference_selection: velg 1–6 bilder per miniatyr som viser selve miniatyren tydelig (malt eller offisielt bilde). Skriv i caption hva bildet viser og hvem som malte det, når kilden sier det.
+For reference_selection: velg bilder som viser akkurat denne miniatyren eller figuren tydelig. "kind" er concept_art (konseptillustrasjon eller kunst av figuren), official (utgiverens bilde av miniatyren), painted (malt av en hobbymaler) eller other. Skriv i caption hva bildet viser og hvem som laget eller malte det, når kilden sier det. Ikke ta med bilder av andre figurer, logoer eller esker.
+"known_sources" i konteksten er sider brukeren allerede har lagret for dette spillet. Åpne dem først når du leter etter bilder; de har ofte flere bilder enn de som er lagret.
 
 Kontekst (det du kan lese; endres bare av brukeren):
 ${JSON.stringify(context)}`;
@@ -305,6 +306,7 @@ export function verifyProposals(proposals: unknown[], opened: Map<string, PageRe
         return [{
           image_url: img.url, page_url: page.url, page_title: page.title, site: page.site,
           creator: page.author, caption: typeof i.caption === 'string' && i.caption.trim() ? i.caption.trim() : img.caption ?? img.alt ?? null,
+          kind: ['concept_art', 'official', 'painted', 'other'].includes(i.kind as string) ? i.kind : null,
         }];
       });
       if (kept.length < imgs.length) warnings.push(`Fjernet ${imgs.length - kept.length} bilde(r) som ikke fantes på en side agenten åpnet.`);

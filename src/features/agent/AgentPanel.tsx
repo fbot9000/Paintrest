@@ -61,6 +61,7 @@ export function useAgentActions(projectId: Id) {
     return researchView(t, projectId)?.task.id ?? app.research.startTask(projectId);
   };
   return {
+    ensureTask,
     suggestPlan: (name: string) => ctl.compose(`Foreslå en maleplan for ${name}. `),
     /** Opens one plan as revision target: an explicit user action (datamodell v3 §12). */
     revisePlan: async (subjectId: Id, name: string) => {
@@ -566,7 +567,7 @@ function Message({ m }: { m: ResearchMessage }) {
   );
 }
 
-function LiveSteps({ events, onStop }: { events: ResearchEvent[]; onStop: () => void }) {
+export function LiveSteps({ events, onStop }: { events: ResearchEvent[]; onStop: () => void }) {
   const lines = events.flatMap((e): { key: string; text: ReactNode; state: 'run' | 'ok' | 'err' }[] => {
     switch (e.type) {
       case 'status': return [{ key: 's' + e.text, text: e.text, state: 'ok' }];

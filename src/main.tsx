@@ -26,8 +26,8 @@ async function boot() {
   const state = migrated ?? await buildSampleData(persistence);
   const store = new Store(state, persistence);
   if (!migrated || migrated !== loaded) await persistence.save(state).catch(() => undefined);
-  const cmd = createLocalCommands(store);
   const ai = httpAiGateway();
+  const cmd = createLocalCommands(store, { fetchImage: ai.fetchImage });
 
   root.render(
     <StrictMode>

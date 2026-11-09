@@ -85,6 +85,9 @@ export function httpAiGateway(): AiGateway {
       }
       return res.blob();
     },
+    async pageImages(url) {
+      return request('POST', '/api/research/page-images', { url });
+    },
     async getSearchCredential() {
       return (await request<{ credential: SearchCredentialView | null }>('GET', '/api/search/credential')).credential;
     },

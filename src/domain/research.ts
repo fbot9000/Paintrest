@@ -16,6 +16,8 @@ export interface ApproveOptions {
   image_urls?: string[];
   /** reference_selection: use the first image as the miniature's picture if it has none. */
   set_cover?: boolean;
+  /** reference_selection: this image becomes the miniature's illustration (replaces the current one). */
+  cover_image_url?: string;
 }
 
 export interface ResearchCommands {

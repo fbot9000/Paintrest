@@ -8,6 +8,7 @@ import { assetFileId, attachedExpansions, deletedSubjects, liveSubjects, physica
 import type { PhysicalStatus } from '../../domain/views';
 import { Badge, Button, Dialog, ErrorNote, Field, FileImage, ImagePicker, Segmented, Stepper } from '../../ui/components';
 import { useAgentActions } from '../agent/AgentPanel';
+import { ImagesDialog } from './ImagesDialog';
 import './miniatures.css';
 
 type Filter = 'all' | 'base' | string;
@@ -24,6 +25,7 @@ export function MiniaturesPage() {
   const [filter, setFilter] = useState<Filter>('all');
   const [onlyActive, setOnlyActive] = useState(false);
   const [editing, setEditing] = useState<MiniatureSubject | 'new' | null>(null);
+  const [imagesFor, setImagesFor] = useState<string | null>(null);
   const agentActions = useAgentActions(projectId);
 
   const shown = data.subjects.filter(({ s, status }) => {
@@ -80,6 +82,7 @@ export function MiniaturesPage() {
               fileId={file}
               expansion={data.expansions.find((e) => e.id === s.expansion_id)}
               onEdit={() => setEditing(s)}
+              onImages={() => setImagesFor(s.id)}
               onAgent={() => (s.current_plan_version_id
                 ? run(() => agentActions.revisePlan(s.id, s.name))
                 : agentActions.suggestPlan(s.name))}
@@ -100,6 +103,8 @@ export function MiniaturesPage() {
           ))}
         </p>
       )}
+
+      {imagesFor && <ImagesDialog subjectId={imagesFor} projectId={projectId} onClose={() => setImagesFor(null)} />}
 
       {editing && (
         <SubjectDialog
@@ -129,15 +134,16 @@ function FilterChip({ on, onClick, children }: { on: boolean; onClick: () => voi
 
 const STATUS_LABEL: Record<PhysicalStatus, string> = { not_started: 'Ikke startet', in_progress: 'Under arbeid', finished: 'Ferdig' };
 
-function MiniCard({ s, status, fileId, expansion, onEdit, onPaint, onAgent }: {
-  s: MiniatureSubject; status: PhysicalStatus; fileId: string | null; expansion?: Expansion; onEdit: () => void; onPaint: () => void; onAgent: () => void;
+function MiniCard({ s, status, fileId, expansion, onEdit, onPaint, onAgent, onImages }: {
+  s: MiniatureSubject; status: PhysicalStatus; fileId: string | null; expansion?: Expansion; onEdit: () => void; onPaint: () => void; onAgent: () => void; onImages: () => void;
 }) {
   return (
     <article className={`mini-card status-${status}`}>
-      <div className="mini-img-wrap">
-        <FileImage fileId={fileId} alt={s.name} className="mini-img" fallback={<span>Ingen bilde</span>} />
+      <button type="button" className="mini-img-wrap" onClick={onImages} aria-label={`Bilder for ${s.name}`}>
+        <FileImage fileId={fileId} alt={s.name} className="mini-img" fallback={<span>Ingen bilde · trykk for å finne</span>} />
+        <span className="mini-img-hint">Bilder</span>
         <span className={`mini-status`}>{STATUS_LABEL[status]}</span>
-      </div>
+      </button>
       <div className="mini-body">
         <h3>{s.name}</h3>
         <p className="small muted">

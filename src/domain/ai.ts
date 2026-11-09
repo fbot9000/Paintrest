@@ -91,6 +91,8 @@ export interface AiGateway {
   /** Address the browser can use to show an image found on the web (fetched by the server). */
   imageProxyUrl(url: string): string;
   fetchImage(url: string): Promise<Blob>;
+  /** Reads a web page through the server and lists its images (no agent). */
+  pageImages(url: string): Promise<{ url: string; title: string; site: string; author: string | null; images: { url: string; alt: string; caption: string | null }[] }>;
 
   getSearchCredential(): Promise<SearchCredentialView | null>;
   saveSearchCredential(input: { provider: 'tavily' | 'brave'; api_key?: string }): Promise<SearchCredentialView>;

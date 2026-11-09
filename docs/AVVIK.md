@@ -21,6 +21,9 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 15. **Kilder lagres først ved godkjenning.** Skjemaet beskriver utkast-kilder med `retention = draft`. Prototypen holder kildene i forslagets nyttelast og oppretter `source`-rader med `retention = kept` først når forslaget godkjennes. En kilde med samme URL gjenbrukes.
 16. **Bilder lastes ned ved godkjenning.** Bilder fra nettet hentes gjennom serveren og lagres lokalt som `stored_file`. Den opprinnelige bildeadressen står i `source_asset.locator`, og sidens adresse står i `source.url`.
 17. **Testbrytere på serveren.** `PAINTREST_ALLOW_LOCAL_FETCH=1` og `PAINTREST_SEARCH_BASE_URL` brukes bare i tester mot simulerte tjenester. De skal ikke settes ved vanlig bruk.
+18. **`source_asset.image_kind`.** Feltet sier hva bildet viser: konseptillustrasjon, offisielt bilde, malt eksempel eller annet. Det finnes ikke i skjemaet.
+19. **Ny illustrasjon skjuler ikke den gamle.** Velger du et annet bilde som illustrasjon (`official_asset_id`), lenkes det forrige til miniatyren som referansebilde. Det blir altså ikke borte fra visningen.
+20. **Bildesøk fra miniatyren går i samme oppgave som panelet.** «Let med AI» skriver en melding og et `reference_selection`-forslag i prosjektets åpne researchoppgave. Du ser dem derfor også i agentpanelet.
 
 ## Antakelser
 

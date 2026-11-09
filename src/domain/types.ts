@@ -293,6 +293,8 @@ export interface SourceAsset {
   caption: string | null;
   file_id: Id | null;
   deleted_at: Timestamp | null;
+  /** PROTOTYPE: what the picture shows (concept_art, official, painted, other). Not in skjema. */
+  image_kind?: 'concept_art' | 'official' | 'painted' | 'other' | null;
 }
 
 export type LinkTargetType = 'project' | 'subject' | 'technique' | 'recipe' | 'plan_step';

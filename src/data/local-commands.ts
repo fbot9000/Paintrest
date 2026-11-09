@@ -8,6 +8,7 @@ import type {
 import { currentPlanVersion, liveExpansionsOfGame } from '../domain/views';
 import type { Store } from './store';
 import { buildSampleData } from './seed';
+import { attachImages, downloadImages, setCover } from './images-tx';
 
 type Rec = {
   target_type: string;
@@ -48,7 +49,7 @@ function normaliseSubject(s: MiniatureSubject): void {
   if (s.finished_count > s.physical_count) s.finished_count = s.physical_count;
 }
 
-export function createLocalCommands(store: Store): Commands {
+export function createLocalCommands(store: Store, deps: { fetchImage?: (url: string) => Promise<Blob> } = {}): Commands {
   const tx = store.transaction.bind(store);
   const blobs = store.persistence;
   const urlCache = new Map<Id, string>();
@@ -346,6 +347,46 @@ export function createLocalCommands(store: Store): Commands {
           record(t, ws, { target_type: 'source', target_id: source_id, action: 'create' });
         }
         record(t, ws, { target_type: 'miniature_subject', target_id: subject_id, action: 'update' });
+      });
+    },
+
+    async attachWebImages(subject_id, images, cover_image_url) {
+      if (!images.length) throw new CommandError('Velg minst ett bilde');
+      const files = await downloadImages(store, deps.fetchImage, images);
+      tx((t, ws) => {
+        const assets = attachImages(t, ws, subject_id, images, files, null, (tt, id, a) => record(t, ws, { target_type: tt, target_id: id, action: a }));
+        if (cover_image_url && assets[cover_image_url]) {
+          setCover(t, subject_id, assets[cover_image_url]!, (tt, id, a) => record(t, ws, { target_type: tt, target_id: id, action: a }));
+          record(t, ws, { target_type: 'miniature_subject', target_id: subject_id, action: 'update' });
+        }
+      });
+    },
+
+    async setSubjectCover(subject_id, asset_id) {
+      tx((t, ws) => {
+        must(t.miniature_subject[subject_id], 'Miniatyren');
+        if (asset_id && (!t.source_asset[asset_id] || t.source_asset[asset_id]!.deleted_at)) throw new CommandError('Bildet finnes ikke');
+        setCover(t, subject_id, asset_id, (tt, id, a) => record(t, ws, { target_type: tt, target_id: id, action: a }));
+        record(t, ws, { target_type: 'miniature_subject', target_id: subject_id, action: 'update' });
+      });
+    },
+
+    async detachSubjectImage(subject_id, asset_id) {
+      tx((t, ws) => {
+        const s = must(t.miniature_subject[subject_id], 'Miniatyren');
+        const links = Object.values(t.source_link).filter((l) => !l.deleted_at && l.target_type === 'subject' && l.target_id === subject_id && l.use === 'visual_reference');
+        for (const l of links) {
+          const before = t.source_link_asset.filter((x) => x.link_id === l.id);
+          if (!before.some((x) => x.source_asset_id === asset_id)) continue;
+          t.source_link_asset = t.source_link_asset.filter((x) => !(x.link_id === l.id && x.source_asset_id === asset_id));
+          // A link without assets would show the whole source, so it is removed too.
+          if (before.length === 1) l.deleted_at = now();
+          record(t, ws, { target_type: 'source_link', target_id: l.id, action: 'detach' });
+        }
+        if (s.official_asset_id === asset_id) {
+          s.official_asset_id = null;
+          record(t, ws, { target_type: 'miniature_subject', target_id: subject_id, action: 'update' });
+        }
       });
     },
 

@@ -119,6 +119,13 @@ export function createHandler(d: AppDeps) {
           return;
         }
 
+        case 'POST /api/research/page-images': {
+          // The user browses a known source without the agent: title and image list only.
+          const body = await readJson(req);
+          const page = await d.openPage(str(body.url));
+          return json(res, 200, { url: page.url, title: page.title, site: page.site, author: page.author, images: page.images });
+        }
+
         case 'POST /api/agent/run': {
           const body = await readJson(req, MAX_AGENT_BODY);
           const input: ResearchInput = {
