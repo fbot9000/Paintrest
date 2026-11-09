@@ -302,7 +302,7 @@ function PartDetail({ ev, isGroup, physical, onBack, onPrev, onNext, onDone, onG
                   </ul>
                 </div>
               )}
-              <button type="button" className="pm-dev-link" onClick={() => onDeviation(sv)}>Registrer avvik</button>
+              <button type="button" className="pm-dev-link" onClick={() => onDeviation(sv)}>Rediger</button>
             </div>
           </li>
         ))}
