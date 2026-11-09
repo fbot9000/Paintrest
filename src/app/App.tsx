@@ -6,6 +6,7 @@ import { GamePage } from '../features/game/GamePage';
 import { MiniaturesPage } from '../features/miniatures/MiniaturesPage';
 import { PaintingMode } from '../features/painting/PaintingMode';
 import { NotYetPage } from '../features/projects/NotYetPage';
+import { AiSettingsPage } from '../features/settings/AiSettingsPage';
 import { Button, Dialog } from '../ui/components';
 import { useCommand } from './context';
 import { Logo } from '../ui/Logo';
@@ -18,6 +19,7 @@ const routes = [
     element: <Shell />,
     children: [
       { index: true, element: <ProjectsPage /> },
+      { path: 'innstillinger', element: <AiSettingsPage /> },
       {
         path: 'p/:projectId',
         element: <ProjectLayout />,
@@ -67,6 +69,9 @@ function TopBar() {
         </button>
         {menu && (
           <div className="menu" role="menu">
+            <button role="menuitem" type="button" onClick={() => { setMenu(false); navigate('/innstillinger'); }}>
+              AI-nøkkel
+            </button>
             <button role="menuitem" type="button" onClick={() => { setMenu(false); setConfirm(true); }}>
               Tilbakestill eksempeldata
             </button>

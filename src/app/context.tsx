@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
+import type { AiGateway } from '../domain/ai';
 import type { Commands } from '../domain/commands';
 import type { Tables } from '../domain/types';
 import type { Store } from '../data/store';
@@ -7,12 +8,13 @@ import type { Store } from '../data/store';
 interface AppCtx {
   store: Store;
   cmd: Commands;
+  ai: AiGateway;
 }
 
 const Ctx = createContext<AppCtx | null>(null);
 
-export function AppProvider({ store, cmd, children }: AppCtx & { children: ReactNode }) {
-  const value = useMemo(() => ({ store, cmd }), [store, cmd]);
+export function AppProvider({ store, cmd, ai, children }: AppCtx & { children: ReactNode }) {
+  const value = useMemo(() => ({ store, cmd, ai }), [store, cmd, ai]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -51,4 +53,9 @@ export function useCommand() {
     }
   }, [cmd]);
   return { run, error, busy, clearError: () => setError(null), cmd };
+}
+
+/** The AI gateway. Screens never see the key itself (skjema §4). */
+export function useAi(): AiGateway {
+  return useApp().ai;
 }

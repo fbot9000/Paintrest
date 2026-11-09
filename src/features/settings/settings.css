@@ -1,0 +1,9 @@
+.settings { max-width: 760px; }
+.settings-status { display: grid; gap: 8px; }
+.settings-status.warn { border-color: var(--warn-soft); background: #fbf3ec; }
+.settings-status code, .settings code { font-family: var(--font-mono); font-size: 13px; background: var(--panel); padding: 1px 6px; border-radius: 4px; }
+.status-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.settings-form { display: grid; gap: 18px; }
+.settings-actions { display: flex; gap: 10px; flex-wrap: wrap; padding-top: 4px; }
+.notice { padding: 10px 14px; border-radius: var(--r-sm); background: var(--moss-soft); color: var(--pine); font-weight: 500; }
+.test-result { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }

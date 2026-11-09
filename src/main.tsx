@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './ui/tokens.css';
 import { App } from './app/App';
 import { AppProvider } from './app/context';
+import { httpAiGateway } from './data/ai-http';
 import { createLocalCommands } from './data/local-commands';
 import { indexedDbPersistence, memoryPersistence } from './data/persistence';
 import { buildSampleData } from './data/seed';
@@ -27,7 +28,7 @@ async function boot() {
 
   root.render(
     <StrictMode>
-      <AppProvider store={store} cmd={cmd}>
+      <AppProvider store={store} cmd={cmd} ai={httpAiGateway()}>
         <App />
       </AppProvider>
     </StrictMode>,

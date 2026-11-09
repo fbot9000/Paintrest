@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-Åpne adressen Vite skriver ut. Slik åpner du appen på iPad på samme nett:
+`npm run dev` starter både Paintrest-serveren (port 8787, bare localhost) og Vite. Åpne adressen Vite skriver ut. Slik åpner du appen på iPad på samme nett:
 
 ```bash
 npm run dev -- --host
@@ -25,6 +25,20 @@ npm run build     # typesjekk og produksjonsbygg til dist/
 ```
 
 Ved første start får appen eksempeldata: prosjektet Avalon med fire figurer og ferdige maleplaner for Merlin og Druid Champions. «⋯ → Tilbakestill eksempeldata» setter dataene tilbake.
+
+## AI-nøkkel (UiB)
+
+Appen virker fullt ut uten AI. Nøkkelen legges inn under «⋯ → AI-nøkkel». Adressen er fylt ut med UiB sin: `https://models.api.uib.no/v1`.
+
+- Nøkkelen sendes én gang fra nettleseren til Paintrest-serveren (`server/`). Serveren krypterer den med AES-256-GCM og lagrer den i `.paintrest-data/ai_credential.json`.
+- Hovednøkkelen ligger i `.paintrest-data/master.key`, eller i miljøvariabelen `PAINTREST_MASTER_KEY` (64 heksadesimale tegn). Begge filene har tilgang bare for eieren, og mappen er utelatt fra git.
+- Nettleseren får aldri nøkkelen tilbake, bare de fire siste tegnene.
+- Bare `server/provider.ts` bruker den dekrypterte nøkkelen, i ett kall om gangen (`GET /models` og `POST /responses`, `Authorization: Bearer …`).
+- Den publiserte forhåndsvisningen på claude.ai har ingen server. Der står det at nøkkelen må legges inn i en lokal kjøring.
+
+```bash
+npm test   # også serveren: kryptering, at nøkkelen ikke lekker, feilmeldinger
+```
 
 ## Dette er med
 

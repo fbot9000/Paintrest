@@ -12,10 +12,15 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 6. **`openPart` skriver ikke `change_record`.** «Sist åpnede del» er et minne for brukergrensesnittet, ikke en endring av innhold.
 7. **Kobling til BGG matcher utvidelser på navn.** En manuell utvidelse med samme navn som en utvidelse fra BGG får thing-id i stedet for at det lages en ny rad.
 
+8. **`ai_credential.base_url`.** Skjemaet har ikke adressen til tjenesten. Prototypen lagrer den på raden, slik at adressen kan endres uten ny kode.
+9. **Nøkkelen ligger i en fil, ikke i PostgreSQL.** Raden har samme form som i skjemaet, men ligger i `.paintrest-data/ai_credential.json` til databasen finnes. Hovednøkkelen ligger i en fil ved siden av eller i en miljøvariabel. Hvilket nøkkellager som skal brukes i produksjon, er ikke avgjort (skjema §10).
+10. **Ingen innlogging.** Serveren lytter bare på 127.0.0.1. Kjøres Vite med `--host`, kan alle på samme nett nå `/api` gjennom proxyen, og dermed bruke nøkkelen, men ikke lese den.
+
 ## Antakelser
 
 - **Klient:** React og TypeScript som webapp med hash-ruting. Det er godkjent av brukeren 9. november 2026.
 - **Lagring:** All data ligger lokalt i nettleseren (IndexedDB). Det finnes ingen synkronisering mellom enheter.
+- **UiB-API-et:** Adresse, endepunkter og Bearer-autentisering er oppgitt av brukeren. Svarformatet (`data[].id` fra `/models`, og `output[].content[].text` eller `output_text` fra `/responses`) følger OpenAI-konvensjonen. Det er ikke testet mot UiB, fordi nettverket i utviklingsmiljøet blokkerte adressen. Testene bruker en simulert tjeneste.
 - **BGG:** Oppslaget er simulert. Navnene og thing-id-ene (9000xx) er oppdiktet.
 - **Eksempeldata:** Spillet og kildene er plassholdere hentet fra Figma. Fargene på fargeprøvene er tilnærminger. Malingsnavnene er Citadel-produkter. Det er ikke sjekket om navnene er i produksjon i dag.
 - **Skrift:** DM Serif Display, DM Sans og DM Mono, lastet fra Google Fonts. Valget er gjort ut fra skjermbildene i Figma og ikke kontrollert mot filen.

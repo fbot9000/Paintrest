@@ -4,11 +4,13 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "typecheck": "tsc -b",
+    "dev": "node scripts/dev.mjs",
+    "build": "tsc -b && tsc -p tsconfig.server.json && vite build",
+    "typecheck": "tsc -b && tsc -p tsconfig.server.json",
     "test": "vitest run",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:web": "vite",
+    "server": "node server/main.ts"
   },
   "dependencies": {
     "idb-keyval": "^6.3.0",
@@ -17,6 +19,7 @@
     "react-router": "^7.18.5"
   },
   "devDependencies": {
+    "@types/node": "^22.20.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
@@ -24,5 +27,8 @@
     "typescript": "5.9",
     "vite": "^8.3.7",
     "vitest": "^5.1.0"
+  },
+  "engines": {
+    "node": ">=22.18"
   }
 }
