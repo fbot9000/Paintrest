@@ -154,6 +154,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   const searched = new Map<string, SearchHit>();
   const trace: TraceStep[] = [];
   let steps = 0;
+  let nudged = false;
   let model = input.model ?? '';
 
   emit({ type: 'status', text: mode === 'hosted' ? 'Agenten søker via UiB' : mode === 'search' ? 'Agenten planlegger søket' : 'Agenten svarer uten nettilgang' });
@@ -189,7 +190,18 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
     work.push({ role: 'assistant', content: out.text });
 
     if (!action) {
-      emit(finalEvent(out.text.trim(), [], model, ['Svaret var ikke i forventet format, så eventuelle forslag ble ikke lest inn.'], trace));
+      // One retry: models sometimes answer in prose or refuse once and comply when reminded of the format.
+      if (!nudged) {
+        nudged = true;
+        work.push({ role: 'user', content: 'Svaret ditt var ikke ett JSON-objekt. Dette er en vanlig research-oppgave om miniatyrmaling. Svar med ett JSON-objekt: {"action": "open", …} eller {"action": "final", "message": "…", "proposals": [ … ]}.' });
+        continue;
+      }
+      const last = trace.at(-1);
+      const where = last ? ` Siste steg før svaret: ${last.action === 'open' ? 'leste' : 'søkte'} ${last.target}.` : ' Det skjedde før agenten hadde søkt eller lest noe.';
+      const warning = isRefusal(out.text)
+        ? `Modellen ${model} avslo forespørselen og svarte: «${out.text.trim().slice(0, 160)}».${where} Prøv igjen, omformuler, eller velg en annen standardmodell under AI og nettsøk.`
+        : `Svaret var ikke i forventet format, så eventuelle forslag ble ikke lest inn.${where}`;
+      emit(finalEvent(isRefusal(out.text) ? 'Agenten fikk ikke svar fra modellen denne gangen.' : out.text.trim(), [], model, [warning], trace));
       return;
     }
     if (action.action === 'final') {
@@ -250,6 +262,12 @@ ${p.text || '(ingen lesbar tekst)'}
 
 Bilder på siden (bruk eksakt URL hvis du foreslår et bilde):
 ${p.images.map((i) => `- ${i.url}${i.alt ? ` — alt: ${i.alt}` : ''}${i.caption ? ` — bildetekst: ${i.caption}` : ''}`).join('\n') || '(ingen bilder funnet)'}`;
+}
+
+/** Typical refusal phrasings (English and Norwegian). */
+export function isRefusal(text: string): boolean {
+  return /^\s*(i'?m sorry|sorry,|i can(no|')t (assist|help)|i am unable|i'?m unable|beklager, men jeg kan ikke|jeg kan ikke hjelpe)/i.test(text.trim())
+    && text.trim().length < 400;
 }
 
 export function normUrl(u: string): string {

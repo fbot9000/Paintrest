@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { extract } from './fetch-page.ts';
 import type { PageResult } from './fetch-page.ts';
 import { isPrivateAddress } from './net-guard.ts';
-import { parseAction, runResearch } from './research-agent.ts';
+import { isRefusal, parseAction, runResearch } from './research-agent.ts';
 import type { ResearchEvent } from './research-agent.ts';
 import { HostedToolError, hostedSearchOf, parseResponse } from './provider.ts';
 import type { ResponsesProvider } from './provider.ts';
@@ -164,5 +164,26 @@ describe('innebygd nettsøk via UiB', () => {
     expect(events.some((e) => e.type === 'tool_error' && e.target === 'UiB nettsøk')).toBe(true);
     expect(events.some((e) => e.type === 'search' && e.query === 'q')).toBe(true);
     expect(events.at(-1)?.type).toBe('final');
+  });
+});
+
+describe('avslag fra modellen', () => {
+  it('prøver én gang til og forklarer et vedvarende avslag', async () => {
+    const events = await run(["I'm sorry, but I cannot assist with that request.", "I'm sorry, but I cannot assist with that request."]);
+    const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    expect(final.message).toBe('Agenten fikk ikke svar fra modellen denne gangen.');
+    expect(final.warnings[0]).toMatch(/avslo forespørselen/);
+    expect(final.warnings[0]).toMatch(/før agenten hadde søkt/);
+  });
+
+  it('fortsetter når modellen følger formatet etter påminnelse', async () => {
+    const events = await run(["I'm sorry, but I cannot assist with that request.", '{"action":"final","message":"ok","proposals":[]}']);
+    expect((events.at(-1) as Extract<ResearchEvent, { type: 'final' }>).message).toBe('ok');
+  });
+
+  it('kjenner igjen avslag', () => {
+    expect(isRefusal("I'm sorry, but I cannot assist with that request.")).toBe(true);
+    expect(isRefusal('Beklager, men jeg kan ikke hjelpe med det.')).toBe(true);
+    expect(isRefusal('Her er miniatyrene i esken.')).toBe(false);
   });
 });
