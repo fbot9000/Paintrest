@@ -183,3 +183,8 @@
 .wsi-video-actions { justify-content: space-between; }
 .ws-thumb button.ws-inplan { position: absolute; right: 4px; bottom: 4px; width: 22px; height: 22px; aspect-ratio: auto; border: 2px solid #fff; border-radius: 50%; }
 .ws-thumb button.ws-inplan.on { background: var(--pine); }
+
+/* Ingen bilder ennå: ingen tom kolonne */
+.ws-body.no-refs { grid-template-columns: minmax(0, 1fr) 340px; }
+.ws-body.no-refs.side-hidden { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 1180px) { .ws-body.no-refs { grid-template-columns: minmax(0, 1fr); } }

@@ -119,8 +119,8 @@ export function Workspace() {
       </header>
       <ErrorNote error={error} onClose={clearError} />
 
-      <div className={`ws-body ${showSide ? 'side-open' : ''} ${sideShown ? '' : 'side-hidden'} ${collapsed ? 'refs-collapsed' : ''}`}>
-        <aside className="ws-refs" aria-label="Bilder av miniatyren">
+      <div className={`ws-body ${showSide ? 'side-open' : ''} ${sideShown ? '' : 'side-hidden'} ${collapsed ? 'refs-collapsed' : ''} ${data.refs.length ? '' : 'no-refs'}`}>
+        {data.refs.length > 0 && <aside className="ws-refs" aria-label="Bilder av miniatyren">
           <button type="button" className="ws-refs-toggle" onClick={() => setCollapsed(!collapsed)} aria-expanded={!collapsed}
             aria-label={collapsed ? 'Vis bildekolonnen' : 'Skjul bildekolonnen'} title={collapsed ? 'Vis bildene' : 'Skjul bildene'}>{collapsed ? '›' : '‹'}</button>
           {collapsed ? (
@@ -171,13 +171,8 @@ export function Workspace() {
                 })}
               </div>
             </>
-          ) : (
-            <div className="ws-refs-empty">
-              <p>Ingen bilder ennå.</p>
-              <p className="small muted">Finn bilder med AI, hent fra en lagret kilde eller last opp i Bilder-fanen.</p>
-            </div>
-          )}
-        </aside>
+          ) : null}
+        </aside>}
 
         <main className="ws-main">
           {tab === 'bilder' && <ImagesTab subject={s} game={data.game} run={imagesRun} browseUrl={browseUrl} setBrowseUrl={setBrowseUrl} referenceFileId={data.refs.find((r) => r.cover)?.file_id ?? data.refs[0]?.file_id ?? null} />}
@@ -233,7 +228,8 @@ function RunResult({ run: r }: { run: Run }) {
         {r.finished_at ? ` kl. ${new Date(r.finished_at).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}` : ''}
       </span>
       {final && final.type === 'final' && <p>{final.message}</p>}
-      {final && final.type === 'final' && final.warnings.map((w, i) => <p key={i} className="small ws-warn">{w}</p>)}
+      {/* Notes about removed, unconfirmed finds are bookkeeping; only problems the user must act on are shown. */}
+      {final && final.type === 'final' && final.warnings.filter((w) => !w.startsWith('Fjernet')).map((w, i) => <p key={i} className="small ws-warn">{w}</p>)}
       {r.error && <p className="small ws-warn">{r.error}</p>}
     </div>
   );

@@ -42,6 +42,8 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
   const { run: cmdRun, error, clearError } = useCommand();
   const data = useView((t) => view(t, s), [s]);
   const [selected, setSelected] = useState<Map<string, Candidate>>(new Map());
+  // Pictures that do not load (or are tiny icons) are left out instead of shown as empty boxes.
+  const [broken, setBroken] = useState<Set<string>>(new Set());
   const [cover, setCover] = useState<string | null>(null);
   const [busy, setBusy] = useState<null | 'page' | 'save'>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -118,12 +120,14 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
   const official = rest.filter((c) => c.kind === 'official' || c.kind === 'concept_art');
   const painted = rest.filter((c) => c.kind !== 'official' && c.kind !== 'concept_art');
   const videos = dedupeVideos(data.videos);
+  const visible = (list: Candidate[]) => dedupe(list).filter((c) => !broken.has(c.image_url));
   const grid = (list: Candidate[], withReasons: boolean) => (
     <div className="wsi-grid">
-      {dedupe(list).map((c) => (
+      {visible(list).map((c) => (
         <CandidateCard key={c.image_url} c={c} reasons={withReasons} saved={data.saved.has(c.image_url)}
           on={selected.has(c.image_url)} cover={cover === c.image_url}
           onToggle={(on) => toggle(c, on)} onCover={() => { setCover(c.image_url); toggle(c, true); }}
+          onBroken={() => setBroken((cur) => new Set(cur).add(c.image_url))}
           proxy={app.ai.imageProxyUrl(c.image_url)} />
       ))}
     </div>
@@ -153,6 +157,7 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
               <CandidateCard c={anchorCandidate} reasons={false} saved={data.saved.has(anchorCandidate.image_url)}
                 on={selected.has(anchorCandidate.image_url)} cover={cover === anchorCandidate.image_url}
                 onToggle={(on) => toggle(anchorCandidate, on)} onCover={() => { setCover(anchorCandidate.image_url); toggle(anchorCandidate, true); }}
+                onBroken={() => {}}
                 proxy={app.ai.imageProxyUrl(anchorCandidate.image_url)} />
               <div className="wsi-anchor-text" title={anchor.anchor.why ?? undefined}>
                 {anchor.anchor.painter && <p><strong>Malt av {anchor.anchor.painter}</strong></p>}
@@ -202,7 +207,7 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
             <details key={p.url} className="wsi-page" open={livePages.length <= 2}>
               <summary>
                 <strong>{p.title}</strong>
-                <span className="small muted"> · {p.candidates.length}</span>
+                <span className="small muted"> · {visible(p.candidates).length}</span>
                 <a className="small" href={p.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}> ↗</a>
               </summary>
               {grid(p.candidates, false)}
@@ -268,32 +273,35 @@ function dedupe(list: Candidate[]): Candidate[] {
   return list.filter((c) => !seen.has(c.image_url) && !!seen.add(c.image_url));
 }
 
-function CandidateCard({ c, reasons, saved, on, cover, onToggle, onCover, proxy }: {
+function CandidateCard({ c, reasons, saved, on, cover, onToggle, onCover, onBroken, proxy }: {
   c: Candidate; reasons: boolean; saved: boolean; on: boolean; cover: boolean;
-  onToggle: (on: boolean) => void; onCover: () => void; proxy: string;
+  onToggle: (on: boolean) => void; onCover: () => void; onBroken: () => void; proxy: string;
 }) {
+  // Cards straight from a page show only the picture; the agent's suggestions also show why.
+  const meta = (reasons && (c.reason || c.caption)) || (on && !saved);
   return (
     <div className={`wsi-card ${on ? 'on' : ''} ${saved ? 'saved' : ''}`}>
       <button type="button" className="wsi-pic" onClick={() => !saved && onToggle(!on)} aria-pressed={on} disabled={saved}>
-        <img src={proxy} alt={c.caption ?? ''} loading="lazy" />
+        <img src={proxy} alt={c.caption ?? ''} title={reasons ? undefined : c.caption ?? undefined} loading="lazy" onError={onBroken}
+          onLoad={(e) => { if (e.currentTarget.naturalWidth < 100 || e.currentTarget.naturalHeight < 100) onBroken(); }} />
         {saved && <span className="ws-badge">Lagret</span>}
         {on && <span className="wsi-check" aria-hidden>✓</span>}
       </button>
-      <div className="wsi-meta">
+      {meta && <div className="wsi-meta">
         {reasons && c.reason
           ? <span className="small wsi-reason" title={c.caption ?? undefined}>
               {c.confidence && c.confidence !== 'high' && <span className={`wsi-conf ${c.confidence}`}>{CONFIDENCE[c.confidence]}. </span>}{c.reason}
             </span>
-          : c.caption && <span className="small">{c.caption}</span>}
+          : reasons && c.caption && <span className="small">{c.caption}</span>}
         <span className="wsi-card-foot">
-          <a className="small muted" href={c.page_url} target="_blank" rel="noreferrer" title={c.page_title}>{c.creator ?? c.site} ↗</a>
+          {reasons && <a className="small muted" href={c.page_url} target="_blank" rel="noreferrer" title={c.page_title}>{c.creator ?? c.site} ↗</a>}
           {on && !saved && (
             <label className="wsi-cover">
               <input type="radio" checked={cover} onChange={onCover} /> Illustrasjon
             </label>
           )}
         </span>
-      </div>
+      </div>}
     </div>
   );
 }

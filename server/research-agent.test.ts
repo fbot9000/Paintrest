@@ -394,3 +394,21 @@ describe('videoer og sidedata', () => {
     expect(r.images[0]!.context).toContain('sidens data');
   });
 });
+
+describe('bilder i nettbutikker', () => {
+  it('fyller ut størrelsesmaler og viser hvert bilde én gang, i største størrelse', () => {
+    const html = `<html><head><title>Deluxe Upgrade Pack</title><meta property="og:image" content="https://cdn.shop.example/files/pack.jpg?v=17"></head><body>
+      <img src="https://cdn.shop.example/files/pack_300x.jpg?v=17" alt="Load image into Gallery viewer">
+      <img data-src="//cdn.shop.example/files/agents_{width}x.jpg?v=3" data-widths="[180,360]" alt="Load image into Gallery viewer">
+      <img src="https://cdn.shop.example/files/agents_360x.jpg?v=3">
+      <img src="https://img.example/get?id=1"><img src="https://img.example/get?id=2">
+      <img data-src="https://cdn.shop.example/files/x_{size}.jpg"></body></html>`;
+    const r = extract('https://shop.example/products/pack', html);
+    expect(r.images.map((i) => i.url)).toEqual([
+      'https://cdn.shop.example/files/pack.jpg?v=17',
+      'https://cdn.shop.example/files/agents_1200x.jpg?v=3',
+      'https://img.example/get?id=1',
+      'https://img.example/get?id=2',
+    ]);
+  });
+});

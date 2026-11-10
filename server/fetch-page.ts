@@ -141,20 +141,31 @@ export function extract(pageUrl: string, html: string): PageResult {
   const author = meta('meta[name="author"]') ?? meta('meta[property="article:author"]') ?? meta('meta[property="og:site_name"]');
 
   const images: PageImage[] = [];
-  const seen = new Set<string>();
+  // One entry per picture: shops and blogs list the same image in several sizes.
+  const byVariant = new Map<string, number>();
   const add = (src: string | null | undefined, alt: string, caption: string | null, context: string | null) => {
     if (!src || src.startsWith('data:')) return;
+    // Lazy-loading themes (Shopify among them) write the size as a template: …_{width}x.jpg
+    const filled = src.trim().replace(/\{width\}|%7Bwidth%7D/gi, '1200').replace(/\{height\}|%7Bheight%7D/gi, '');
+    if (/[{}]|%7B|%7D/i.test(filled)) return;
     let abs: string;
-    try { abs = new URL(src.trim(), pageUrl).toString(); } catch { return; }
-    if (!/^https?:/.test(abs) || SKIP_IMG.test(abs) || /\.svg(\?|$)/i.test(abs) || seen.has(abs)) return;
-    seen.add(abs);
+    try { abs = new URL(filled, pageUrl).toString(); } catch { return; }
+    if (!/^https?:/.test(abs) || SKIP_IMG.test(abs) || /\.svg(\?|$)/i.test(abs)) return;
+    const key = variantKey(abs);
+    const at = byVariant.get(key);
+    if (at !== undefined) {
+      if (sizeHint(abs) > sizeHint(images[at]!.url)) images[at]!.url = abs;
+      return;
+    }
+    byVariant.set(key, images.length);
     images.push({ url: abs, alt: alt.trim().slice(0, 160), caption: caption?.trim().slice(0, 200) || null, context });
   };
   add(meta('meta[property="og:image"]'), title, null, null);
   for (const img of root.querySelectorAll('img')) {
     const w = Number(img.getAttribute('width'));
     if (w && w < 120) continue;
-    const src = img.getAttribute('data-src') ?? img.getAttribute('data-lazy-src') ?? largestFromSrcset(img.getAttribute('srcset')) ?? img.getAttribute('src');
+    const src = largestFromSrcset(img.getAttribute('data-srcset')) ?? img.getAttribute('data-src') ?? img.getAttribute('data-lazy-src')
+      ?? largestFromSrcset(img.getAttribute('srcset')) ?? img.getAttribute('src');
     const fig = closest(img, 'figure');
     const block = fig ?? blockOf(img);
     const caption = fig?.querySelector('figcaption')?.text ?? block?.querySelector('.se-caption, .caption, .wp-caption-text')?.text ?? null;
@@ -176,6 +187,28 @@ export function extract(pageUrl: string, html: string): PageResult {
   const text = body.structuredText.replace(/\n{3,}/g, '\n\n').replace(/[ \t]+/g, ' ').trim().slice(0, MAX_TEXT);
 
   return { url: pageUrl, title, site: new URL(pageUrl).hostname.replace(/^www\./, ''), author, text, images, language: language ?? guessLanguage(text) };
+}
+
+/** The same picture in another size has the same key (size suffixes and query removed). */
+export function variantKey(u: string): string {
+  try {
+    const x = new URL(u);
+    x.hash = '';
+    for (const k of [...x.searchParams.keys()]) {
+      if (/^(width|w|height|h|type|v|crop|quality|q|format|fm|fit|resize|size|auto|dpr)$/i.test(k)) x.searchParams.delete(k);
+    }
+    return x.toString()
+      .replace(/(_(\d+x\d*|x\d+)|_(pico|icon|thumb|small|compact|medium|large|grande|original|master)|@\dx|-\d+x\d+|-scaled)(?=\.[a-z0-9]+$)/i, '')
+      .toLowerCase();
+  } catch {
+    return u;
+  }
+}
+
+/** Rough width a variant asks for; no size marker usually means the original, which is largest. */
+function sizeHint(u: string): number {
+  const m = /[_-](\d+)x\d*(?=\.[a-z0-9]+(\?|$))/i.exec(u) ?? /[?&](?:width|w)=(\d+)/i.exec(u);
+  return m ? Number(m[1]) : 100_000;
 }
 
 /** Image addresses written anywhere in the page source, also JSON-escaped ones. */

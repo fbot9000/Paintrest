@@ -600,15 +600,18 @@ function Message({ m }: { m: ResearchMessage }) {
 }
 
 export function LiveSteps({ events, onStop }: { events: ResearchEvent[]; onStop: () => void }) {
+  // An image hunt reports its phases; the general status line would only repeat them.
+  const phased = events.some((e) => e.type === 'phase');
+  const short = (t: string) => { const one = t.split('\n').filter(Boolean).slice(-1)[0] ?? t; return one.length > 110 ? `${one.slice(0, 108)} …` : one; };
   const lines = events.flatMap((e): { key: string; text: ReactNode; state: 'run' | 'ok' | 'err' }[] => {
     switch (e.type) {
-      case 'status': return [{ key: 's' + e.text, text: e.text, state: 'ok' }];
+      case 'status': return phased ? [] : [{ key: 's' + e.text, text: e.text, state: 'ok' }];
       case 'search': return [{ key: 'q' + e.query, text: <>Søker: <em>«{e.query}»</em></>, state: 'run' }];
       case 'search_done': return [{ key: 'qd' + e.query, text: <>{e.hits.length} treff for «{e.query}»</>, state: 'ok' }];
-      case 'open': return [{ key: 'o' + e.url, text: <>Leser {shortUrl(e.url)}</>, state: 'run' }];
-      case 'open_done': return [{ key: 'od' + e.url, text: <>{e.title} · {e.image_count} bilder</>, state: 'ok' }];
-      case 'look': return [{ key: 'l' + e.count + (e.why ?? ''), text: <>Ser på {e.count} bilder{e.why ? ` – ${e.why}` : ''}</>, state: 'run' }];
-      case 'look_done': return [{ key: 'ld' + e.summary.slice(0, 20), text: <>Vurdering: {e.summary.split('\n').slice(-1)[0]}</>, state: 'ok' }];
+      case 'open': return [{ key: 'o' + e.url, text: <span title={e.url}>Leser {hostOnly(e.url)}</span>, state: 'run' }];
+      case 'open_done': return [{ key: 'od' + e.url, text: <span title={e.url}>{e.title}</span>, state: 'ok' }];
+      case 'look': return [{ key: 'l' + e.count + (e.why ?? ''), text: <>Ser på {e.count} {e.count === 1 ? 'bilde' : 'bilder'}</>, state: 'run' }];
+      case 'look_done': return [{ key: 'ld' + e.summary.slice(0, 20), text: <span title={e.summary}>{short(e.summary)}</span>, state: 'ok' }];
       case 'phase': return [{ key: 'p' + e.phase, text: <strong>{e.text}</strong>, state: 'ok' }];
       case 'anchor': return [{ key: 'a' + (e.anchor.image_url ?? ''), text: e.anchor.image_url
         ? <>Offisielt anker valgt{e.anchor.site ? ` fra ${e.anchor.site}` : ''}{e.anchor.painter ? `, malt av ${e.anchor.painter}` : ''}</>
@@ -654,6 +657,10 @@ function SourceList({ sources, compact }: { sources: SourceRef[]; compact?: bool
       {compact && sources.length > 2 && <li className="small">+{sources.length - 2} kilder</li>}
     </ul>
   );
+}
+
+function hostOnly(u: string): string {
+  try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; }
 }
 
 function shortUrl(u: string): string {
