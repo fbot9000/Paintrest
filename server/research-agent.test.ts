@@ -412,3 +412,58 @@ describe('bilder i nettbutikker', () => {
     ]);
   });
 });
+
+describe('innhold, ikke anbefalinger', () => {
+  it('tar bare bildene i selve innholdet, og bare hovedbildet på videosider', () => {
+    const page = `<html><head><title>Galleri</title></head><body><nav><img src="https://a.example/menu-photo.jpg"></nav>
+      <article><p>Malte agenter</p><img src="https://a.example/agents.jpg"></article>
+      <aside><img src="https://a.example/other-game.jpg"></aside></body></html>`;
+    expect(extract('https://a.example/post', page).images.map((i) => i.url)).toEqual(['https://a.example/agents.jpg']);
+    const video = `<html><head><meta property="og:image" content="https://i0.hdslb.example/cover.jpg"><title>视频</title></head><body>
+      <img src="https://i0.hdslb.example/rec1.jpg"><img src="https://i0.hdslb.example/rec2.jpg"></body></html>`;
+    expect(extract('https://www.bilibili.com/video/BV1x', video).images.map((i) => i.url)).toEqual(['https://i0.hdslb.example/cover.jpg']);
+  });
+});
+
+describe('bildesøk', () => {
+  const focus = { kind: 'images' as const, subject_ref: 'M1', subject_name: 'Agenter', game: 'Dune Imperium', reference_image: null };
+  it('leser Brave- og Tavily-svar', async () => {
+    const { parseBraveImages, parseTavilyImages } = await import('./search.ts');
+    expect(parseBraveImages({ results: [{ title: 'Painted agents', url: 'https://www.reddit.com/r/x/1', source: 'reddit.com',
+      thumbnail: { src: 'https://imgs.search.brave.com/abc' }, properties: { url: 'https://i.redd.it/a.jpg' } }, { title: 'x' }] }))
+      .toEqual([{ image_url: 'https://i.redd.it/a.jpg', thumbnail_url: 'https://imgs.search.brave.com/abc', page_url: 'https://www.reddit.com/r/x/1', title: 'Painted agents', site: 'reddit.com' }]);
+    expect(parseTavilyImages({ results: [{ url: 'https://bgg.example/t', title: 'Thread', images: ['https://cf.bgg.example/1.jpg', { url: 'https://cf.bgg.example/2.jpg', description: 'Agents' }] }] }).map((i) => [i.image_url, i.title]))
+      .toEqual([['https://cf.bgg.example/1.jpg', 'Thread'], ['https://cf.bgg.example/2.jpg', 'Agents']]);
+  });
+
+  it('søker bilder, ser på miniatyrbildet og foreslår uten å åpne siden', async () => {
+    const hit = { image_url: 'https://i.redd.it/agents.jpg', thumbnail_url: 'https://imgs.search.brave.com/t1', page_url: 'https://www.reddit.com/r/dune/1', title: 'Painted my Dune Imperium agents', site: 'reddit.com' };
+    const queries: string[] = [];
+    const looked: string[][] = [];
+    const search = {
+      configured: () => true,
+      search: async () => [],
+      imageSearch: async (q: string) => { queries.push(q); return q.includes('"') ? [] : [hit]; },
+    } as unknown as WebSearch;
+    const replies = [
+      '{"action":"image_search","query":"\\"Dune Imperium\\" agents"}',
+      '{"action":"anchor","image_url":"https://i.redd.it/agents.jpg","page_url":"https://www.reddit.com/r/dune/1","kind":"official"}',
+      '{"action":"look","image_urls":["https://i.redd.it/agents.jpg"]}',
+      JSON.stringify({ action: 'final', message: 'ok', proposals: [{ type: 'reference_selection', payload: { subject: 'M1',
+        images: [{ image_url: 'https://i.redd.it/agents.jpg', page_url: 'https://www.reddit.com/r/dune/1', kind: 'painted', confidence: 'high', reason: 'Malt' }] } }] }),
+    ];
+    let i = 0;
+    const prov = { respond: async () => ({ text: replies[i++] ?? '{"action":"final","message":"slutt","proposals":[]}', model: 'm', usage: null, searches: [], citations: [] }) } as unknown as ResponsesProvider;
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider: prov, search, openPage: async () => { throw new Error('skal ikke åpnes'); },
+      lookAtImages: async (urls) => { looked.push(urls); return '1 – ja'; } },
+    { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: ['reference_selection'], focus }, (e) => events.push(e));
+    expect(queries).toEqual(['"Dune Imperium" agents', 'Dune Imperium agents']);
+    expect(looked).toEqual([['https://imgs.search.brave.com/t1']]);
+    const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    const images = (final.proposals[0] as { payload: { images: Record<string, unknown>[] } }).payload.images;
+    expect(images).toHaveLength(1);
+    expect(images[0]).toMatchObject({ image_url: 'https://i.redd.it/agents.jpg', thumbnail_url: 'https://imgs.search.brave.com/t1', page_url: 'https://www.reddit.com/r/dune/1', site: 'reddit.com' });
+    expect(events.some((e) => e.type === 'image_search_done')).toBe(true);
+  });
+});

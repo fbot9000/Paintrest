@@ -69,8 +69,8 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
   const livePages = useMemo(() => (run?.pages ?? []).map((p) => ({
     ...p,
     candidates: p.images.map((i): Candidate => ({
-      image_url: i.url, page_url: p.url, page_title: p.title, site: p.site, creator: p.author,
-      caption: i.caption ?? (i.alt || null), page_language: p.language, kind: null, proposal_id: null,
+      image_url: i.url, page_url: i.page_url ?? p.url, page_title: i.page_title ?? p.title, site: i.site ?? p.site, creator: p.search ? null : p.author,
+      caption: i.caption ?? (i.alt || null), page_language: p.language, kind: null, proposal_id: null, thumbnail_url: i.thumbnail_url ?? null,
     })),
   })), [run?.pages]);
 
@@ -115,6 +115,7 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
     page_title: anchor.anchor.page_title ?? '', site: anchor.anchor.site ?? '', creator: anchor.anchor.painter,
     caption: null,
     kind: anchor.anchor.kind === 'painted' ? 'official' : anchor.anchor.kind, proposal_id: anchor.proposal_id,
+    thumbnail_url: data.suggested.find((x) => x.image_url === anchor.anchor.image_url)?.thumbnail_url ?? null,
   } : null;
   const rest = dedupe(data.suggested).filter((c) => c.image_url !== anchorCandidate?.image_url);
   const official = rest.filter((c) => c.kind === 'official' || c.kind === 'concept_art');
@@ -128,7 +129,7 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
           on={selected.has(c.image_url)} cover={cover === c.image_url}
           onToggle={(on) => toggle(c, on)} onCover={() => { setCover(c.image_url); toggle(c, true); }}
           onBroken={() => setBroken((cur) => new Set(cur).add(c.image_url))}
-          proxy={app.ai.imageProxyUrl(c.image_url)} />
+          proxy={app.ai.imageProxyUrl(c.image_url)} fallback={c.thumbnail_url ? app.ai.imageProxyUrl(c.thumbnail_url) : null} />
       ))}
     </div>
   );
@@ -158,7 +159,7 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
                 on={selected.has(anchorCandidate.image_url)} cover={cover === anchorCandidate.image_url}
                 onToggle={(on) => toggle(anchorCandidate, on)} onCover={() => { setCover(anchorCandidate.image_url); toggle(anchorCandidate, true); }}
                 onBroken={() => {}}
-                proxy={app.ai.imageProxyUrl(anchorCandidate.image_url)} />
+                proxy={app.ai.imageProxyUrl(anchorCandidate.image_url)} fallback={anchorCandidate.thumbnail_url ? app.ai.imageProxyUrl(anchorCandidate.thumbnail_url) : null} />
               <div className="wsi-anchor-text" title={anchor.anchor.why ?? undefined}>
                 {anchor.anchor.painter && <p><strong>Malt av {anchor.anchor.painter}</strong></p>}
                 {anchor.anchor.description && <p>{anchor.anchor.description}</p>}
@@ -208,7 +209,7 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
               <summary>
                 <strong>{p.title}</strong>
                 <span className="small muted"> · {visible(p.candidates).length}</span>
-                <a className="small" href={p.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}> ↗</a>
+                {!p.search && <a className="small" href={p.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}> ↗</a>}
               </summary>
               {grid(p.candidates, false)}
             </details>
@@ -273,17 +274,20 @@ function dedupe(list: Candidate[]): Candidate[] {
   return list.filter((c) => !seen.has(c.image_url) && !!seen.add(c.image_url));
 }
 
-function CandidateCard({ c, reasons, saved, on, cover, onToggle, onCover, onBroken, proxy }: {
+function CandidateCard({ c, reasons, saved, on, cover, onToggle, onCover, onBroken, proxy, fallback = null }: {
   c: Candidate; reasons: boolean; saved: boolean; on: boolean; cover: boolean;
-  onToggle: (on: boolean) => void; onCover: () => void; onBroken: () => void; proxy: string;
+  onToggle: (on: boolean) => void; onCover: () => void; onBroken: () => void; proxy: string; fallback?: string | null;
 }) {
+  // The original may be blocked; an image search's small copy usually loads.
+  const [src, setSrc] = useState(proxy);
+  const failed = () => { if (fallback && src !== fallback) setSrc(fallback); else onBroken(); };
   // Cards straight from a page show only the picture; the agent's suggestions also show why.
   const meta = (reasons && (c.reason || c.caption)) || (on && !saved);
   return (
     <div className={`wsi-card ${on ? 'on' : ''} ${saved ? 'saved' : ''}`}>
       <button type="button" className="wsi-pic" onClick={() => !saved && onToggle(!on)} aria-pressed={on} disabled={saved}>
-        <img src={proxy} alt={c.caption ?? ''} title={reasons ? undefined : c.caption ?? undefined} loading="lazy" onError={onBroken}
-          onLoad={(e) => { if (e.currentTarget.naturalWidth < 100 || e.currentTarget.naturalHeight < 100) onBroken(); }} />
+        <img src={src} alt={c.caption ?? ''} title={reasons ? undefined : [c.caption, c.site].filter(Boolean).join(' · ') || undefined} loading="lazy" onError={failed}
+          onLoad={(e) => { if (e.currentTarget.naturalWidth < 100 || e.currentTarget.naturalHeight < 100) failed(); }} />
         {saved && <span className="ws-badge">Lagret</span>}
         {on && <span className="wsi-check" aria-hidden>✓</span>}
       </button>

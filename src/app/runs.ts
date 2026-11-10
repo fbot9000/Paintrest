@@ -15,7 +15,11 @@ export interface LivePage {
   site: string;
   author: string | null;
   language: string | null;
-  images: { url: string; alt: string; caption: string | null; context: string | null }[];
+  images: { url: string; alt: string; caption: string | null; context: string | null;
+    /** Image search: each picture has its own page. */
+    page_url?: string; page_title?: string; site?: string; thumbnail_url?: string | null }[];
+  /** True for an image search rather than a page. */
+  search?: boolean;
 }
 
 export interface Run {
@@ -72,7 +76,13 @@ class RunRegistry {
         ? [...cur.pages.filter((p) => p.url !== e.url), {
             url: e.url, title: e.title, site: e.site ?? hostOf(e.url), author: e.author ?? null, language: e.language ?? null, images: e.images ?? [],
           }]
-        : cur.pages;
+        : e.type === 'image_search_done'
+          ? [...cur.pages.filter((p) => p.url !== `bildesok:${e.query}`), {
+              url: `bildesok:${e.query}`, title: `Bildesøk: ${e.query}`, site: '', author: null, language: null, search: true,
+              images: e.images.map((h) => ({ url: h.image_url, alt: h.title, caption: h.title || null, context: null,
+                page_url: h.page_url, page_title: h.title || h.site, site: h.site, thumbnail_url: h.thumbnail_url })),
+            }]
+          : cur.pages;
       this.set({ ...cur, events: [...cur.events, e], pages });
     };
     work(onEvent, ac.signal)

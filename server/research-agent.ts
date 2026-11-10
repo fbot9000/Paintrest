@@ -15,7 +15,7 @@ import type { PageResult, VideoInfo } from './fetch-page.ts';
 import { youtubeId } from './fetch-page.ts';
 import { HostedToolError, VisionUnsupportedError } from './provider.ts';
 import type { HostedSearch, ResponsesMessage, ResponsesProvider } from './provider.ts';
-import type { SearchHit, WebSearch } from './search.ts';
+import type { ImageHit, SearchHit, WebSearch } from './search.ts';
 
 export type ResearchEvent =
   | { type: 'status'; text: string }
@@ -25,6 +25,8 @@ export type ResearchEvent =
   | { type: 'open_done'; url: string; title: string; image_count: number; site?: string; author?: string | null; language?: string | null;
       /** The page's images, so the user can look and pick while the agent is still working. */
       images?: { url: string; alt: string; caption: string | null; context: string | null }[] }
+  | { type: 'image_search'; query: string; why: string | null }
+  | { type: 'image_search_done'; query: string; images: ImageHit[] }
   | { type: 'look'; count: number; why: string | null }
   | { type: 'look_done'; summary: string }
   | { type: 'phase'; phase: 'official' | 'broad'; text: string }
@@ -44,7 +46,7 @@ export interface PageSeen {
 }
 
 export interface TraceStep {
-  action: 'search' | 'open' | 'look' | 'anchor';
+  action: 'search' | 'open' | 'look' | 'anchor' | 'image_search';
   target: string;
   result: string;
 }
@@ -135,13 +137,15 @@ export const MAX_PLAN_STEPS = 16;
 const MAX_LOOK = 8;
 const MAX_MESSAGES = 30;
 
-export function researchInstructions(context: unknown, resultTypes: string[], mode: WebMode, anyFocus: ImageFocus | PlanFocus | null = null, vision = false, imagesAttached = false, direct = false, hunt0: HuntState | null = null): string {
+export function researchInstructions(context: unknown, resultTypes: string[], mode: WebMode, anyFocus: ImageFocus | PlanFocus | null = null, vision = false, imagesAttached = false, direct = false, hunt0: HuntState | null = null, imageSearch = false): string {
+  const img = imageSearch && mode !== 'none';
   const focus = anyFocus?.kind === 'images' ? anyFocus : null;
   const plan = anyFocus?.kind === 'plan' ? anyFocus : null;
   const maxSteps = focus ? MAX_IMAGE_STEPS : plan ? MAX_PLAN_STEPS : MAX_TOOL_STEPS;
   const sourceRules = `Kildekrav (viktig):
 - Påstander om hvilke miniatyrer og hvor mange som finnes, skal bygge på kilder. Oppgi dem i "sources" med eksakt URL.
-- Bilder du foreslår, må være fra bildelisten på en side du har åpnet med "open". Bruk eksakt bilde-URL og sidens URL. Ikke gjett eller lag bilde-URL-er.
+- Bilder du foreslår, må være fra bildelisten på en side du har åpnet med "open"${img ? ' eller fra et bildesøk ("image_search")' : ''}. Bruk eksakt bilde-URL og sidens URL. Ikke gjett eller lag bilde-URL-er.
+- Søk med korte søk (3–6 ord) uten anførselstegn. Start bredt og snevre inn etterpå.
 - Står det ikke i kildene, skriv det i "uncertainty". Bruk "documented" bare når en kilde sier det.`;
   const web = mode === 'hosted'
     ? `Du har nettilgang. Du har et innebygd nettsøk-verktøy (web_search) som du bruker direkte når du trenger det; bruk gjerne engelske søkeord.
@@ -167,10 +171,15 @@ Det du vet fra opplæringen, merkes "synthesized". Ikke foreslå bilder.`;
     ? `
 Du kan også SE på bilder:
   {"action": "look", "image_urls": ["https://…", …], "question": "hva du vil vite", "why": "kort grunn"}
-Bildene må være fra bildelisten på en side du har åpnet (høyst ${MAX_LOOK} per gang). Paintrest viser deg bildene${focus?.reference_image ? ', med et kjent bilde av miniatyren først som referanse' : ''}, og du får en vurdering tilbake.
+Bildene må være fra bildelisten på en side du har åpnet${img ? ' eller fra et bildesøk' : ''} (høyst ${MAX_LOOK} per gang). Paintrest viser deg bildene${focus?.reference_image ? ', med et kjent bilde av miniatyren først som referanse' : ''}, og du får en vurdering tilbake.
 Bruk dette til å avgjøre om et dårlig merket bilde faktisk viser figuren.`
     : '';
-  const hunt = focus ? huntInstructions(focus, hunt0 ?? { phase: 'official', anchor: null }, mode, vision) : '';
+  const imageTool = img ? `
+Du har også BILDESØK, slik en person bruker Google Bilder:
+  {"action": "image_search", "query": "…", "why": "kort grunn"}
+Du får inntil 40 bilder, hvert med siden det kommer fra. Bilder fra bildesøket kan vises med "look" og foreslås direkte (eksakt bilde-URL og side-URL fra listen), uten at du åpner siden.
+Mange av de beste kildene (Reddit, BoardGameGeek, Etsy, Instagram, Facebook) kan ikke åpnes av Paintrest, men bildene deres finnes i bildesøket.` : '';
+  const hunt = focus ? huntInstructions(focus, hunt0 ?? { phase: 'official', anchor: null }, mode, vision, img) : '';
   const planTask = plan ? `
 
 OPPDRAG: MALEPLAN for miniatyren «${plan.subject_name}» (${plan.subject_ref}) fra spillet «${plan.game}».
@@ -190,7 +199,7 @@ Lag ikke andre forslagstyper i dette oppdraget.` : '';
 Du hjelper brukeren å kartlegge miniatyrer i brettspillprosjekter, finne referansebilder og lage maleplaner med eksakte malingsprodukter.
 Svar alltid på norsk bokmål.
 
-${web}${look}${hunt}${planTask}
+${web}${look}${imageTool}${hunt}${planTask}
 
 Regler for forslag:
 - Du arbeider fritt INNE I DETTE PROSJEKTET mens brukeren setter det opp. Du kan lage, endre, dele, slå sammen og slette miniatyrer, og lage nye versjoner av maleplaner, også for det som allerede er godkjent. Ikke be brukeren gjøre endringer manuelt; gjør det selv gjennom "proposals".
@@ -231,7 +240,8 @@ ${JSON.stringify(context)}`;
 }
 
 /** Phase 1 finds and checks the best official picture; phase 2 searches broadly and compares with it. */
-function huntInstructions(focus: ImageFocus, hunt: HuntState, mode: WebMode, vision: boolean): string {
+function huntInstructions(focus: ImageFocus, hunt: HuntState, mode: WebMode, vision: boolean, img: boolean): string {
+  const lookIt = vision && mode !== 'none';
   const head = `OPPDRAG: BILDEJAKT for miniatyren «${focus.subject_name}» (${focus.subject_ref}) fra spillet «${focus.game}».
 Slike bilder er vanskelige å finne og ofte dårlig merket. Jakten har to faser, og Paintrest styrer overgangen mellom dem.
 Åpne sider i known_sources direkte når de er relevante, i stedet for å søke dem fram på nytt.`;
@@ -242,7 +252,8 @@ ${head}
 
 FASE 1 AV 2: OFFISIELT ANKER (høyst ${OFFICIAL_STEPS} verktøysteg)
 Finn det beste offisielle bildet av akkurat denne figuren. Resten av jakten sammenlignes med det.
-Let i denne rekkefølgen:
+${img ? `Begynn med bildesøk, for eksempel «${focus.game} ${focus.subject_name}», «${focus.game} ${focus.subject_name} miniature» og «${focus.game} miniatures». Utgiverens og kampanjens bilder dukker ofte opp der.
+` : ''}Let i denne rekkefølgen:
 - utgiverens nettside og nettbutikk: produktsiden for spillet, utvidelsen eller figuren,
 - kampanjen på Kickstarter eller Gamefound: hovedsiden, oppdateringene («updates») og tilleggene («add-ons»), som ofte har malte figurer,
 - BoardGameGeek: spillets side og bildegalleriet, og regelbok eller komponentliste.
@@ -250,7 +261,7 @@ Kampanjer får ofte en profesjonell maler til å male figurene («painted by …
 Avgjør hvilke bilder som faktisk viser figuren${vision && mode !== 'none' ? ' (bruk «look»)' : ' ut fra teksten rundt bildene'}. Foretrekk i denne rekkefølgen: offisielt malt figur, umalt render eller 3D-modell, konseptkunst.
 Avslutt fasen med ETT JSON-objekt:
   {"action": "anchor", "image_url": "https://…", "page_url": "https://…", "kind": "official|concept_art", "painter": "navn eller null", "description": "kjennetegn: positur, våpen, kappe, base, detaljer", "why": "hvorfor dette er riktig figur"}
-Bildet må være fra bildelisten på en side du har åpnet.
+Bildet må være fra bildelisten på en side du har åpnet${img ? ' eller fra et bildesøk' : ''}.
 Finner du ikke noe offisielt bilde, svar {"action": "anchor", "image_url": null, "description": "det du vet om hvordan figuren ser ut", "why": "hva du prøvde"}.
 Ikke svar med final i fase 1.`;
   }
@@ -266,7 +277,9 @@ ${head}
 FASE 2 AV 2: BREDT SØK (resten av verktøystegene)
 ${anchorText}
 Finn ut om noen har malt figuren, og samle de beste bildene. Arbeid slik:
-1. ${a?.painter ? `Maleren fra kampanjen, ${a.painter}: portefølje, blogg, Putty&Paint, CoolMiniOrNot.` : 'Maleren fra kampanjen, hvis navnet dukker opp: portefølje, blogg, Putty&Paint, CoolMiniOrNot.'}
+${img ? `0. BILDESØK FØRST, bredt, slik en person gjør i Google Bilder: «${focus.game} painted», «${focus.game} painted minis», «${focus.game} ${focus.subject_name} painted», «${focus.game} miniatures painted reddit». Korte søk uten anførselstegn. Gir et søk mange treff for hele spillet, er det bra: figuren er ofte med på bilder av flere figurer.
+   ${lookIt ? `Se på kandidatene med «look» i bunker på ${MAX_LOOK}, og behold bare bilder der figuren faktisk er med. Åpne en side bare når du trenger teksten (maler, farger); mange sider kan ikke åpnes.` : 'Vurder kandidatene ut fra tittelen og siden de kommer fra.'}
+` : ''}1. ${a?.painter ? `Maleren fra kampanjen, ${a.painter}: portefølje, blogg, Putty&Paint, CoolMiniOrNot.` : 'Maleren fra kampanjen, hvis navnet dukker opp: portefølje, blogg, Putty&Paint, CoolMiniOrNot.'}
 2. Søk bredt og på flere språk. Malere legger ofte ut bilder på koreanske (Naver-blogg, Tistory), japanske, kinesiske, polske, spanske og tyske blogger og forum, og på Reddit (for eksempel r/minipainting) og BoardGameGeek. Søk med spillets navn og figurens navn, også translitterert, sammen med ord som «painted», «도색», «塗装», «malowanie» og «pintado».
 3. Åpne mange sider: gallerier, malerapporter, Reddit-tråder og BGG-bilder. En side som viser hele fraksjonen kan ha figuren uten navn. Sammenlign med ankeret${vision && mode !== 'none' ? ' med «look»' : ''}: form, positur, våpen og base, ikke farger.
 4. YouTube: søk etter malevideoer av figuren eller fraksjonen (for eksempel «${focus.subject_name} painting», «speed paint», «도색»). Du kan ikke se videoene. Ta dem med i "videos" med URL og en norsk setning om hva videoen trolig viser, ut fra tittel og søketreff. Paintrest henter tittel og kanal selv. Høyst ${MAX_VIDEOS}.
@@ -284,6 +297,7 @@ type Action =
   | { action: 'search'; query: string; why: string | null }
   | { action: 'open'; url: string; why: string | null }
   | { action: 'look'; image_urls: string[]; question: string; why: string | null }
+  | { action: 'image_search'; query: string; why: string | null }
   | { action: 'anchor'; image_url: string | null; page_url: string | null; kind: string | null; painter: string | null; description: string | null; why: string | null }
   | { action: 'final'; message: string; proposals: unknown[] };
 
@@ -302,6 +316,7 @@ export function parseAction(text: string): Action | null {
     const why = typeof v.why === 'string' ? v.why : null;
     if (v.action === 'search' && typeof v.query === 'string') return { action: 'search', query: v.query, why };
     if (v.action === 'open' && typeof v.url === 'string') return { action: 'open', url: v.url, why };
+    if (v.action === 'image_search' && typeof v.query === 'string') return { action: 'image_search', query: v.query, why };
     if (v.action === 'look' && Array.isArray(v.image_urls)) {
       return { action: 'look', image_urls: v.image_urls.filter((x): x is string => typeof x === 'string'), question: typeof v.question === 'string' ? v.question : '', why };
     }
@@ -334,7 +349,10 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   let anchorRef: string | null = null;
   let phaseSteps = 0;
   let huntNudges = 0;
-  const build = () => researchInstructions(input.context, input.result_types, mode, input.focus ?? null, vision, imagesAttached, !!input.direct_apply && !input.focus, hunt);
+  // Image search needs a Tavily or Brave key; it works next to UiB's own web search too.
+  const imageSearchOn = !!deps.search?.configured() && !plan;
+  const imageHits = new Map<string, ImageHit>();
+  const build = () => researchInstructions(input.context, input.result_types, mode, input.focus ?? null, vision, imagesAttached, !!input.direct_apply && !input.focus, hunt, imageSearchOn);
   const withImages = (): ResponsesMessage[] => {
     if (!imagesAttached || !plan) return history;
     const last = history.at(-1)!;
@@ -424,7 +442,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
         work.push({ role: 'user', content: hunt ? 'Ankeret er allerede satt. Fortsett fase 2 med verktøyene eller final.' : '"anchor" brukes bare i bildejakt. Svar med et verktøy eller final.' });
         continue;
       }
-      const anchor = anchorFrom(action, opened);
+      const anchor = anchorFrom(action, opened, imageHits);
       if (!anchor) {
         if (++huntNudges <= 2) {
           work.push({ role: 'user', content: 'Ankerbildet finnes ikke i bildelisten på en side du har åpnet. Bruk eksakt bilde-URL fra en bildeliste, eller sett "image_url" til null.' });
@@ -448,14 +466,16 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       continue;
     }
     if (action.action === 'final') {
-      const checked = verifyProposals(action.proposals, opened, searched);
-      if (focus && hunt) await finishHunt(checked, focus, hunt, opened, searched, deps.videoInfo);
+      const checked = verifyProposals(action.proposals, opened, searched, imageHits);
+      if (focus && hunt) await finishHunt(checked, focus, hunt, opened, searched, deps.videoInfo, imageHits);
       emit(finalEvent(action.message, checked.proposals, model, checked.warnings, trace, opened));
       return;
     }
     const allowed = action.action === 'look'
       ? vision && mode !== 'none'
-      : mode === 'search' || (mode === 'hosted' && action.action === 'open');
+      : action.action === 'image_search'
+        ? imageSearchOn && mode !== 'none'
+        : mode === 'search' || (mode === 'hosted' && action.action === 'open');
     if (allowed && hunt?.phase === 'official' && phaseSteps >= OFFICIAL_STEPS && steps < maxSteps) {
       if (++huntNudges <= 2) {
         work.push({ role: 'user', content: `Fase 1 har brukt sine ${OFFICIAL_STEPS} steg. Svar nå med {"action": "anchor", …}, med "image_url": null hvis du ikke fant noe.` });
@@ -471,6 +491,8 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
           ? `Du har brukt alle ${maxSteps} verktøystegene. Svar nå med {"action": "final", …} basert på det du har funnet.`
           : action.action === 'look'
             ? 'Bildevisning er ikke tilgjengelig. Vurder bildene ut fra teksten rundt dem, og fortsett med open eller final.'
+            : action.action === 'image_search'
+              ? 'Bildesøk er ikke tilgjengelig i dette oppsettet. Fortsett med nettsøk og open, eller final.'
             : 'Bruk det innebygde web_search-verktøyet til å søke. Svar med {"action": "open", …} eller {"action": "final", …}.' });
       continue;
     }
@@ -480,6 +502,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
     if (action.action === 'look') {
       // Only images from pages opened in this turn: the model cannot make Paintrest fetch arbitrary files.
       const known = new Set([...opened.values()].flatMap((pg) => pg.images.map((i) => normUrl(i.url))));
+      for (const k of imageHits.keys()) known.add(k);
       const urls = [...new Set(action.image_urls.map(normUrl))].filter((u) => known.has(u)).slice(0, MAX_LOOK);
       if (!urls.length) {
         work.push({ role: 'user', content: 'Ingen av bilde-URL-ene finnes på sidene du har åpnet. Bruk eksakte URL-er fra bildelistene.' });
@@ -487,7 +510,9 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       }
       emit({ type: 'look', count: urls.length, why: action.why });
       try {
-        const verdict = await deps.lookAtImages!(urls, action.question || `Viser bildene ${focus?.subject_name ?? 'figuren'}?`, focus?.reference_image ?? anchorRef ?? plan?.reference_images[0] ?? null);
+        // Image-search hits are shown from the search service's small copy: the original site often blocks other servers.
+        const fetchable = urls.map((u) => imageHits.get(u)?.thumbnail_url ?? u);
+        const verdict = await deps.lookAtImages!(fetchable, action.question || `Viser bildene ${focus?.subject_name ?? 'figuren'}?`, focus?.reference_image ?? anchorRef ?? plan?.reference_images[0] ?? null);
         emit({ type: 'look_done', summary: verdict.slice(0, 300) });
         trace.push({ action: 'look', target: `${urls.length} bilder`, result: verdict.slice(0, 160) });
         work.push({ role: 'user', content: `Vurdering av bildene:\n${verdict}` });
@@ -504,10 +529,37 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       continue;
     }
 
+    if (action.action === 'image_search') {
+      emit({ type: 'image_search', query: action.query, why: action.why });
+      try {
+        let query = action.query;
+        let hits = await deps.search!.imageSearch(query);
+        if (!hits.length && /["«»“”]/.test(query)) {
+          query = unquote(query);
+          hits = await deps.search!.imageSearch(query);
+        }
+        for (const h of hits) {
+          imageHits.set(normUrl(h.image_url), h);
+          if (!searched.has(normUrl(h.page_url))) searched.set(normUrl(h.page_url), { title: h.title || h.site, url: h.page_url, snippet: '' });
+        }
+        emit({ type: 'image_search_done', query, images: hits });
+        trace.push({ action: 'image_search', target: query, result: `${hits.length} bilder` });
+        work.push({ role: 'user', content: `Bildesøk «${query}»${query !== action.query ? ' (uten anførselstegn, fordi søket med dem ga null treff)' : ''}:\n`
+          + (hits.map((h, i) => `${i + 1}. ${h.image_url}\n   side: ${h.page_url} (${h.site})${h.title ? ` — ${h.title}` : ''}`).join('\n') || 'Ingen bilder. Prøv et kortere eller bredere søk.') });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        emit({ type: 'tool_error', action: 'search', target: action.query, error: msg });
+        trace.push({ action: 'image_search', target: action.query, result: `Feil: ${msg}` });
+        work.push({ role: 'user', content: `Bildesøket feilet: ${msg}` });
+      }
+      continue;
+    }
+
     if (action.action === 'search') {
       emit({ type: 'search', query: action.query, why: action.why });
       try {
-        const hits = await deps.search!.search(action.query);
+        let hits = await deps.search!.search(action.query);
+        if (!hits.length && /["«»“”]/.test(action.query)) hits = await deps.search!.search(unquote(action.query));
         hits.forEach((h) => searched.set(normUrl(h.url), h));
         emit({ type: 'search_done', query: action.query, hits: hits.map((h) => ({ title: h.title, url: h.url })) });
         trace.push({ action: 'search', target: action.query, result: `${hits.length} treff` });
@@ -570,7 +622,7 @@ export function normUrl(u: string): string {
  * that were opened or returned by search. Downgrades "documented" when
  * nothing was opened. Everything removed is reported as a warning.
  */
-export function verifyProposals(proposals: unknown[], opened: Map<string, PageResult>, searched: Map<string, SearchHit>) {
+export function verifyProposals(proposals: unknown[], opened: Map<string, PageResult>, searched: Map<string, SearchHit>, imageHits: Map<string, ImageHit> = new Map()) {
   const warnings: string[] = [];
   const out: unknown[] = [];
   for (const raw of proposals) {
@@ -607,16 +659,29 @@ export function verifyProposals(proposals: unknown[], opened: Map<string, PageRe
 
     if (p.type === 'reference_selection') {
       const imgs = Array.isArray(payload.images) ? payload.images : [];
-      const kept = imgs.flatMap((i: Record<string, unknown>) => {
+      const kept = imgs.flatMap((i: Record<string, unknown>): Record<string, unknown>[] => {
         const imageUrl = typeof i?.image_url === 'string' ? normUrl(i.image_url) : '';
         let page = typeof i?.page_url === 'string' ? opened.get(normUrl(i.page_url)) : undefined;
         if (!page || !page.images.some((x) => normUrl(x.url) === imageUrl)) {
           page = [...opened.values()].find((pg) => pg.images.some((x) => normUrl(x.url) === imageUrl));
         }
+        const hit = imageHits.get(imageUrl);
+        if (!page && hit) {
+          // Found by image search: the page itself was not read (it is often closed to Paintrest).
+          return [{
+            image_url: hit.image_url, thumbnail_url: hit.thumbnail_url, page_url: hit.page_url, page_title: hit.title || hit.site, site: hit.site,
+            creator: null, caption: typeof i.caption === 'string' && i.caption.trim() ? i.caption.trim() : hit.title || null,
+            kind: ['concept_art', 'official', 'painted', 'other'].includes(i.kind as string) ? i.kind : null,
+            confidence: ['high', 'medium', 'low'].includes(i.confidence as string) ? i.confidence : null,
+            reason: typeof i.reason === 'string' ? i.reason.slice(0, 600) : null,
+            original_text: typeof i.original_text === 'string' ? i.original_text.slice(0, 400) : null,
+            page_language: null,
+          }];
+        }
         if (!page) return [];
         const img = page.images.find((x) => normUrl(x.url) === imageUrl)!;
         return [{
-          image_url: img.url, page_url: page.url, page_title: page.title, site: page.site,
+          image_url: img.url, thumbnail_url: hit?.thumbnail_url ?? null, page_url: page.url, page_title: page.title, site: page.site,
           creator: page.author, caption: typeof i.caption === 'string' && i.caption.trim() ? i.caption.trim() : img.caption ?? img.alt ?? null,
           kind: ['concept_art', 'official', 'painted', 'other'].includes(i.kind as string) ? i.kind : null,
           confidence: ['high', 'medium', 'low'].includes(i.confidence as string) ? i.confidence : null,
@@ -625,7 +690,7 @@ export function verifyProposals(proposals: unknown[], opened: Map<string, PageRe
           page_language: page.language,
         }];
       });
-      if (kept.length < imgs.length) warnings.push(`Fjernet ${imgs.length - kept.length} bilde(r) som ikke fantes på en side agenten åpnet.`);
+      if (kept.length < imgs.length) warnings.push(`Fjernet ${imgs.length - kept.length} bilde(r) som ikke fantes på en side agenten åpnet eller i et bildesøk.`);
       if (!kept.length) continue;
       const order = { high: 0, medium: 1, low: 2 } as Record<string, number>;
       kept.sort((a, b) => (order[a.confidence as string] ?? 3) - (order[b.confidence as string] ?? 3));
@@ -648,19 +713,28 @@ export function verifyProposals(proposals: unknown[], opened: Map<string, PageRe
   return { proposals: out, warnings };
 }
 
+/** A query without quotation marks; exact phrases are the usual reason a search finds nothing. */
+export function unquote(q: string): string {
+  return q.replace(/["«»“”]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 function emptyAnchor(description: string | null, why: string): HuntAnchor {
   return { image_url: null, page_url: null, page_title: null, site: null, kind: null, painter: null, description, why };
 }
 
 /** The anchor from the agent's answer, checked against the pages it opened. Null if the image is not on one. */
-export function anchorFrom(a: Extract<Action, { action: 'anchor' }>, opened: Map<string, PageResult>): HuntAnchor | null {
+export function anchorFrom(a: Extract<Action, { action: 'anchor' }>, opened: Map<string, PageResult>, imageHits: Map<string, ImageHit> = new Map()): HuntAnchor | null {
   const kind = (['official', 'concept_art', 'painted'] as const).find((k) => k === a.kind) ?? 'official';
   const base = { painter: a.painter?.slice(0, 120) ?? null, description: a.description?.slice(0, 800) ?? null, why: a.why?.slice(0, 600) ?? null };
   if (!a.image_url) return { ...emptyAnchor(base.description, base.why ?? 'Fant ikke et offisielt bilde.'), painter: base.painter };
   const img = normUrl(a.image_url);
   let page = a.page_url ? opened.get(normUrl(a.page_url)) : undefined;
   if (!page || !page.images.some((x) => normUrl(x.url) === img)) page = [...opened.values()].find((pg) => pg.images.some((x) => normUrl(x.url) === img));
-  if (!page) return null;
+  if (!page) {
+    const hit = imageHits.get(img);
+    if (!hit) return null;
+    return { image_url: hit.image_url, page_url: hit.page_url, page_title: hit.title || hit.site, site: hit.site, kind, ...base };
+  }
   const found = page.images.find((x) => normUrl(x.url) === img)!;
   return { image_url: found.url, page_url: page.url, page_title: page.title, site: page.site, kind, ...base };
 }
@@ -670,7 +744,7 @@ export function anchorFrom(a: Extract<Action, { action: 'anchor' }>, opened: Map
  * and videos are kept only when YouTube or the search confirms them.
  */
 async function finishHunt(checked: { proposals: unknown[]; warnings: string[] }, focus: ImageFocus, hunt: HuntState,
-  opened: Map<string, PageResult>, searched: Map<string, SearchHit>, videoInfo?: (url: string) => Promise<VideoInfo>) {
+  opened: Map<string, PageResult>, searched: Map<string, SearchHit>, videoInfo?: (url: string) => Promise<VideoInfo>, imageHits: Map<string, ImageHit> = new Map()) {
   type Sel = { type: string; evidence?: string; uncertainty?: unknown[]; payload: Record<string, unknown> };
   const all = checked.proposals as Sel[];
   const rawVideos = all.flatMap((p) => (p.type === 'reference_selection' && Array.isArray(p.payload.videos) ? p.payload.videos : []));
@@ -687,7 +761,8 @@ async function finishHunt(checked: { proposals: unknown[]; warnings: string[] },
     const page = opened.get(normUrl(a.page_url!));
     const img = page?.images.find((x) => normUrl(x.url) === normUrl(a.image_url!));
     images.unshift({
-      image_url: a.image_url, page_url: a.page_url, page_title: a.page_title, site: a.site, creator: page?.author ?? null,
+      image_url: a.image_url, thumbnail_url: imageHits.get(normUrl(a.image_url))?.thumbnail_url ?? null,
+      page_url: a.page_url, page_title: a.page_title, site: a.site, creator: page?.author ?? null,
       caption: img?.caption ?? img?.alt ?? `Offisielt bilde av ${focus.subject_name}`, kind: a.kind === 'painted' ? 'official' : a.kind,
       confidence: 'high', reason: a.why, original_text: img?.context ?? null, page_language: page?.language ?? null,
     });

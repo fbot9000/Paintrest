@@ -73,6 +73,8 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 
 30. **Bildejakt i to faser med offisielt anker og videoer.** Fase 1 velger et offisielt anker (handlingen `anchor`, høyst 10 steg), og fase 2 leter bredt. Til sammen er grensen 30 steg, ikke 24 (jf. avvik 23). Forslaget (`reference_selection`) får `anchor` og `videos` i nyttelasten. Ankerbildet legges først blant bildene. Et forslag kan nå ha bare videoer og ingen bilder. Videoer lagres som `source` med `kind = video` og `source_link.use = method`, uten fil. Skjemaet har typen `video`, men ingen regel for hvordan videoer kommer inn.
 
+31. **Bildesøk og bilder uten åpnet side.** Agenten har handlingen `image_search` (Brave Image Search, eller bilder per resultat fra Tavily). Et bilde fra bildesøket kan foreslås og lagres uten at siden er åpnet. Kilden blir siden bildet kom fra, slik søketjenesten oppga den. Det er en oppmykning av kildekravet fra avvik 23: før måtte bildet stå på en side agenten hadde lest. Serveren sjekker fortsatt at hvert bilde faktisk kom fra et søk eller en åpnet side i samme runde. Forslaget kan ha `thumbnail_url` (søketjenestens lille kopi), som brukes når originalen ikke kan hentes.
+
 ## Antakelser
 
 - **Klient:** React og TypeScript som webapp med hash-ruting. Det er godkjent av brukeren 9. november 2026.
@@ -88,6 +90,7 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 - **YouTube og kampanjesider er ikke testet mot de ekte tjenestene.** YouTube leses via `https://www.youtube.com/oembed?url=…&format=json` (felt: `title`, `author_name`, `thumbnail_url`). Endepunktet er godt kjent og listet på oembed.com, men YouTube har ikke en egen dokumentasjonsside for det. Om Kickstarter og Gamefound slipper gjennom en vanlig sidehenting, og om bildene står i sidedataene, er ukjent. Utviklingsmiljøet blokkerer alle tre. Alt er testet mot lokale etterligninger.
 - **Naver-blogger leses gjennom mobilvisningen** (`m.blog.naver.com`), fordi den vanlige visningen legger innlegget i en ramme. Det er ikke testet mot Naver, fordi utviklingsmiljøet blokkerer adressen.
 - **Opphavsrett.** Bilder som lagres, er for personlig bruk som referanse. Kilden og bildeadressen lagres sammen med bildet.
+- **Brave Image Search er ikke testet mot den ekte tjenesten.** Feltene (`results[].title`, `url`, `source`, `thumbnail.src`, `properties.url`) er hentet fra Braves dokumentasjon slik den er gjengitt i søkeresultater 10. november 2026. Selve dokumentasjonssidene kunne ikke åpnes fra utviklingsmiljøet. Om bildefilene fra Reddit og BoardGameGeek lar seg hente direkte, er ikke kjent. Er de stengt, brukes Braves lille kopi.
 - **Søketjenestene:** Endepunktene er hentet fra dokumentasjonen til Tavily (`POST /search`, Bearer) og Brave (`GET /res/v1/web/search`, `X-Subscription-Token`). De er ikke testet mot de ekte tjenestene, fordi utviklingsmiljøet blokkerte all utgående trafikk. Prisene (Tavily: 1 000 gratis kreditter i måneden, Brave: kreditt på 5 dollar i måneden og kredittkort) er sjekket mot oppslag 9. november 2026.
 - **BGG:** Oppslaget er simulert. Navnene og thing-id-ene (9000xx) er oppdiktet.
 - **Eksempeldata:** Spillet og kildene er plassholdere hentet fra Figma. Fargene på fargeprøvene er tilnærminger. Malingsnavnene er Citadel-produkter. Det er ikke sjekket om navnene er i produksjon i dag.

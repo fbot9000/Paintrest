@@ -56,7 +56,7 @@ export interface ResearchCommands {
 export type ProposalWrite = { ok: true; id: Id; ref: string; updated: boolean } | { ok: false; reason: string };
 
 export interface AgentCommands {
-  addAssistantMessage(task_id: Id, body: string, model_id: string | null, trace?: { action: 'search' | 'open' | 'look' | 'anchor'; target: string; result: string }[]): Id;
+  addAssistantMessage(task_id: Id, body: string, model_id: string | null, trace?: { action: 'search' | 'open' | 'look' | 'anchor' | 'image_search'; target: string; result: string }[]): Id;
   addSystemMessage(task_id: Id, body: string): Id;
   /** Creates a draft, or updates the agent's own pending draft when `update_of` names one. */
   writeProposal(task_id: Id, p: NormalisedProposal, provider: string, model_id: string): ProposalWrite;

@@ -49,6 +49,8 @@ export interface ReferenceImage {
   reason?: string | null;
   original_text?: string | null;
   page_language?: string | null;
+  /** Image search: a small copy from the search service, used when the original site blocks other servers. */
+  thumbnail_url?: string | null;
 }
 
 /** A page the agent read during an image hunt, with a Norwegian summary. */
@@ -333,6 +335,7 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
         reason: str(io.reason).trim() || null,
         original_text: str(io.original_text).trim() || null,
         page_language: str(io.page_language).trim() || null,
+        thumbnail_url: /^https?:\/\//.test(str(io.thumbnail_url)) ? str(io.thumbnail_url) : null,
       }];
     });
     const videos = videoRefs(o.videos);

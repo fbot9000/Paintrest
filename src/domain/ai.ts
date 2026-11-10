@@ -68,7 +68,7 @@ export interface PageSeen {
 }
 
 export interface TraceStep {
-  action: 'search' | 'open' | 'look' | 'anchor';
+  action: 'search' | 'open' | 'look' | 'anchor' | 'image_search';
   target: string;
   result: string;
 }
@@ -81,6 +81,8 @@ export type ResearchEvent =
   | { type: 'open'; url: string; why: string | null }
   | { type: 'open_done'; url: string; title: string; image_count: number; site?: string; author?: string | null; language?: string | null;
       images?: { url: string; alt: string; caption: string | null; context: string | null }[] }
+  | { type: 'image_search'; query: string; why: string | null }
+  | { type: 'image_search_done'; query: string; images: ImageHit[] }
   | { type: 'look'; count: number; why: string | null }
   | { type: 'look_done'; summary: string }
   | { type: 'phase'; phase: 'official' | 'broad'; text: string }
@@ -90,6 +92,15 @@ export type ResearchEvent =
   | { type: 'error'; error: string };
 
 import type { HuntAnchor } from './agent';
+
+/** One picture from an image search, with the page it was found on. */
+export interface ImageHit {
+  image_url: string;
+  thumbnail_url: string | null;
+  page_url: string;
+  title: string;
+  site: string;
+}
 
 export type FinalEvent = Extract<ResearchEvent, { type: 'final' }>;
 

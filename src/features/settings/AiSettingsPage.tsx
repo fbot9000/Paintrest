@@ -278,17 +278,17 @@ function SearchSettings() {
     <Card>
       <div className="search-settings">
         <div className="status-row">
-          <h3>Reserve: Tavily eller Brave</h3>
+          <h3>Bildesøk: Brave eller Tavily</h3>
           {cred ? <Badge tone="moss">{cred.label} · {cred.key_hint}</Badge> : <Badge>Ikke satt opp</Badge>}
         </div>
         <p className="small muted">
-          Reserve når nettsøk via UiB er slått av eller ikke virker for modellen. Sidene og bildene hentes uansett av
-          Paintrest-serveren på din maskin, uten nøkkel.
+          Gir agenten bildesøk når den leter etter bilder av miniatyrer. Brave har et eget bildesøk og gir best resultat.
+          Brukes også til vanlig nettsøk når UiB-søket er slått av eller ikke virker.
         </p>
         <div className="field">
           <span className="field-label">Søketjeneste</span>
           <Segmented label="Søketjeneste" value={provider} onChange={setProvider}
-            options={[{ value: 'tavily', label: 'Tavily' }, { value: 'brave', label: 'Brave Search' }]} />
+            options={[{ value: 'brave', label: 'Brave Search' }, { value: 'tavily', label: 'Tavily' }]} />
         </div>
         <Field label="Nøkkel" hint={cred && cred.provider === provider ? `En nøkkel er lagret (${cred.key_hint}). La feltet stå tomt for å beholde den.` : 'Lim inn API-nøkkelen fra søketjenesten.'}>
           {(id) => <input id={id} type="password" value={key} onChange={(e) => setKey(e.target.value)} autoComplete="off" spellCheck={false} placeholder="Lim inn nøkkelen" />}

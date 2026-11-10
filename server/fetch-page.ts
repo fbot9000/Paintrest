@@ -80,6 +80,7 @@ export async function fetchVideo(rawUrl: string, opts: FetchOptions = {}): Promi
 
 const MAX_TEXT = 7000;
 const MAX_IMAGES = 40;
+const VIDEO_HOSTS = /(^|\.)(bilibili\.com|b23\.tv|nicovideo\.jp|vimeo\.com|dailymotion\.com|tiktok\.com|douyin\.com|youku\.com|ixigua\.com|twitch\.tv)$/i;
 const SKIP_IMG = /(logo|icon|sprite|avatar|badge|emoji|pixel|spacer|tracking|ads?[-_/]|banner|favicon|gravatar|placeholder)/i;
 
 /**
@@ -161,7 +162,12 @@ export function extract(pageUrl: string, html: string): PageResult {
     images.push({ url: abs, alt: alt.trim().slice(0, 160), caption: caption?.trim().slice(0, 200) || null, context });
   };
   add(meta('meta[property="og:image"]'), title, null, null);
-  for (const img of root.querySelectorAll('img')) {
+  // On video sites the other pictures are thumbnails of other videos; only the video's own picture belongs.
+  const videoSite = VIDEO_HOSTS.test(new URL(pageUrl).hostname);
+  // Pictures from the content itself, not from menus, sidebars and recommendations, when the page marks its content.
+  const scope = [root.querySelector('article'), root.querySelector('main'), root.querySelector('[role="main"]')]
+    .find((el) => el && el.querySelectorAll('img').length > 0) ?? root;
+  for (const img of videoSite ? [] : scope.querySelectorAll('img')) {
     const w = Number(img.getAttribute('width'));
     if (w && w < 120) continue;
     const src = largestFromSrcset(img.getAttribute('data-srcset')) ?? img.getAttribute('data-src') ?? img.getAttribute('data-lazy-src')
@@ -174,7 +180,7 @@ export function extract(pageUrl: string, html: string): PageResult {
   }
   // Campaign pages (Kickstarter, Gamefound) and shops built with scripts often keep their pictures
   // in embedded data rather than in <img>. Take image addresses from the page source as a fallback.
-  if (images.length < 4) {
+  if (images.length < 4 && !videoSite && scope === root) {
     for (const src of imageUrlsInSource(html)) {
       add(src, '', null, 'Funnet i sidens data, ikke som synlig bilde');
       if (images.length >= MAX_IMAGES) break;
