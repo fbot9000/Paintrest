@@ -1,5 +1,7 @@
 import { createServer } from 'node:http';
+import { homedir } from 'node:os';
 import { resolve } from 'node:path';
+import { DataStore, moveKeysFrom } from './data-store.ts';
 import { createHandler } from './app.ts';
 import { CredentialStore } from './credential-store.ts';
 import { loadOrCreateMasterKey } from './crypto.ts';
@@ -7,7 +9,11 @@ import { fetchImage, fetchPage } from './fetch-page.ts';
 import { ResponsesProvider } from './provider.ts';
 import { WebSearch } from './search.ts';
 
-const dataDir = resolve(process.env.PAINTREST_DATA_DIR ?? '.paintrest-data');
+// One fixed folder for everything: data, images, backups and the encrypted keys.
+const dataDir = resolve((process.env.PAINTREST_DATA_DIR ?? '~/Paintrest').replace(/^~(?=$|\/)/, homedir()));
+const data = new DataStore(dataDir);
+const moved = moveKeysFrom(resolve('.paintrest-data'), dataDir);
+if (moved.length) console.log(`[api] Flyttet ${moved.join(', ')} fra .paintrest-data til ${dataDir} (kopiert, originalene står).`);
 const port = Number(process.env.PORT ?? 8787);
 // Localhost only: the browser reaches this through the Vite proxy.
 const host = process.env.HOST ?? '127.0.0.1';
@@ -25,6 +31,7 @@ createServer(createHandler({
   search: new WebSearch(searchStore),
   openPage: (url) => fetchPage(url, { allowLocal }),
   getImage: (url) => fetchImage(url, { allowLocal }),
+  data,
 })).listen(port, host, () => {
   console.log(`[api] Paintrest-server på http://${host}:${port} (data: ${dataDir})${allowLocal ? ' · TESTMODUS: lokale sider tillatt' : ''}`);
 });

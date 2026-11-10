@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -9,6 +9,7 @@ import { CredentialStore } from './credential-store.ts';
 import { decrypt, encrypt, loadOrCreateMasterKey } from './crypto.ts';
 import { ResponsesProvider } from './provider.ts';
 import { WebSearch } from './search.ts';
+import { DataStore, moveKeysFrom } from './data-store.ts';
 
 const SECRET = 'sk-test-HEMMELIG-1234567890';
 
@@ -53,6 +54,7 @@ beforeAll(async () => {
   app.on('request', createHandler({
     aiStore: store, provider: new ResponsesProvider(store), searchStore, search: new WebSearch(searchStore),
     openPage: async () => { throw new Error('not used'); }, getImage: async () => { throw new Error('not used'); },
+    data: new DataStore(join(dataDir, 'paintrest')),
   }));
   await new Promise<void>((r) => app.listen(0, '127.0.0.1', r));
   api = `http://127.0.0.1:${(app.address() as AddressInfo).port}`;
@@ -143,5 +145,54 @@ describe('søkenøkkel', () => {
 
   it('bytte av tjeneste krever ny nøkkel', async () => {
     expect((await call('PUT', '/api/search/credential', { provider: 'brave' })).status).toBe(400);
+  });
+});
+
+describe('datamappen', () => {
+  const state = (n: number) => ({ schema_version: 4, workspace_id: 'w', tables: { project: { p: { id: 'p', n } } } });
+
+  it('starter tom, lagrer med revisjon og nekter utdatert lagring', async () => {
+    expect((await call('GET', '/api/data')).json).toMatchObject({ revision: 0, state: null });
+    const a = await call('PUT', '/api/data', { base_revision: 0, state: state(1) });
+    expect(a.json.revision).toBe(1);
+    const b = await call('PUT', '/api/data', { base_revision: 1, state: state(2) });
+    expect(b.json.revision).toBe(2);
+    const stale = await call('PUT', '/api/data', { base_revision: 1, state: state(99) });
+    expect(stale.status).toBe(409);
+    expect(stale.json.revision).toBe(2);
+    expect((await call('GET', '/api/data')).json.state).toEqual(state(2));
+  });
+
+  it('lagrer og henter filer, og legger slettede i papirkurven', async () => {
+    const id = '0f8fad5b-d9cb-469f-a165-70867728950e';
+    const put = await fetch(`${api}/api/files/${id}`, { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: new Uint8Array([1, 2, 3]) });
+    expect(put.status).toBe(200);
+    const got = await fetch(`${api}/api/files/${id}`);
+    expect(got.headers.get('content-type')).toBe('image/png');
+    expect(new Uint8Array(await got.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+    await fetch(`${api}/api/files/${id}`, { method: 'DELETE' });
+    expect((await fetch(`${api}/api/files/${id}`)).status).toBe(404);
+    expect(existsSync(join(dataDir, 'paintrest', 'files', 'trash', id))).toBe(true);
+    expect((await fetch(`${api}/api/files/..%2F..%2Fetc`)).status).toBe(400);
+  });
+
+  it('tar sikkerhetskopi og beholder høyst 30', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'paintrest-backup-'));
+    const store = new DataStore(dir);
+    store.write(0, state(1));
+    for (let i = 0; i < 35; i++) store.backup('manual');
+    expect(readdirSync(join(dir, 'backups')).length).toBe(30);
+    expect(store.info()).toMatchObject({ data_dir: dir, revision: 1, backups: 30 });
+  });
+
+  it('flytter nøklene fra den gamle mappen bare når hovednøkkelen passer', () => {
+    const oldDir = mkdtempSync(join(tmpdir(), 'paintrest-old-'));
+    const newDir = mkdtempSync(join(tmpdir(), 'paintrest-new-'));
+    writeFileSync(join(oldDir, 'master.key'), 'a'.repeat(64));
+    writeFileSync(join(oldDir, 'ai_credential.json'), '{}');
+    expect(moveKeysFrom(oldDir, newDir).sort()).toEqual(['ai_credential.json', 'master.key']);
+    const other = mkdtempSync(join(tmpdir(), 'paintrest-new2-'));
+    writeFileSync(join(other, 'master.key'), 'b'.repeat(64));
+    expect(moveKeysFrom(oldDir, other)).toEqual([]);
   });
 });

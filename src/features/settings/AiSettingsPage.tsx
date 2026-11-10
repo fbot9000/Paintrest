@@ -101,7 +101,7 @@ export function AiSettingsPage() {
       <div className="page-head">
         <div>
           <span className="eyebrow">Innstillinger</span>
-          <h1>AI og nettsøk</h1>
+          <h1>AI, nettsøk og data</h1>
           <p className="muted">Paintrest virker fullt ut uten AI. Nøkkelen trengs bare for researchagenten.</p>
         </div>
       </div>
@@ -225,6 +225,7 @@ export function AiSettingsPage() {
       )}
 
       {load.state === 'ready' && <SearchSettings />}
+      <DataSettings />
 
       <Dialog
         open={confirmDelete}
@@ -306,6 +307,52 @@ function SearchSettings() {
         </div>
         {result && <p className="notice" role="status">{result}</p>}
         <ErrorNote error={error} onClose={() => setError(null)} />
+      </div>
+    </Card>
+  );
+}
+
+/** Where the data lives on disk, and backups (server data folder). */
+function DataSettings() {
+  const [info, setInfo] = useState<{ data_dir: string; revision: number; saved_at: string | null; backups: number; latest_backup: string | null; files: number; bytes: number } | null | 'none'>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const refresh = useCallback(() => {
+    fetch('/api/data/info').then(async (r) => {
+      if (!r.ok || !(r.headers.get('content-type') ?? '').includes('json')) return setInfo('none');
+      setInfo(await r.json());
+    }).catch(() => setInfo('none'));
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
+  if (info === null) return null;
+  return (
+    <Card>
+      <div className="search-settings">
+        <div className="status-row">
+          <h3>Data</h3>
+          {info === 'none' ? <Badge tone="warn">Bare i denne nettleseren</Badge> : <Badge tone="moss">I datamappen</Badge>}
+        </div>
+        {info === 'none' ? (
+          <p className="small muted">Paintrest-serveren kjører ikke, så dataene lagres bare i denne nettleseren. Start appen med <code>npm run dev</code> for å bruke datamappen.</p>
+        ) : (
+          <>
+            <p>Alt lagres i <code>{info.data_dir}</code>: prosjektene i <code>data.json</code>, bildene i <code>files/</code> og sikkerhetskopier i <code>backups/</code>. Mappen kan tas med i Time Machine eller kopieres til en ny maskin.</p>
+            <dl className="data-facts">
+              <dt>Revisjon</dt><dd>{info.revision}</dd>
+              <dt>Sist lagret</dt><dd>{info.saved_at ? new Date(info.saved_at).toLocaleString('nb-NO') : '–'}</dd>
+              <dt>Størrelse</dt><dd>{(info.bytes / 1024 / 1024).toFixed(1)} MB data · {info.files} filer</dd>
+              <dt>Sikkerhetskopier</dt><dd>{info.backups} (de 30 siste beholdes){info.latest_backup ? ` · siste: ${info.latest_backup}` : ''}</dd>
+            </dl>
+            <div className="settings-actions">
+              <Button onClick={async () => {
+                await fetch('/api/data/backup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+                setNotice('Sikkerhetskopi tatt.');
+                refresh();
+              }}>Ta sikkerhetskopi nå</Button>
+            </div>
+            <p className="small muted">Gjenoppretting: stopp appen, kopier ønsket fil fra <code>backups/</code> til <code>data.json</code> og start på nytt. Bildene ligger i <code>files/</code> og slettes aldri; de flyttes til <code>files/trash/</code>.</p>
+            {notice && <p className="notice" role="status">{notice}</p>}
+          </>
+        )}
       </div>
     </Card>
   );

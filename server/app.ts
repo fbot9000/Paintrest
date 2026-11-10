@@ -6,6 +6,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { CredentialStore } from './credential-store.ts';
 import { UserError } from './credential-store.ts';
 import type { PageResult } from './fetch-page.ts';
+import type { DataStore } from './data-store.ts';
 import { hostedSearchOf } from './provider.ts';
 import type { ResponsesProvider } from './provider.ts';
 import { runResearch } from './research-agent.ts';
@@ -16,6 +17,8 @@ import type { SearchProviderId, WebSearch } from './search.ts';
 
 const MAX_BODY = 64 * 1024;
 const MAX_AGENT_BODY = 3 * 1024 * 1024;
+const MAX_STATE_BODY = 200 * 1024 * 1024;
+const MAX_FILE_BODY = 30 * 1024 * 1024;
 
 export const UIB_PROVIDER = 'uib';
 
@@ -26,6 +29,7 @@ export interface AppDeps {
   search: WebSearch;
   openPage: (url: string) => Promise<PageResult>;
   getImage: (url: string) => Promise<{ type: string; body: Buffer }>;
+  data: DataStore;
 }
 
 export function createHandler(d: AppDeps) {
@@ -33,9 +37,55 @@ export function createHandler(d: AppDeps) {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const route = `${req.method} ${url.pathname}`;
     try {
+      // ---------- Filer (bilder) i datamappen ----------
+      const fileMatch = /^\/api\/files\/([^/]+)$/.exec(url.pathname);
+      if (fileMatch) {
+        const id = decodeURIComponent(fileMatch[1]!);
+        if (req.method === 'PUT') {
+          const body = await readRaw(req, MAX_FILE_BODY);
+          d.data.putFile(id, String(req.headers['content-type'] ?? 'application/octet-stream'), body);
+          return json(res, 200, { ok: true });
+        }
+        if (req.method === 'GET') {
+          const f = d.data.getFile(id);
+          if (!f) return json(res, 404, { error: 'Filen finnes ikke' });
+          res.writeHead(200, { 'Content-Type': f.type, 'Cache-Control': 'private, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' });
+          res.end(f.body);
+          return;
+        }
+        if (req.method === 'DELETE') {
+          d.data.trashFile(id);
+          return json(res, 200, { ok: true });
+        }
+      }
+
       switch (route) {
         case 'GET /api/health':
-          return json(res, 200, { ok: true });
+          return json(res, 200, { ok: true, storage: 'server' });
+
+        // ---------- Data ----------
+        case 'GET /api/data/info':
+          return json(res, 200, d.data.info());
+
+        case 'GET /api/data': {
+          const stored = d.data.read();
+          return stored ? json(res, 200, stored) : json(res, 200, { revision: 0, saved_at: null, state: null });
+        }
+
+        case 'PUT /api/data': {
+          const body = await readJson(req, MAX_STATE_BODY);
+          const base = Number(body.base_revision);
+          if (!Number.isInteger(base) || base < 0) throw new UserError('base_revision mangler');
+          if (!body.state || typeof body.state !== 'object') throw new UserError('state mangler');
+          const saved = d.data.write(base, body.state);
+          return json(res, 200, { revision: saved.revision, saved_at: saved.saved_at });
+        }
+
+        case 'POST /api/data/backup': {
+          const body = await readJson(req);
+          const reason = body.reason === 'before-reset' ? 'before-reset' : 'manual';
+          return json(res, 200, { backup: d.data.backup(reason) });
+        }
 
         // ---------- AI-nøkkel ----------
         case 'GET /api/ai/credential':
@@ -145,7 +195,7 @@ export function createHandler(d: AppDeps) {
       }
     } catch (err) {
       if (res.headersSent) return void res.end();
-      if (err instanceof UserError) return json(res, err.status, { error: err.message });
+      if (err instanceof UserError) return json(res, err.status, { error: err.message, ...('revision' in err ? { revision: (err as { revision: number }).revision } : {}) });
       // Unexpected errors are logged without request bodies, which may hold a key.
       console.error(`[api] ${route} feilet:`, err instanceof Error ? err.message : err);
       return json(res, 500, { error: 'Noe gikk galt på serveren' });
@@ -244,6 +294,17 @@ async function readJson(req: IncomingMessage, max = MAX_BODY): Promise<Record<st
   } catch {
     throw new UserError('Ugyldig JSON');
   }
+}
+
+async function readRaw(req: IncomingMessage, max: number): Promise<Buffer> {
+  let size = 0;
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > max) throw new UserError('Filen er for stor', 413);
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks);
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {

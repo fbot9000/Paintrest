@@ -607,6 +607,8 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
     },
 
     async resetToSampleData() {
+      // Snapshot of the data folder first, so even this can be undone from backups/.
+      await blobs.backup?.('before-reset');
       const state = await buildSampleData(blobs);
       urlCache.forEach((u) => URL.revokeObjectURL(u));
       urlCache.clear();

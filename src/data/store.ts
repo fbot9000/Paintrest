@@ -16,11 +16,15 @@ export interface DbState {
 }
 
 export interface Persistence {
+  /** Where the data lives: the Paintrest server (data folder), this browser, or memory only. */
+  readonly kind: 'server' | 'browser' | 'memory';
   load(): Promise<DbState | undefined>;
   save(state: DbState): Promise<void>;
   putBlob(key: string, blob: Blob): Promise<void>;
   getBlob(key: string): Promise<Blob | undefined>;
   deleteBlob(key: string): Promise<void>;
+  /** Server only: snapshot of the data file in backups/. */
+  backup?(reason: 'manual' | 'before-reset'): Promise<void>;
 }
 
 export function emptyTables(): Tables {

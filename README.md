@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-`npm run dev` starter både Paintrest-serveren (port 8787, bare localhost) og Vite. Åpne adressen Vite skriver ut. Slik åpner du appen på iPad på samme nett:
+`npm run dev` starter både Paintrest-serveren (port 8787, bare localhost) og Vite på fast port: http://localhost:5173. Slik åpner du appen på iPad på samme nett:
 
 ```bash
 npm run dev -- --host
@@ -24,14 +24,35 @@ npm test          # kommandolaget: versjoner, avvik, ferdigstilling, BGG-kobling
 npm run build     # typesjekk og produksjonsbygg til dist/
 ```
 
-Ved første start får appen eksempeldata: prosjektet Avalon med fire figurer og ferdige maleplaner for Merlin og Druid Champions. «⋯ → Tilbakestill eksempeldata» setter dataene tilbake.
+Ved første start får appen eksempeldata: prosjektet Avalon med fire figurer og ferdige maleplaner for Merlin og Druid Champions. «⋯ → Tilbakestill eksempeldata» setter dataene tilbake. Du må skrive «tilbakestill» for å bekrefte, og serveren tar en sikkerhetskopi først.
+
+## Lagring: datamappen ~/Paintrest
+
+Paintrest-serveren eier dataene. De ligger i en fast mappe på maskinen, ikke i nettleseren. Derfor ser du de samme dataene uansett port, nettleser eller fane.
+
+```
+~/Paintrest/
+  data.json        prosjektene, med revisjonsnummer
+  files/           bildene (files/trash/ for bilder som er fjernet; ingenting slettes)
+  backups/         sikkerhetskopier av data.json, de 30 siste beholdes
+  master.key, ai_credential.json, search_credential.json   krypterte nøkler
+```
+
+- Mappen kan flyttes med `PAINTREST_DATA_DIR=/annen/mappe npm run dev`.
+- Første gang serveren finner en tom datamappe og nettleseren har data fra før, tilbyr appen å flytte dem. Kopien i nettleseren blir liggende urørt.
+- Nøkler fra den gamle mappen `.paintrest-data/` i prosjektet kopieres til datamappen ved oppstart.
+- Øverst til høyre står det hvor dataene er lagret og når. Feiler en lagring, står det der, og appen prøver igjen hvert 5. sekund.
+- Hver lagring sier hvilken revisjon den bygger på. Har en annen fane lagret i mellomtiden, avviser serveren lagringen, og appen ber deg laste inn på nytt. Ingenting overskrives i stillhet.
+- Sikkerhetskopi tas ved oppstart, omtrent hvert 10. minutt med endringer, før tilbakestilling og når du trykker «Ta sikkerhetskopi nå» under «⋯ → Innstillinger».
+- **Gjenoppretting:** stopp appen, kopier ønsket fil fra `backups/` til `data.json`, og start på nytt.
+- Uten server (for eksempel den publiserte forhåndsvisningen) lagrer appen i nettleseren (IndexedDB) og sier det i toppfeltet.
 
 ## AI-nøkkel (UiB)
 
-Appen virker fullt ut uten AI. Nøkkelen legges inn under «⋯ → AI-nøkkel». Adressen er fylt ut med UiB sin: `https://models.api.uib.no/v1`.
+Appen virker fullt ut uten AI. Nøkkelen legges inn under «⋯ → Innstillinger: AI, nettsøk og data». Adressen er fylt ut med UiB sin: `https://models.api.uib.no/v1`.
 
-- Nøkkelen sendes én gang fra nettleseren til Paintrest-serveren (`server/`). Serveren krypterer den med AES-256-GCM og lagrer den i `.paintrest-data/ai_credential.json`.
-- Hovednøkkelen ligger i `.paintrest-data/master.key`, eller i miljøvariabelen `PAINTREST_MASTER_KEY` (64 heksadesimale tegn). Begge filene har tilgang bare for eieren, og mappen er utelatt fra git.
+- Nøkkelen sendes én gang fra nettleseren til Paintrest-serveren (`server/`). Serveren krypterer den med AES-256-GCM og lagrer den i `~/Paintrest/ai_credential.json`.
+- Hovednøkkelen ligger i `~/Paintrest/master.key`, eller i miljøvariabelen `PAINTREST_MASTER_KEY` (64 heksadesimale tegn). Begge filene har tilgang bare for eieren. Datamappen ligger utenfor prosjektet og kommer aldri med i git.
 - Nettleseren får aldri nøkkelen tilbake, bare de fire siste tegnene.
 - Bare `server/provider.ts` bruker den dekrypterte nøkkelen, i ett kall om gangen (`GET /models` og `POST /responses`, `Authorization: Bearer …`).
 - Den publiserte forhåndsvisningen på claude.ai har ingen server. Der står det at nøkkelen må legges inn i en lokal kjøring.
@@ -42,7 +63,7 @@ npm test   # også serveren: kryptering, at nøkkelen ikke lekker, feilmeldinger
 
 ## Researchagent
 
-Panelet til høyre i hvert prosjekt. Det bruker nøkkelen og standardmodellen fra «AI-nøkkel».
+Panelet til høyre i hvert prosjekt. Det bruker nøkkelen og standardmodellen fra innstillingene.
 
 - Agenten leser prosjektet, miniatyrene, maleplanene og malingene dine. Den lager **utkast**: nye miniatyrer (`catalog_subject`) og maleplaner (`paint_plan`).
 - En godkjent plan kan agenten bare foreslå ny versjon av når du har trykket «Revider planen med agenten» på miniatyren. Det åpner planen som revisjonsmål (`plan_revision`).

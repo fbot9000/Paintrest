@@ -66,11 +66,15 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
     Bildeutvalg og planer med malinger som ikke finnes i katalogen, er fortsatt forslag. Det samme gjelder runder brukeren starter fra en egen visning (bildejakt og maleplan), der brukeren går gjennom forslaget der.
     
     Dette avviker fra datamodell v3 §3, §12 og §13, og fra skjema §2 og §8, der agenten aldri skriver kanoniske data uten godkjenning. Dokumentene bør oppdateres.
+29. **BRUKERBESLUTNING 10. november 2026: dataene ligger i en fast datamappe, `~/Paintrest`.** Paintrest-serveren eier dataene: `data.json` (hele tilstanden, med revisjonsnummer), `files/` (bildene) og `backups/` (de 30 siste kopiene). Nøklene kopieres hit fra `.paintrest-data/`. Dette er et filbasert mellomsteg før en ekte database, og det har tre følger:
+    - **Hele tilstanden lagres hver gang.** Skjemaets tabeller og radformat er de samme, så overgangen til SQLite eller PostgreSQL blir en flytting av rader, ikke en ny modell. Valget av database og tilgang fra iPad utenfor maskinen er ikke tatt.
+    - **Samtidighet med revisjon, ikke sammenslåing.** En lagring som bygger på en gammel revisjon, avvises (409), og appen ber brukeren laste inn på nytt. Endringer fra den fanen etter konflikten lagres ikke. Skjemaets `content_revision` per rad er uendret.
+    - **Bilder slettes aldri.** Fjernede bilder flyttes til `files/trash/`. Skjemaet har ingen regel for opprydding.
 
 ## Antakelser
 
 - **Klient:** React og TypeScript som webapp med hash-ruting. Det er godkjent av brukeren 9. november 2026.
-- **Lagring:** All data ligger lokalt i nettleseren (IndexedDB). Det finnes ingen synkronisering mellom enheter.
+- **Lagring:** Med serveren ligger dataene i `~/Paintrest` (se avvik 29). Uten serveren ligger de i nettleseren (IndexedDB). Det finnes ingen synkronisering mellom maskiner.
 - **UiB-API-et:** Adresse, endepunkter og Bearer-autentisering er oppgitt av brukeren. Svarformatet (`data[].id` fra `/models`, og `output[].content[].text` eller `output_text` fra `/responses`) følger OpenAI-konvensjonen. Det er ikke testet mot UiB, fordi nettverket i utviklingsmiljøet blokkerte adressen. Testene bruker en simulert tjeneste.
 - **Agentens svarformat:** Modellen blir bedt om å svare med ett JSON-objekt. Formatet er ikke lagt inn som `text.format`/`json_schema`, fordi det er ukjent om alle modellene hos UiB støtter det. Svar som ikke kan tolkes, vises som vanlig tekst, og eventuelle forslag i dem leses ikke inn.
 - **Nettsøk via UiB er ubekreftet.** Agenten sender `tools: [{"type": "web_search"}]` til UiB og leser `web_search_call` og `url_citation` fra svaret, som i OpenAIs Responses API. Det er ikke bekreftet at UiB sender verktøyet videre, eller for hvilke modeller. Svarer UiB med feil 400, 422 eller 501 når verktøyet er med, går agenten over til Tavily eller Brave, eller videre uten nettsøk. Panelet sier fra når det skjer. Sitater fra UiB-søket regnes som søketreff. «Dokumentert» og bilder krever fortsatt at agenten har åpnet siden gjennom Paintrest.
