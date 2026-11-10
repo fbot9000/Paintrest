@@ -68,7 +68,7 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
     ...p,
     candidates: p.images.map((i): Candidate => ({
       image_url: i.url, page_url: p.url, page_title: p.title, site: p.site, creator: p.author,
-      caption: i.caption ?? (i.alt || null), original_text: i.context, page_language: p.language, kind: null, proposal_id: null,
+      caption: i.caption ?? (i.alt || null), page_language: p.language, kind: null, proposal_id: null,
     })),
   })), [run?.pages]);
 
@@ -281,7 +281,7 @@ function CandidateCard({ c, reasons, saved, on, cover, onToggle, onCover, proxy 
       </button>
       <div className="wsi-meta">
         {reasons && c.reason
-          ? <span className="small wsi-reason" title={[c.caption, c.original_text].filter(Boolean).join('\n\n')}>
+          ? <span className="small wsi-reason" title={c.caption ?? undefined}>
               {c.confidence && c.confidence !== 'high' && <span className={`wsi-conf ${c.confidence}`}>{CONFIDENCE[c.confidence]}. </span>}{c.reason}
             </span>
           : c.caption && <span className="small">{c.caption}</span>}
