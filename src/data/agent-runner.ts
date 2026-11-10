@@ -22,6 +22,7 @@ export async function runAgentTurn(deps: {
   ai: AiGateway;
 }, task_id: Id, text: string, onEvent: (e: ResearchEvent) => void = () => {}, signal?: AbortSignal): Promise<TurnSummary> {
   const { store, research, agent, ai } = deps;
+  await research.syncResultTypes(task_id);
   await research.addUserMessage(task_id, text);
 
   const t = store.getTables();

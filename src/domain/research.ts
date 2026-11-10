@@ -25,6 +25,12 @@ export interface ResearchCommands {
   closeTask(task_id: Id): Promise<void>;
   addUserMessage(task_id: Id, body: string): Promise<Id>;
   openRevisionTarget(task_id: Id, subject_id: Id): Promise<void>;
+  /**
+   * Gives an open task the result types this version of Paintrest supports for its area.
+   * Run when the user starts a turn, so tasks created before a new type existed can use it.
+   * The agent has no access to this command.
+   */
+  syncResultTypes(task_id: Id): Promise<void>;
   editCatalogProposal(proposal_id: Id, payload: CatalogSubjectPayload): Promise<void>;
   approveProposal(proposal_id: Id, opts?: ApproveOptions): Promise<void>;
   rejectProposal(proposal_id: Id): Promise<void>;

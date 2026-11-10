@@ -182,6 +182,18 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
       });
     },
 
+    async syncResultTypes(task_id) {
+      if (!store.getTables().research_task[task_id]) return;
+      const missing = IMPLEMENTED_TYPES.filter((rt) => !store.getTables().task_result_type.some((r) => r.task_id === task_id && r.result_type === rt));
+      if (!missing.length) return;
+      tx((t, ws) => {
+        const task = must(t.research_task[task_id], 'Oppgaven');
+        if (task.status !== 'open' || t.task_scope[task_id]?.area_kind !== 'new_project') return;
+        for (const result_type of missing) t.task_result_type.push({ task_id, result_type });
+        record(t, ws, 'task_result_type', task_id, 'update', { initiated_by: 'user', task_id });
+      });
+    },
+
     async openRevisionTarget(task_id, subject_id) {
       tx((t, ws) => {
         const scope = must(t.task_scope[task_id], 'Omfanget');

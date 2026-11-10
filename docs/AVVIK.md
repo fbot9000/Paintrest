@@ -24,6 +24,7 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 18. **`source_asset.image_kind`.** Feltet sier hva bildet viser: konseptillustrasjon, offisielt bilde, malt eksempel eller annet. Det finnes ikke i skjemaet.
 19. **Ny illustrasjon skjuler ikke den gamle.** Velger du et annet bilde som illustrasjon (`official_asset_id`), lenkes det forrige til miniatyren som referansebilde. Det blir altså ikke borte fra visningen.
 20. **Bildesøk fra miniatyren går i samme oppgave som panelet.** «Let med AI» skriver en melding og et `reference_selection`-forslag i prosjektets åpne researchoppgave. Du ser dem derfor også i agentpanelet.
+21. **Eldre åpne oppgaver får nye resultattyper.** Skjema §7 sier at systemet setter resultattypene når oppgaven opprettes. Når Paintrest får en ny type, legger systemet den til på åpne prosjektoppgaver i det øyeblikket brukeren starter en runde. Det skrives en `change_record` med `initiated_by = user`. Agenten kan ikke gjøre dette selv.
 
 ## Antakelser
 

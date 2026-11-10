@@ -156,6 +156,18 @@ describe('bildeutvalg fra nettet', () => {
   });
 });
 
+describe('eldre oppgaver', () => {
+  it('får nye resultattyper når brukeren starter en runde', async () => {
+    const { store, research, agent, task, subject } = await setup();
+    store.transaction((t) => { t.task_result_type = t.task_result_type.filter((r) => !(r.task_id === task && r.result_type === 'reference_selection')); });
+    const sel: NormalisedProposal = { result_type: 'reference_selection', update_of: null, evidence: 'documented', uncertainty: [],
+      payload: { subject_id: subject('Merlin').id, note: null, images: [{ image_url: 'https://a.example/1.jpg', page_url: 'https://a.example/', page_title: 'A', site: 'a.example', creator: null, caption: null }] } };
+    expect(agent.writeProposal(task, sel, 'uib', 'm').ok).toBe(false);
+    await research.syncResultTypes(task);
+    expect(agent.writeProposal(task, sel, 'uib', 'm').ok).toBe(true);
+  });
+});
+
 describe('kontekst og migrering', () => {
   it('konteksten viser figurer med korte referanser og eide malinger', async () => {
     const { store, task } = await setup();
