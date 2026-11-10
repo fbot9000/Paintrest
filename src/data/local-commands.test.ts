@@ -188,3 +188,23 @@ describe('bilder på miniatyren (brukerens egne valg)', () => {
     expect(t.source_asset[asset]!.deleted_at).toBeNull();
   });
 });
+
+describe('palett for miniatyren', () => {
+  it('legger til, endrer og fjerner rader, og øker innholdsrevisjonen', async () => {
+    const p = memoryPersistence();
+    const store = new Store(await buildSampleData(p), p);
+    const cmd = createLocalCommands(store);
+    const t0 = store.getTables();
+    const s = Object.values(t0.miniature_subject).find((x) => x.name === 'Merlin')!;
+    const product = Object.values(t0.paint_product).find((x) => x.name === 'Caliban Green')!;
+    const before = t0.project[s.project_id]!.content_revision;
+    const id = await cmd.addPaletteEntry(s.id, product.id, { part: 'Kappe', role_label: 'base' });
+    await cmd.updatePaletteEntry(id, { role_label: 'skygge' });
+    let pal = paintingView(store.getTables(), s.id)!.palette.filter((x) => !x.project_wide);
+    expect(pal.map((x) => [x.product.name, x.entry.note, x.entry.role_label])).toEqual([['Caliban Green', 'Kappe', 'skygge']]);
+    await cmd.removePaletteEntry(id);
+    pal = paintingView(store.getTables(), s.id)!.palette;
+    expect(pal).toHaveLength(0);
+    expect(store.getTables().project[s.project_id]!.content_revision).toBe(before + 3);
+  });
+});

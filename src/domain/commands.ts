@@ -76,6 +76,13 @@ export interface Commands {
   /** Removes an image from the miniature. The source and the file stay, as history. */
   detachSubjectImage(subject_id: Id, asset_id: Id): Promise<void>;
 
+  // Palett (datamodell v3 §8)
+  /** Adds a paint to one miniature's palette. */
+  addPaletteEntry(subject_id: Id, product_id: Id, input?: { role_label?: string | null; part?: string | null }): Promise<Id>;
+  updatePaletteEntry(entry_id: Id, patch: { role_label?: string | null; part?: string | null }): Promise<void>;
+  /** Hides the entry (restorable); plans that use the paint are not changed. */
+  removePaletteEntry(entry_id: Id): Promise<void>;
+
   // Katalog
   createProduct(input?: ProductInput): Promise<Id>;
   setOwnership(product_id: Id, ownership: Ownership): Promise<void>;

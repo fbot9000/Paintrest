@@ -79,7 +79,8 @@ export type ResearchEvent =
   | { type: 'search'; query: string; why: string | null }
   | { type: 'search_done'; query: string; hits: { title: string; url: string }[] }
   | { type: 'open'; url: string; why: string | null }
-  | { type: 'open_done'; url: string; title: string; image_count: number }
+  | { type: 'open_done'; url: string; title: string; image_count: number; site?: string; author?: string | null; language?: string | null;
+      images?: { url: string; alt: string; caption: string | null; context: string | null }[] }
   | { type: 'look'; count: number; why: string | null }
   | { type: 'look_done'; summary: string }
   | { type: 'tool_error'; action: string; target: string; error: string }

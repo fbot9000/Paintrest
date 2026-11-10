@@ -21,7 +21,9 @@ export type ResearchEvent =
   | { type: 'search'; query: string; why: string | null }
   | { type: 'search_done'; query: string; hits: { title: string; url: string }[] }
   | { type: 'open'; url: string; why: string | null }
-  | { type: 'open_done'; url: string; title: string; image_count: number }
+  | { type: 'open_done'; url: string; title: string; image_count: number; site?: string; author?: string | null; language?: string | null;
+      /** The page's images, so the user can look and pick while the agent is still working. */
+      images?: { url: string; alt: string; caption: string | null; context: string | null }[] }
   | { type: 'look'; count: number; why: string | null }
   | { type: 'look_done'; summary: string }
   | { type: 'tool_error'; action: string; target: string; error: string }
@@ -389,7 +391,8 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
         const page = await deps.openPage(action.url);
         opened.set(normUrl(page.url), page);
         opened.set(normUrl(action.url), page);
-        emit({ type: 'open_done', url: page.url, title: page.title, image_count: page.images.length });
+        emit({ type: 'open_done', url: page.url, title: page.title, image_count: page.images.length, site: page.site, author: page.author,
+          language: page.language, images: page.images.slice(0, 40) });
         trace.push({ action: 'open', target: page.url, result: `${page.title} · ${page.images.length} bilder` });
         work.push({ role: 'user', content: formatPage(page) });
       } catch (e) {

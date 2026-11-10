@@ -7,6 +7,7 @@ import { MiniaturesPage } from '../features/miniatures/MiniaturesPage';
 import { PaintingMode } from '../features/painting/PaintingMode';
 import { NotYetPage } from '../features/projects/NotYetPage';
 import { AiSettingsPage } from '../features/settings/AiSettingsPage';
+import { Workspace } from '../features/workspace/Workspace';
 import { Button, Dialog } from '../ui/components';
 import { useCommand } from './context';
 import { Logo } from '../ui/Logo';
@@ -20,6 +21,8 @@ const routes = [
     children: [
       { index: true, element: <ProjectsPage /> },
       { path: 'innstillinger', element: <AiSettingsPage /> },
+      { path: 'p/:projectId/m/:subjectId', element: <Workspace /> },
+      { path: 'p/:projectId/m/:subjectId/:tab', element: <Workspace /> },
       {
         path: 'p/:projectId',
         element: <ProjectLayout />,

@@ -7,8 +7,7 @@ import type { Expansion, Grouping, MiniatureSubject } from '../../domain/types';
 import { assetFileId, attachedExpansions, deletedSubjects, liveSubjects, physicalStatus } from '../../domain/views';
 import type { PhysicalStatus } from '../../domain/views';
 import { Badge, Button, Dialog, ErrorNote, Field, FileImage, ImagePicker, Segmented, Stepper } from '../../ui/components';
-import { ImagesDialog } from './ImagesDialog';
-import { PlanDialog } from './PlanDialog';
+import { useRuns } from '../../app/runs';
 import './miniatures.css';
 
 type Filter = 'all' | 'base' | string;
@@ -25,8 +24,7 @@ export function MiniaturesPage() {
   const [filter, setFilter] = useState<Filter>('all');
   const [onlyActive, setOnlyActive] = useState(false);
   const [editing, setEditing] = useState<MiniatureSubject | 'new' | null>(null);
-  const [imagesFor, setImagesFor] = useState<string | null>(null);
-  const [planFor, setPlanFor] = useState<string | null>(null);
+  const working = useRuns((r) => new Set(r.active().map((x) => x.subject_id)));
 
   const shown = data.subjects.filter(({ s, status }) => {
     if (onlyActive && status !== 'in_progress') return false;
@@ -82,8 +80,9 @@ export function MiniaturesPage() {
               fileId={file}
               expansion={data.expansions.find((e) => e.id === s.expansion_id)}
               onEdit={() => setEditing(s)}
-              onImages={() => setImagesFor(s.id)}
-              onAgent={() => setPlanFor(s.id)}
+              onImages={() => navigate(`/p/${projectId}/m/${s.id}/bilder`)}
+              working={working.has(s.id)}
+              onAgent={() => navigate(`/p/${projectId}/m/${s.id}/maleplan`)}
               onPaint={async () => {
                 if (!s.current_plan_version_id) await run((c) => c.createEmptyPlan(s.id));
                 navigate(`/male/${s.id}`);
@@ -102,8 +101,6 @@ export function MiniaturesPage() {
         </p>
       )}
 
-      {imagesFor && <ImagesDialog subjectId={imagesFor} projectId={projectId} onClose={() => setImagesFor(null)} onNext={() => { setPlanFor(imagesFor); setImagesFor(null); }} />}
-      {planFor && <PlanDialog subjectId={planFor} projectId={projectId} onClose={() => setPlanFor(null)} />}
 
       {editing && (
         <SubjectDialog
@@ -133,18 +130,19 @@ function FilterChip({ on, onClick, children }: { on: boolean; onClick: () => voi
 
 const STATUS_LABEL: Record<PhysicalStatus, string> = { not_started: 'Ikke startet', in_progress: 'Under arbeid', finished: 'Ferdig' };
 
-function MiniCard({ s, status, fileId, expansion, onEdit, onPaint, onAgent, onImages }: {
-  s: MiniatureSubject; status: PhysicalStatus; fileId: string | null; expansion?: Expansion; onEdit: () => void; onPaint: () => void; onAgent: () => void; onImages: () => void;
+function MiniCard({ s, status, fileId, expansion, onEdit, onPaint, onAgent, onImages, working }: {
+  s: MiniatureSubject; status: PhysicalStatus; fileId: string | null; expansion?: Expansion; onEdit: () => void; onPaint: () => void; onAgent: () => void; onImages: () => void; working: boolean;
 }) {
   return (
     <article className={`mini-card status-${status}`}>
-      <button type="button" className="mini-img-wrap" onClick={onImages} aria-label={`Bilder for ${s.name}`}>
+      <button type="button" className="mini-img-wrap" onClick={onImages} aria-label={`Åpne verkstedet for ${s.name}`}>
         <FileImage fileId={fileId} alt={s.name} className="mini-img" fallback={<span>Ingen bilde · trykk for å finne</span>} />
-        <span className="mini-img-hint">Bilder</span>
+        <span className="mini-img-hint">Åpne verkstedet</span>
+        {working && <span className="mini-working">Agenten jobber …</span>}
         <span className={`mini-status`}>{STATUS_LABEL[status]}</span>
       </button>
       <div className="mini-body">
-        <h3>{s.name}</h3>
+        <h3><button type="button" className="mini-name" onClick={onImages}>{s.name}</button></h3>
         <p className="small muted">
           {s.grouping === 'group' ? `Malegruppe · ${s.physical_count} figurer` : 'Enkeltfigur'}
           {' · '}{expansion?.name ?? 'Grunnspill'}
@@ -160,7 +158,7 @@ function MiniCard({ s, status, fileId, expansion, onEdit, onPaint, onAgent, onIm
           <Button onClick={onEdit}>Rediger</Button>
         </div>
         <button type="button" className="mini-agent" onClick={onAgent}>
-          ✦ {s.current_plan_version_id ? 'Maleplan og palett · ny versjon med AI' : 'Lag maleplan og palett med AI'}
+          ✦ {s.current_plan_version_id ? 'Maleplan og palett' : 'Lag maleplan og palett med AI'}
         </button>
       </div>
     </article>

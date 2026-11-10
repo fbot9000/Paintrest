@@ -390,6 +390,45 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
       });
     },
 
+    // ---------- Palett ----------
+    async addPaletteEntry(subject_id, product_id, input) {
+      return tx((t, ws) => {
+        const s = must(t.miniature_subject[subject_id], 'Miniatyren');
+        must(t.paint_product[product_id], 'Malingen');
+        const id = newId();
+        t.palette_entry[id] = {
+          id, project_id: s.project_id, product_id, role_label: input?.role_label?.trim() || null, note: input?.part?.trim() || null,
+          scope_kind: 'subjects', expansion_id: null, category_label: null, deleted_at: null,
+        };
+        t.palette_entry_subject.push({ palette_entry_id: id, subject_id });
+        const p = t.project[s.project_id];
+        if (p) p.content_revision++;
+        record(t, ws, { target_type: 'palette_entry', target_id: id, action: 'create' });
+        return id;
+      });
+    },
+
+    async updatePaletteEntry(entry_id, patch) {
+      tx((t, ws) => {
+        const e = must(t.palette_entry[entry_id], 'Palettraden');
+        if (patch.role_label !== undefined) e.role_label = patch.role_label?.trim() || null;
+        if (patch.part !== undefined) e.note = patch.part?.trim() || null;
+        const p = t.project[e.project_id];
+        if (p) p.content_revision++;
+        record(t, ws, { target_type: 'palette_entry', target_id: entry_id, action: 'update' });
+      });
+    },
+
+    async removePaletteEntry(entry_id) {
+      tx((t, ws) => {
+        const e = must(t.palette_entry[entry_id], 'Palettraden');
+        e.deleted_at = now();
+        const p = t.project[e.project_id];
+        if (p) p.content_revision++;
+        record(t, ws, { target_type: 'palette_entry', target_id: entry_id, action: 'delete' });
+      });
+    },
+
     // ---------- Katalog ----------
     async createProduct(input) {
       return tx((t, ws) => {

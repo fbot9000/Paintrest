@@ -61,27 +61,29 @@ Agenten bruker først **nettsøket som er bygget inn i UiB sitt API** (OpenAIs `
 
 Panelet viser hvert søk og hver side mens agenten jobber, og du kan stoppe den. Under svaret kan du se hvordan agenten fant det. Serveren fjerner bilder og kilder agenten ikke faktisk har åpnet, og sier fra i panelet.
 
-## Bilder på miniatyrene
+## Miniatyrverkstedet
 
-Trykk på bildet på et miniatyrkort. Da åpnes «Bilder for …»:
+Trykk på bildet eller navnet på et miniatyrkort. Da åpnes verkstedet for miniatyren, som bruker hele skjermen:
 
-- **Lagret på miniatyren:** her velger du hvilket bilde som er illustrasjonen, fjerner bilder eller åpner kilden.
-- **Let med AI (bildejakt):** agenten finner først ut hvordan figuren ser ut og hva den heter på andre språk. Så søker den bredt, også på koreanske, japanske og kinesiske malerblogger, og bruker opptil 24 steg. Den kan se på bildene og sammenligne dem med miniatyrens nåværende illustrasjon. Hver kandidat får sikkerhet («Trolig riktig», «Mulig», «Usikker»), en norsk begrunnelse og originalteksten. «Kilder agenten leste» viser et norsk sammendrag av hver side. Du ser hvert steg mens agenten jobber.
-- **Fra lagrede kilder:** du åpner en side som er lagret for spillet, og velger bilder direkte, uten AI. Samme kilde kan gi bilder til mange miniatyrer.
-- **Last opp:** ditt eget bilde.
+- **Venstre: bildene av miniatyren.** Bildet du har valgt vises stort, og du kan zoome. Her gjør du et bilde til illustrasjon, fjerner bilder, åpner kilden og krysser av for hvilke bilder (høyst 4) maleplanen skal bygge på.
+- **Midten: faner.**
+  - **Bilder:**
+    - «Let etter bilder med AI» starter en bildejakt på flere språk.
+    - Bilder fra sidene agenten leser, dukker opp underveis, og du kan velge med en gang.
+    - Agentens forslag kommer med sikkerhet, norsk begrunnelse og originaltekst.
+    - Du kan også velge en kilde i høyre kolonne og hente bilder fra den uten AI, eller laste opp et bilde.
+    - Kryss av, velg én illustrasjon og trykk «Lagre».
+  - **Maleplan:**
+    - «Lag maleplan med AI» bruker bildene du har krysset av. Agenten foreslår arbeidsmåte, deler og steg med eksakte malinger, og en palett.
+    - Du redigerer forslaget fritt og godkjenner det.
+    - Uten forslag vises den gjeldende planen.
+  - **Palett:** malingene miniatyren males med, gruppert per del. Du kan legge til malinger, endre rolle og del, og fjerne rader.
+- **Høyre: agenten og kildene.** Her ser du hva agenten gjør akkurat nå, med «Stopp», og resultatet når den er ferdig. Under ligger alle kildene for spillet, både lagrede og funnet av agenten, med språk og norsk sammendrag. Trykk på en kilde for å hente bilder fra den.
+- **Forrige og neste** øverst flytter deg mellom miniatyrene i prosjektet og beholder fanen du står på.
+- **Agenten fortsetter mens du gjør noe annet.** Du kan bytte fane eller gå tilbake til galleriet. Miniatyrkortet viser «Agenten jobber …». Kjøringen lever i nettleserfanen, så laster du siden på nytt, stopper den.
+- **På iPad** ligger agent og kilder bak knappen «Agent og kilder».
 
-Kryss av for bildene du vil beholde, velg ett som «Illustrasjon» og trykk «Lagre». Bildene lastes ned og lagres med kilde. En kilde eller et bilde som er lagret fra før, gjenbrukes.
-
-## Maleplan og palett per miniatyr
-
-Når bildene er på plass, trykker du «Neste: maleplan →» i bildevisningen, eller «✦ Lag maleplan og palett med AI» på miniatyrkortet.
-
-1. Velg opptil 4 av miniatyrens bilder. Agenten ser på dem.
-2. «Lag maleplan med AI»: agenten analyserer fargesoner og uttrykk og leter etter maleguider. Kildene du allerede har funnet for spillet, leses først. Den foreslår arbeidsmåte, felles operasjoner og deler med steg og eksakte malinger, og en palett for miniatyren. Malinger du eier, foretrekkes.
-3. Rediger fritt: arbeidsmåte, delnavn og rekkefølge, instruksjoner, malinger og roller. Du kan legge til eller fjerne steg, deler og palettrader. Malinger som ikke finnes i katalogen, kobler du til et produkt eller oppretter som ubekreftet, også alle på én gang.
-4. «Godkjenn maleplanen» skriver planen (eller en ny versjon av den) og paletten. Painting Mode viser arbeidsmåte og palett øverst.
-
-Alle sider agenten leser, lagres automatisk som kilder for spillet («Funnet av agenten»). Da slipper agenten å finne dem på nytt, og du kan hente bilder fra dem under «Fra lagrede kilder».
+Alle sider agenten leser, lagres automatisk som kilder for spillet («Funnet av agenten»). Da slipper agenten å finne dem på nytt.
 
 ## Dette er med
 

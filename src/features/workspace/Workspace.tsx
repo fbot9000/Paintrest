@@ -1,0 +1,215 @@
+/**
+ * Miniatyrverkstedet: one page per miniature, using the whole screen.
+ * Left: the miniature's pictures. Middle: Bilder · Maleplan · Palett.
+ * Right: what the agent is doing and the sources found for the game.
+ */
+import { useEffect, useMemo, useState } from 'react';
+import { Link, NavLink, useNavigate, useParams } from 'react-router';
+import { useCommand, useView } from '../../app/context';
+import { useRuns } from '../../app/runs';
+import type { Run } from '../../app/runs';
+import { knownSources } from '../../domain/agent';
+import type { Id, Tables } from '../../domain/types';
+import { attachedExpansions, liveSubjects, subjectReferences } from '../../domain/views';
+import { Badge, Button, ErrorNote, FileImage } from '../../ui/components';
+import { LiveSteps } from '../agent/AgentPanel';
+import { runs } from '../../app/runs';
+import { ImagesTab } from './ImagesTab';
+import { PaletteTab } from './PaletteTab';
+import { PlanTab } from './PlanTab';
+import './workspace.css';
+
+export type Tab = 'bilder' | 'maleplan' | 'palett';
+
+function view(t: Tables, project_id: Id, subject_id: Id) {
+  const s = t.miniature_subject[subject_id];
+  const project = t.project[project_id];
+  if (!s || !project || s.project_id !== project_id) return null;
+  const game = t.game[project.game_id]?.primary_name ?? '';
+  const siblings = liveSubjects(t, project_id);
+  const i = siblings.findIndex((x) => x.id === s.id);
+  const refs = subjectReferences(t, s).map((r) => ({ ...r, cover: r.asset.id === s.official_asset_id }));
+  return {
+    s, game,
+    expansion: attachedExpansions(t, project_id).find((e) => e.id === s.expansion_id)?.name ?? 'Grunnspill',
+    prev: i > 0 ? siblings[i - 1] : undefined,
+    next: i >= 0 && i < siblings.length - 1 ? siblings[i + 1] : undefined,
+    position: `${i + 1} av ${siblings.length}`,
+    refs,
+    sources: knownSources(t, project_id),
+  };
+}
+
+export function Workspace() {
+  const { projectId = '', subjectId = '', tab: tabParam } = useParams();
+  const tab: Tab = tabParam === 'maleplan' || tabParam === 'palett' ? tabParam : 'bilder';
+  const data = useView((t) => view(t, projectId, subjectId), [projectId, subjectId]);
+  const navigate = useNavigate();
+  const { run, error, clearError } = useCommand();
+  const imagesRun = useRuns((r) => r.get(subjectId, 'images'));
+  const planRun = useRuns((r) => r.get(subjectId, 'plan'));
+  // Pictures the plan is built on. Until the user ticks anything (null), it follows the
+  // pictures: the illustration and up to three more, also when new pictures are saved.
+  const [chosenRefs, setChosenRefs] = useState<Set<Id> | null>(null);
+  const [viewing, setViewing] = useState<Id | null>(null);
+  const [zoom, setZoom] = useState(false);
+  const [browseUrl, setBrowseUrl] = useState<string | null>(null);
+  const [showSide, setShowSide] = useState(false);
+
+  useEffect(() => { setChosenRefs(null); setViewing(null); setBrowseUrl(null); }, [subjectId]);
+  const planRefs = useMemo(() => chosenRefs
+    ?? new Set([...(data?.refs ?? [])].sort((a, b) => Number(b.cover) - Number(a.cover)).slice(0, 4).map((r) => r.asset.id)), [chosenRefs, data]);
+  const setPlanRefs = (fn: (cur: Set<Id>) => Set<Id>) => setChosenRefs(fn(planRefs));
+
+  const current = useMemo(() => data?.refs.find((r) => r.asset.id === viewing) ?? data?.refs.find((r) => r.cover) ?? data?.refs[0], [data, viewing]);
+
+  if (!data) {
+    return <main className="page"><h1>Fant ikke miniatyren</h1><Link to={`/p/${projectId}/miniatyrer`}>Til miniatyrene</Link></main>;
+  }
+  const { s } = data;
+  const base = `/p/${projectId}/m`;
+  const activeRun = [imagesRun, planRun].filter((r): r is Run => !!r).sort((a, b) => b.started_at.localeCompare(a.started_at))[0] ?? null;
+
+  return (
+    <div className="ws">
+      <header className="ws-head">
+        <Link to={`/p/${projectId}/miniatyrer`} className="ws-back">← Miniatyrer</Link>
+        <div className="ws-title">
+          <span className="eyebrow">{data.game} · {data.expansion} · {data.position}</span>
+          <h1>{s.name}</h1>
+          <span className="small muted">{s.grouping === 'group' ? `Malegruppe · ${s.physical_count} figurer` : 'Enkeltfigur'}{s.plan_state === 'approved' ? ' · har maleplan' : ''}</span>
+        </div>
+        <nav className="ws-tabs" aria-label="Arbeid med miniatyren">
+          <NavLink to={`${base}/${s.id}/bilder`} className={tab === 'bilder' ? 'active' : ''}>Bilder {imagesRun?.status === 'running' && <span className="ws-dot" aria-label="agenten jobber" />}</NavLink>
+          <NavLink to={`${base}/${s.id}/maleplan`} className={tab === 'maleplan' ? 'active' : ''}>Maleplan {planRun?.status === 'running' && <span className="ws-dot" aria-label="agenten jobber" />}</NavLink>
+          <NavLink to={`${base}/${s.id}/palett`} className={tab === 'palett' ? 'active' : ''}>Palett</NavLink>
+        </nav>
+        <div className="ws-head-actions">
+          <Button variant="ghost" disabled={!data.prev} onClick={() => data.prev && navigate(`${base}/${data.prev.id}/${tab}`)} aria-label="Forrige miniatyr">‹ {data.prev?.name ?? ''}</Button>
+          <Button variant="ghost" disabled={!data.next} onClick={() => data.next && navigate(`${base}/${data.next.id}/${tab}`)} aria-label="Neste miniatyr">{data.next?.name ?? ''} ›</Button>
+          {s.current_plan_version_id && <Button variant="primary" onClick={() => navigate(`/male/${s.id}`)}>Mal</Button>}
+          <Button className="ws-side-toggle" onClick={() => setShowSide((v) => !v)} aria-expanded={showSide}>Agent og kilder</Button>
+        </div>
+      </header>
+      <ErrorNote error={error} onClose={clearError} />
+
+      <div className={`ws-body ${showSide ? 'side-open' : ''}`}>
+        <aside className="ws-refs" aria-label="Bilder av miniatyren">
+          {current ? (
+            <>
+              <button type="button" className="ws-ref-main" onClick={() => setZoom(true)} aria-label={`Forstørr ${current.label}`}>
+                <FileImage fileId={current.file_id} alt={current.label} className="ws-ref-img" />
+                {current.cover && <span className="ws-badge">Illustrasjon</span>}
+              </button>
+              <div className="ws-ref-meta">
+                <strong>{current.label}</strong>
+                <span className="small muted">{current.source.title}{current.source.creator ? ` · ${current.source.creator}` : ''}</span>
+                <span className="ws-ref-actions">
+                  {!current.cover && <button type="button" className="link small" onClick={() => run((c) => c.setSubjectCover(s.id, current.asset.id))}>Gjør til illustrasjon</button>}
+                  {current.source.url && <a className="small" href={current.source.url} target="_blank" rel="noreferrer">Kilde ↗</a>}
+                  <button type="button" className="link small" onClick={() => run((c) => c.detachSubjectImage(s.id, current.asset.id))}>Fjern</button>
+                </span>
+              </div>
+              <div className="ws-thumbs">
+                {data.refs.map((r) => {
+                  const inPlan = planRefs.has(r.asset.id);
+                  return (
+                    <div key={r.asset.id} className={`ws-thumb ${current.asset.id === r.asset.id ? 'on' : ''}`}>
+                      <button type="button" onClick={() => setViewing(r.asset.id)} aria-label={`Vis ${r.label}`}>
+                        <FileImage fileId={r.file_id} alt="" className="ws-thumb-img" />
+                        {r.cover && <span className="ws-badge small">Illustrasjon</span>}
+                      </button>
+                      <label className="ws-inplan" title="Agenten ser på dette bildet når den lager maleplanen">
+                        <input type="checkbox" checked={inPlan} onChange={(e) => setPlanRefs((cur) => {
+                          const n = new Set(cur);
+                          if (e.target.checked) { if (n.size < 4) n.add(r.asset.id); } else n.delete(r.asset.id);
+                          return n;
+                        })} />
+                        I planen
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="small muted">{planRefs.size} av høyst 4 bilder brukes når agenten lager maleplanen.</p>
+            </>
+          ) : (
+            <div className="ws-refs-empty">
+              <p>Ingen bilder ennå.</p>
+              <p className="small muted">Finn bilder med AI, hent fra en lagret kilde eller last opp i Bilder-fanen.</p>
+            </div>
+          )}
+        </aside>
+
+        <main className="ws-main">
+          {tab === 'bilder' && <ImagesTab subject={s} game={data.game} run={imagesRun} browseUrl={browseUrl} setBrowseUrl={setBrowseUrl} referenceFileId={data.refs.find((r) => r.cover)?.file_id ?? data.refs[0]?.file_id ?? null} />}
+          {tab === 'maleplan' && <PlanTab subject={s} game={data.game} run={planRun} planFileIds={data.refs.filter((r) => planRefs.has(r.asset.id)).map((r) => r.file_id)} />}
+          {tab === 'palett' && <PaletteTab subject={s} />}
+        </main>
+
+        <aside className="ws-side" aria-label="Agenten og kildene">
+          <section className="ws-agent">
+            <h2 className="eyebrow">Agenten</h2>
+            {activeRun?.status === 'running' ? (
+              <div className="ws-live"><LiveSteps events={activeRun.events} onStop={() => runs.stop(s.id, activeRun.kind)} /></div>
+            ) : activeRun ? (
+              <RunResult run={activeRun} />
+            ) : (
+              <p className="small">Ingen kjøring for denne miniatyren ennå. Agenten fortsetter selv om du bytter fane eller går til galleriet.</p>
+            )}
+          </section>
+          <section className="ws-sources">
+            <h2 className="eyebrow">Kilder for spillet ({data.sources.length})</h2>
+            {data.sources.length === 0 && <p className="small">Sider agenten leser, og sider du lagrer bilder fra, samles her for alle miniatyrene.</p>}
+            <ul>
+              {data.sources.map((k) => (
+                <li key={k.source.id} className={browseUrl === k.source.url ? 'on' : ''}>
+                  <button type="button" onClick={() => { setBrowseUrl(k.source.url); if (tab !== 'bilder') navigate(`${base}/${s.id}/bilder`); }}>
+                    <span className="ws-src-head">
+                      <strong>{k.source.title}</strong>
+                      <Badge tone={k.status === 'kept' ? 'moss' : 'neutral'}>{k.status === 'kept' ? `Lagret · ${k.asset_count}` : 'Funnet'}</Badge>
+                    </span>
+                    <span className="small ws-src-sub">{k.source.creator ?? ''}{k.source.language ? ` · ${languageName(k.source.language)}` : ''}</span>
+                    {k.summary && <span className="small ws-src-sum">{k.summary}</span>}
+                  </button>
+                  <a className="small" href={k.source.url!} target="_blank" rel="noreferrer" aria-label="Åpne siden">↗</a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </aside>
+      </div>
+
+      {zoom && current && (
+        <div className="pm-zoom" role="dialog" aria-label="Forstørret bilde" onClick={() => setZoom(false)}>
+          <FileImage fileId={current.file_id} alt={current.label} className="pm-zoom-img" />
+          <button type="button" className="pm-zoom-close">Lukk</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RunResult({ run: r }: { run: Run }) {
+  const final = [...r.events].reverse().find((e) => e.type === 'final');
+  const label = r.kind === 'images' ? 'Bildejakt' : 'Maleplan';
+  return (
+    <div className="ws-result">
+      <span className="small">
+        {label} {r.status === 'done' ? 'ferdig' : r.status === 'stopped' ? 'stoppet' : 'feilet'}
+        {r.finished_at ? ` kl. ${new Date(r.finished_at).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}` : ''} · {r.pages.length} sider lest
+      </span>
+      {final && final.type === 'final' && <p>{final.message}</p>}
+      {final && final.type === 'final' && final.warnings.map((w, i) => <p key={i} className="small ws-warn">{w}</p>)}
+      {r.error && <p className="small ws-warn">{r.error}</p>}
+    </div>
+  );
+}
+
+export function languageName(code: string): string {
+  try {
+    return new Intl.DisplayNames(['nb'], { type: 'language' }).of(code.split('-')[0]!) ?? code;
+  } catch {
+    return code;
+  }
+}
