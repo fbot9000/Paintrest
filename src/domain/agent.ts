@@ -123,10 +123,32 @@ export interface NormalisedProposal {
   update_of: string | null;
   evidence: Evidence;
   uncertainty: Uncertainty[];
-  payload: CatalogSubjectPayload | PaintPlanPayload | ReferenceSelectionPayload;
+  payload: CatalogSubjectPayload | PaintPlanPayload | ReferenceSelectionPayload | CatalogChangePayload;
 }
 
-export type ProposalKind = 'catalog_subject' | 'paint_plan' | 'reference_selection';
+/** Fields of a miniature the agent may set; omitted fields are left as they are. */
+export interface SubjectFields {
+  name?: string;
+  grouping?: Grouping;
+  physical_count?: number;
+  expansion_name?: string | null;
+  category_label?: string | null;
+}
+
+export type CatalogOp =
+  | { op: 'update'; subject_id: Id; set: SubjectFields }
+  | { op: 'delete'; subject_id: Id }
+  | { op: 'split'; subject_id: Id; into: (SubjectFields & { name: string })[] }
+  | { op: 'merge'; subject_ids: Id[]; into: SubjectFields & { name: string } }
+  | { op: 'create'; fields: SubjectFields & { name: string } };
+
+/** Several changes to the project's miniatures, approved together in one transaction. */
+export interface CatalogChangePayload {
+  operations: CatalogOp[];
+  note: string | null;
+}
+
+export type ProposalKind = 'catalog_subject' | 'paint_plan' | 'reference_selection' | 'catalog_change';
 
 const ROLES: MaterialRole[] = ['base', 'shade', 'layer', 'highlight', 'wash', 'glaze', 'mix', 'other'];
 const EVIDENCE: Evidence[] = ['documented', 'synthesized', 'unresolved'];
@@ -147,6 +169,56 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
       return reason ? [{ path: str(x.path) || '', reason }] : [];
     }),
   };
+
+  if (raw.type === 'catalog_change') {
+    const ref = (v: unknown): Id | null => {
+      const r = str(v).trim();
+      return subjectRefs[r] ?? subjectRefs[r.toUpperCase()] ?? null;
+    };
+    const fields = (v: unknown): SubjectFields => {
+      const f = obj(v);
+      const out: SubjectFields = {};
+      if (str(f.name).trim()) out.name = str(f.name).trim();
+      if (f.grouping === 'single' || f.grouping === 'group') out.grouping = f.grouping;
+      if (f.physical_count !== undefined && Number.isFinite(Number(f.physical_count))) out.physical_count = Math.max(1, Math.round(Number(f.physical_count)));
+      if ('expansion_name' in f) out.expansion_name = str(f.expansion_name).trim() || null;
+      if ('category_label' in f) out.category_label = str(f.category_label).trim() || null;
+      if (out.physical_count && out.physical_count > 1 && !out.grouping) out.grouping = 'group';
+      return out;
+    };
+    const named = (v: unknown) => {
+      const f = fields(v);
+      return f.name ? [{ ...f, name: f.name }] : [];
+    };
+    const operations: CatalogOp[] = [];
+    for (const raw2 of arr(o.operations)) {
+      const op = obj(raw2);
+      if (op.op === 'update') {
+        const id = ref(op.subject);
+        if (!id) return { ok: false, reason: `Endringen viser til en ukjent miniatyr (${str(op.subject) || 'ingen'})` };
+        operations.push({ op: 'update', subject_id: id, set: fields(op.set) });
+      } else if (op.op === 'delete') {
+        const id = ref(op.subject);
+        if (!id) return { ok: false, reason: `Slettingen viser til en ukjent miniatyr (${str(op.subject) || 'ingen'})` };
+        operations.push({ op: 'delete', subject_id: id });
+      } else if (op.op === 'split') {
+        const id = ref(op.subject);
+        const into = arr(op.into).flatMap(named);
+        if (!id || into.length < 2) return { ok: false, reason: 'En deling må vise til en miniatyr og ha minst to nye grupper med navn' };
+        operations.push({ op: 'split', subject_id: id, into });
+      } else if (op.op === 'merge') {
+        const ids = arr(op.subjects).map(ref);
+        const into = named(op.into)[0];
+        if (ids.length < 2 || ids.some((x) => !x) || !into) return { ok: false, reason: 'En sammenslåing må vise til minst to kjente miniatyrer og ha et navn' };
+        operations.push({ op: 'merge', subject_ids: ids as Id[], into });
+      } else if (op.op === 'create') {
+        const f = named(op.fields ?? op)[0];
+        if (f) operations.push({ op: 'create', fields: f });
+      }
+    }
+    if (!operations.length) return { ok: false, reason: 'Endringsforslaget har ingen gyldige operasjoner' };
+    return { ok: true, value: { ...common, result_type: 'catalog_change', payload: { operations, note: str(o.note).trim() || null } } };
+  }
 
   if (raw.type === 'catalog_subject') {
     const name = str(o.name).trim();
@@ -298,14 +370,12 @@ export function buildAgentContext(t: Tables, task_id: Id): AgentContext {
   const subjects = liveSubjects(t, project.id);
   const subjectRefs: Record<string, Id> = {};
   const expansions = attachedExpansions(t, project.id);
-  const targets = Object.values(t.task_revision_target).filter((r) => r.task_id === task_id);
 
   const subjectData = subjects.map((s, i) => {
     const ref = `M${i + 1}`;
     subjectRefs[ref] = s.id;
     const pv = s.current_plan_version_id ? t.paint_plan_version[s.current_plan_version_id] : undefined;
     const elements = pv ? Object.values(t.plan_element).filter((e) => e.plan_version_id === pv.id).sort((a, b) => a.position - b.position) : [];
-    const target = targets.find((r) => r.target_id === s.id);
     return {
       ref,
       name: s.name,
@@ -318,7 +388,6 @@ export function buildAgentContext(t: Tables, task_id: Id): AgentContext {
       plan: pv
         ? {
             version: pv.version_number,
-            open_for_revision: !!target && target.base_version_id === pv.id,
             elements: elements.map((e) => ({
               kind: e.kind,
               name: e.name,
@@ -403,6 +472,13 @@ export function proposalTitle(t: Tables, type: ResultType, payload: unknown): st
     const p = payload as CatalogSubjectPayload;
     return `${p.name} (${p.grouping === 'group' ? `gruppe, ${p.physical_count}` : 'enkeltfigur'})`;
   }
+  if (type === 'catalog_change') {
+    const p = payload as CatalogChangePayload;
+    const name = (id: Id) => t.miniature_subject[id]?.name ?? 'ukjent';
+    const short = p.operations.map((o) => o.op === 'update' ? `Endre «${name(o.subject_id)}»` : o.op === 'delete' ? `Slett «${name(o.subject_id)}»`
+      : o.op === 'split' ? `Del «${name(o.subject_id)}» i ${o.into.length}` : o.op === 'merge' ? `Slå sammen ${o.subject_ids.length} miniatyrer` : `Ny «${o.fields.name}»`);
+    return short.length > 2 ? `${short.slice(0, 2).join(' · ')} + ${short.length - 2} til` : short.join(' · ') || 'Endring i katalogen';
+  }
   if (type === 'reference_selection') {
     const p = payload as ReferenceSelectionPayload;
     return `${p.images.length} referansebilde${p.images.length === 1 ? '' : 'r'} for ${t.miniature_subject[p.subject_id]?.name ?? 'ukjent miniatyr'}`;
@@ -412,6 +488,24 @@ export function proposalTitle(t: Tables, type: ResultType, payload: unknown): st
     return `Maleplan for ${t.miniature_subject[p.subject_id]?.name ?? 'ukjent miniatyr'}`;
   }
   return type;
+}
+
+/** Human-readable lines for catalog operations (Norwegian). */
+export function describeOps(t: Tables, ops: CatalogOp[]): string[] {
+  const name = (id: Id) => t.miniature_subject[id]?.name ?? 'ukjent';
+  const fmt = (f: SubjectFields) => [
+    f.name, f.grouping === 'group' ? `gruppe${f.physical_count ? ` på ${f.physical_count}` : ''}` : f.grouping === 'single' ? 'enkeltfigur' : f.physical_count ? `${f.physical_count} stk.` : null,
+    f.expansion_name !== undefined ? (f.expansion_name ?? 'grunnspill') : null, f.category_label ? `kategori ${f.category_label}` : null,
+  ].filter(Boolean).join(', ');
+  return ops.map((o) => {
+    switch (o.op) {
+      case 'update': return `Endre «${name(o.subject_id)}»: ${fmt(o.set) || 'ingen felt'}`;
+      case 'delete': return `Slett «${name(o.subject_id)}»`;
+      case 'split': return `Del «${name(o.subject_id)}» i ${o.into.length}: ${o.into.map(fmt).join(' / ')}`;
+      case 'merge': return `Slå sammen ${o.subject_ids.map((i) => `«${name(i)}»`).join(', ')} til ${fmt(o.into)}`;
+      case 'create': return `Ny: ${fmt(o.fields)}`;
+    }
+  });
 }
 
 function fullName(p: PaintProduct): string {

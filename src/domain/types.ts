@@ -393,7 +393,9 @@ export type AreaKind = 'new_project' | 'new_knowledge' | 'revision_only';
 
 export type ResultType =
   | 'game_identity' | 'catalog_subject' | 'palette_entry' | 'project_method'
-  | 'reference_selection' | 'paint_plan' | 'recipe' | 'technique' | 'plan_revision';
+  | 'reference_selection' | 'paint_plan' | 'recipe' | 'technique' | 'plan_revision'
+  /** PROTOTYPE: changes to existing miniatures in the work project (update, split, merge, delete). */
+  | 'catalog_change';
 
 export interface ResearchTask {
   id: Id;

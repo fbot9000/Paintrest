@@ -1,16 +1,21 @@
 import { CommandError } from '../domain/commands';
 import { newId, now } from '../domain/ids';
 import { matchProduct, planProductRefs, productKey } from '../domain/agent';
-import type { CatalogSubjectPayload, NormalisedProposal, PaintPlanPayload, PaletteItem, ProductRef, ProposalKind, ReferenceSelectionPayload, SourceRef } from '../domain/agent';
+import type { CatalogChangePayload, CatalogSubjectPayload, NormalisedProposal, PaintPlanPayload, PaletteItem, ProductRef, ProposalKind, ReferenceSelectionPayload, SourceRef, SubjectFields } from '../domain/agent';
 import type { AgentCommands, ApproveOptions, ProposalWrite, ResearchCommands } from '../domain/research';
-import type { ChangeAction, Id, ResearchProposal, ResultType, Tables } from '../domain/types';
+import type { ChangeAction, Id, MiniatureSubject, ResearchProposal, ResultType, Tables, Uncertainty } from '../domain/types';
 import { attachedExpansions } from '../domain/views';
 import type { Store } from './store';
 import { addSourceLayers, attachImages, downloadImages, setCover, sourceFor } from './images-tx';
 import type { Downloaded } from './images-tx';
 
 /** Result types implemented in this version. See docs/AVVIK.md. */
-export const IMPLEMENTED_TYPES: ResultType[] = ['catalog_subject', 'paint_plan', 'reference_selection'];
+/**
+ * Result types for a project task in this version. catalog_change and plan_revision
+ * let the agent change what already exists in the work project (user decision
+ * 10 November 2026, see docs/AVVIK.md). Nothing outside the project is reachable.
+ */
+export const IMPLEMENTED_TYPES: ResultType[] = ['catalog_subject', 'paint_plan', 'reference_selection', 'catalog_change', 'plan_revision'];
 
 type Who = { initiated_by: 'user' | 'agent'; task_id?: Id | null; proposal_id?: Id | null };
 
@@ -50,6 +55,18 @@ export function checkScope(t: Tables, task_id: Id, p: { result_type: ProposalKin
     return { result_type: 'catalog_subject', base_version_id: null };
   }
 
+  if (p.result_type === 'catalog_change') {
+    if (!types.has('catalog_change')) throw new CommandError('Oppgaven tillater ikke endringer i katalogen');
+    const ids = (p.payload as CatalogChangePayload).operations.flatMap((o) =>
+      o.op === 'merge' ? o.subject_ids : o.op === 'create' ? [] : [o.subject_id]);
+    for (const id of ids) {
+      const s = t.miniature_subject[id];
+      // Only miniatures in this task's project (skjema §7: no other project's ids).
+      if (!s || s.deleted_at || s.project_id !== project.id) throw new CommandError('Endringen gjelder en miniatyr utenfor prosjektet eller en som er slettet');
+    }
+    return { result_type: 'catalog_change', base_version_id: null };
+  }
+
   const payload = p.payload as PaintPlanPayload | ReferenceSelectionPayload;
   const subject = t.miniature_subject[payload.subject_id];
   // Payload may not carry another project's subject (skjema §7).
@@ -65,14 +82,13 @@ export function checkScope(t: Tables, task_id: Id, p: { result_type: ProposalKin
     if (!types.has('paint_plan')) throw new CommandError('Oppgaven tillater ikke nye maleplaner');
     return { result_type: 'paint_plan', base_version_id: null };
   }
-  // An approved plan exists: only a revision of an opened target is allowed.
+  // An approved plan exists: a new version, based on the version current now.
+  // Inside the work project no opened target is needed (user decision, docs/AVVIK.md).
+  if (!types.has('plan_revision')) throw new CommandError(`«${subject.name}» har en godkjent maleplan, og oppgaven tillater ikke nye versjoner`);
   const target = Object.values(t.task_revision_target).find(
     (r) => r.task_id === task_id && r.target_type === 'paint_plan' && r.target_id === subject.id,
   );
-  if (!target || !types.has('plan_revision')) {
-    throw new CommandError(`«${subject.name}» har en godkjent maleplan. Agenten kan bare foreslå en ny versjon når du åpner planen for revisjon.`);
-  }
-  return { result_type: 'plan_revision', base_version_id: target.base_version_id };
+  return { result_type: 'plan_revision', base_version_id: target?.base_version_id ?? subject.current_plan_version_id };
 }
 
 // ---------- Agentens kommandoer ----------
@@ -317,11 +333,13 @@ function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions, files
   const p = must(t.research_proposal[proposal_id], 'Forslaget');
   if (p.decision !== 'pending') throw new CommandError('Forslaget er allerede behandlet');
   const who: Who = { initiated_by: 'agent', task_id: p.task_id, proposal_id };
-  const kind: ProposalKind = p.result_type === 'catalog_subject' || p.result_type === 'reference_selection' ? p.result_type : 'paint_plan';
+  const kind: ProposalKind = p.result_type === 'catalog_subject' || p.result_type === 'reference_selection' || p.result_type === 'catalog_change' ? p.result_type : 'paint_plan';
   const scope = checkScope(t, p.task_id, { result_type: kind, payload: p.payload });
   const project_id = t.task_scope[p.task_id]!.work_project_id!;
 
-  if (kind === 'catalog_subject') {
+  if (kind === 'catalog_change') {
+    applyCatalogChange(t, ws, project_id, p.payload as CatalogChangePayload, p.uncertainty, who);
+  } else if (kind === 'catalog_subject') {
     const c = p.payload as CatalogSubjectPayload;
     const ex = c.expansion_name
       ? attachedExpansions(t, project_id).find((e) => e.name.trim().toLowerCase() === c.expansion_name!.trim().toLowerCase())
@@ -405,6 +423,61 @@ function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions, files
   p.decision = 'approved';
   p.updated_at = now();
   p.last_error = null;
+}
+
+/**
+ * Applies catalog operations in the same transaction as the approval.
+ * Deletes are soft (restorable); split and merge create new miniatures and
+ * soft-delete the originals, carrying the illustration over.
+ */
+function applyCatalogChange(t: Tables, ws: Id, project_id: Id, payload: CatalogChangePayload, uncertainty: Uncertainty[], who: Who) {
+  const expansions = attachedExpansions(t, project_id);
+  const expansionId = (name: string | null | undefined, fallback: Id | null): Id | null => {
+    if (name === undefined) return fallback;
+    if (name === null) return null;
+    return expansions.find((e) => e.name.trim().toLowerCase() === name.trim().toLowerCase())?.id ?? fallback;
+  };
+  const apply = (s: MiniatureSubject, f: SubjectFields) => {
+    if (f.name !== undefined) s.name = f.name;
+    if (f.grouping !== undefined) s.grouping = f.grouping;
+    if (f.physical_count !== undefined) s.physical_count = f.physical_count;
+    if (f.expansion_name !== undefined) s.expansion_id = expansionId(f.expansion_name, s.expansion_id);
+    if (f.category_label !== undefined) s.category_label = f.category_label;
+    if (s.grouping === 'single') s.physical_count = 1;
+    if (s.physical_count < 1) s.physical_count = 1;
+    if (s.finished_count > s.physical_count) s.finished_count = s.physical_count;
+  };
+  const create = (f: SubjectFields & { name: string }, from?: MiniatureSubject): Id => {
+    const id = newId();
+    const s: MiniatureSubject = {
+      id, project_id, expansion_id: from?.expansion_id ?? null, name: f.name, grouping: 'single', physical_count: 1,
+      category_label: from?.category_label ?? null, official_asset_id: from?.official_asset_id ?? null, plan_state: 'none',
+      in_progress: false, finished_count: 0, count_basis: null, grouping_basis: null, uncertainty: uncertainty.length ? uncertainty : null,
+      current_plan_version_id: null, deleted_at: null,
+    };
+    apply(s, f);
+    t.miniature_subject[id] = s;
+    record(t, ws, 'miniature_subject', id, 'create', who);
+    return id;
+  };
+  const remove = (s: MiniatureSubject) => {
+    s.deleted_at = now();
+    record(t, ws, 'miniature_subject', s.id, 'delete', who);
+  };
+  for (const o of payload.operations) {
+    if (o.op === 'create') { create(o.fields); continue; }
+    if (o.op === 'merge') {
+      const olds = o.subject_ids.map((id) => t.miniature_subject[id]!).filter((x) => !x.deleted_at);
+      create(o.into, olds[0]);
+      olds.forEach(remove);
+      continue;
+    }
+    const s = t.miniature_subject[o.subject_id];
+    if (!s || s.deleted_at) throw new CommandError('En miniatyr i endringen er allerede slettet');
+    if (o.op === 'update') { apply(s, o.set); record(t, ws, 'miniature_subject', s.id, 'update', who); }
+    else if (o.op === 'delete') remove(s);
+    else if (o.op === 'split') { o.into.forEach((f) => create(f, s)); remove(s); }
+  }
 }
 
 /**

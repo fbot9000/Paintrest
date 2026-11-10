@@ -34,6 +34,15 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
     - lenker med `use = method` til kildene som ble brukt
     - farge (`swatch_hex`) fra agenten på malinger som opprettes som ubekreftet. Fargen er omtrentlig.
 26. **Du kan redigere planforslaget før godkjenning** (`editPlanProposal`): arbeidsmåte, deler, steg, malinger og roller, og palett. Miniatyren forslaget gjelder, kan ikke byttes.
+27. **BRUKERBESLUTNING 10. november 2026: agenten får stor frihet inne i prosjektet.** Mens et prosjekt settes opp, kan agenten foreslå å lage, endre, dele, slå sammen og slette miniatyrer (`catalog_change`, ny resultattype). Den kan også foreslå nye versjoner av godkjente maleplaner (`plan_revision`) uten at brukeren først åpner planen som revisjonsmål.
+    - **Hva det avviker fra:** Dette erstatter regelen om revisjonsmål i skjema §3 og §7 og datamodell v3 §12, for objekter i arbeidsprosjektet.
+    - **Det som står fast:**
+      - Alt er forslag som brukeren godkjenner. Det går med ett klikk, og «Godkjenn alle» finnes for forslag som ikke trenger valg.
+      - Hvert forslag godkjennes i én transaksjon.
+      - En ny planversjon stopper hvis planen er endret siden forslaget ble laget.
+      - Sletting skjuler bare, og miniatyren kan gjenopprettes. Deling og sammenslåing lager nye miniatyrer og skjuler originalene.
+      - Agenten kan ikke røre noe utenfor arbeidsprosjektet: andre prosjekter, malingskatalogen (nye malinger krever fortsatt brukerens valg) eller biblioteket.
+    - **Dokumentene bør oppdateres:** «Paintrest – databaseskjema og arkitektur» §3 og §7, og datamodell v3 §12.
 
 ## Antakelser
 

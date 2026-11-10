@@ -51,10 +51,13 @@ describe('agentens omfang (skjema §7)', () => {
     expect(agent.writeProposal(task, plan(subject('The Ancient One').id), 'uib', 'm').ok).toBe(true);
   });
 
-  it('kan ikke skrive over en godkjent plan uten revisjonsmål', async () => {
-    const { agent, task, subject } = await setup();
+  it('kan foreslå ny versjon av en godkjent plan i prosjektet uten åpnet mål', async () => {
+    const { store, agent, task, subject } = await setup();
     const r = agent.writeProposal(task, plan(subject('Merlin').id), 'uib', 'm');
-    expect(r.ok).toBe(false);
+    if (!r.ok) throw new Error(r.reason);
+    const p = store.getTables().research_proposal[r.id]!;
+    expect(p.result_type).toBe('plan_revision');
+    expect(p.base_version_id).toBe(subject('Merlin').current_plan_version_id);
   });
 
   it('kan ikke bruke en figur fra et annet prosjekt', async () => {
@@ -183,6 +186,59 @@ describe('bildejakt: kildetekst og oversettelse', () => {
   });
 });
 
+describe('endringer i katalogen (autonomi i prosjektet)', () => {
+  const change = (operations: unknown[]): NormalisedProposal => ({
+    result_type: 'catalog_change', update_of: null, evidence: 'synthesized', uncertainty: [], payload: { operations, note: null },
+  } as NormalisedProposal);
+
+  it('deler en godkjent miniatyr i fire fraksjoner, og originalen kan gjenopprettes', async () => {
+    const { store, agent, research, task, project, cmd } = await setup();
+    const agents = await cmd.createSubject(project.id, { name: 'Agenter', grouping: 'group', physical_count: 12 });
+    const ctx = buildAgentContext(store.getTables(), task);
+    const ref = Object.entries(ctx.subjectRefs).find(([, id]) => id === agents)![0];
+    const raw = { type: 'catalog_change', payload: { operations: [{ op: 'split', subject: ref, into: ['rød', 'blå', 'grønn', 'gul'].map((c) => ({ name: `Agenter – ${c}`, physical_count: 3, category_label: `${c} fraksjon` })) }] } };
+    const n = normaliseProposal(raw, ctx.subjectRefs);
+    if (!n.ok) throw new Error(n.reason);
+    const w = agent.writeProposal(task, n.value, 'uib', 'm');
+    if (!w.ok) throw new Error(w.reason);
+    await research.approveProposal(w.id);
+    const live = Object.values(store.getTables().miniature_subject).filter((s) => !s.deleted_at && s.name.startsWith('Agenter'));
+    expect(live.map((s) => [s.name, s.grouping, s.physical_count]).sort()).toEqual([
+      ['Agenter – blå', 'group', 3], ['Agenter – grønn', 'group', 3], ['Agenter – gul', 'group', 3], ['Agenter – rød', 'group', 3],
+    ]);
+    expect(store.getTables().miniature_subject[agents]!.deleted_at).not.toBeNull();
+    expect(Object.values(store.getTables().change_record).filter((r) => r.proposal_id === w.id && r.initiated_by === 'agent').length).toBe(5);
+    await cmd.restoreSubject(agents);
+    expect(store.getTables().miniature_subject[agents]!.deleted_at).toBeNull();
+  });
+
+  it('endrer, slår sammen og sletter i én transaksjon', async () => {
+    const { store, agent, research, task, subject } = await setup();
+    const w = agent.writeProposal(task, change([
+      { op: 'update', subject_id: subject('Merlin').id, set: { name: 'Merlin den gamle' } },
+      { op: 'merge', subject_ids: [subject('The Ancient One').id, subject('Druid Mistwalker').id], into: { name: 'Store figurer', grouping: 'group', physical_count: 2 } },
+    ]), 'uib', 'm');
+    if (!w.ok) throw new Error(w.reason);
+    await research.approveProposal(w.id);
+    const live = Object.values(store.getTables().miniature_subject).filter((s) => !s.deleted_at).map((s) => s.name).sort();
+    expect(live).toContain('Merlin den gamle');
+    expect(live).toContain('Store figurer');
+    expect(live).not.toContain('The Ancient One');
+  });
+
+  it('kan ikke røre miniatyrer i et annet prosjekt', async () => {
+    const { agent, task, cmd } = await setup();
+    const other = await cmd.createProject();
+    const foreign = await cmd.createSubject(other.project_id);
+    expect(agent.writeProposal(task, change([{ op: 'delete', subject_id: foreign }]), 'uib', 'm').ok).toBe(false);
+  });
+
+  it('avviser ukjente referanser fra modellen', () => {
+    const r = normaliseProposal({ type: 'catalog_change', payload: { operations: [{ op: 'delete', subject: 'M99' }] } }, { M1: 'a' });
+    expect(r.ok).toBe(false);
+  });
+});
+
 describe('maleplan med palett', () => {
   it('godkjenning gir planversjon med sammendrag, palett for miniatyren, farge på nye malinger og metodekilde', async () => {
     const { store, agent, research, task, subject, project } = await setup();
@@ -265,7 +321,7 @@ describe('kontekst og migrering', () => {
     const ctx = buildAgentContext(store.getTables(), task);
     expect(Object.keys(ctx.subjectRefs)).toContain('M1');
     expect(JSON.stringify(ctx.data)).toContain('Caliban Green');
-    expect(ctx.allowedTypes).toEqual(['catalog_subject', 'paint_plan', 'reference_selection']);
+    expect(ctx.allowedTypes).toEqual(['catalog_subject', 'paint_plan', 'reference_selection', 'catalog_change', 'plan_revision']);
   });
 
   it('migrerer v1-data uten å miste prosjekter', async () => {

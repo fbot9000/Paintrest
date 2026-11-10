@@ -7,8 +7,8 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useApp, useView } from '../../app/context';
-import { matchProduct, planProductRefs, productKey, proposalTitle } from '../../domain/agent';
-import type { CatalogSubjectPayload, PaintPlanPayload, ReferenceSelectionPayload, SourceRef } from '../../domain/agent';
+import { describeOps, matchProduct, planProductRefs, productKey, proposalTitle } from '../../domain/agent';
+import type { CatalogChangePayload, CatalogSubjectPayload, PaintPlanPayload, ReferenceSelectionPayload, SourceRef } from '../../domain/agent';
 import type { ResearchEvent } from '../../domain/ai';
 import type { Id, ResearchMessage, ResearchProposal, Tables } from '../../domain/types';
 import { ownershipOf } from '../../domain/views';
@@ -184,6 +184,23 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
   }
 
   const pending = view?.proposals.filter((p) => p.decision === 'pending') ?? [];
+  // Proposals that need no choice from the user: no image selection, no unknown paints.
+  const simple = pending.filter((p) => {
+    if (p.result_type === 'reference_selection') return false;
+    if (p.result_type === 'paint_plan' || p.result_type === 'plan_revision') {
+      const t = app.store.getTables();
+      return planProductRefs(p.payload as PaintPlanPayload).every((r) => !!matchProduct(t, r));
+    }
+    return true;
+  });
+  const approveAll = async () => {
+    setError(null);
+    const failed: string[] = [];
+    for (const p of simple) {
+      try { await app.research.approveProposal(p.id); } catch (e) { failed.push(`${p.ref}: ${e instanceof Error ? e.message : String(e)}`); }
+    }
+    if (failed.length) setError(`Noen forslag ble ikke godkjent. ${failed.join(' ')}`);
+  };
   const done = view?.proposals.filter((p) => p.decision !== 'pending') ?? [];
 
   return (
@@ -224,7 +241,7 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
       <div className="agent-scroll" ref={listRef}>
         <div className="agent-scope">
           <span className="eyebrow">Arbeidskontekst</span>
-          <span>Dette prosjektet. Agenten kan lese prosjektet, miniatyrene, maleplanene og malingene dine{web ? ', søke på nettet og lese sider' : ''}, og lage forslag til nye miniatyrer, referansebilder og maleplaner.</span>
+          <span>Dette prosjektet. Agenten kan lese prosjektet, miniatyrene, maleplanene og malingene dine{web ? ', søke på nettet og lese sider' : ''}, og foreslå nye og endrede miniatyrer, referansebilder og maleplaner. Den kan ikke endre noe utenfor prosjektet.</span>
           {ai === 'ready' && !web && <span>Uten nettsøk bygger agenten bare på det modellen kan fra før. Legg inn en søketjeneste under <Link to="/innstillinger">AI og nettsøk</Link>.</span>}
           {view?.targets.map((r) => (
             <Badge key={r.id} tone={r.stale ? 'warn' : 'moss'}>
@@ -244,7 +261,12 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
 
         {pending.length > 0 && (
           <section className="agent-proposals">
-            <h3 className="eyebrow">Forslag som venter ({pending.length})</h3>
+            <div className="agent-pending-head">
+              <h3 className="eyebrow">Forslag som venter ({pending.length})</h3>
+              {simple.length > 1 && (
+                <button type="button" className="agent-link small" onClick={approveAll} disabled={busy}>Godkjenn alle {simple.length}</button>
+              )}
+            </div>
             {pending.map((p) => (
               <ProposalCard
                 key={p.id}
@@ -332,6 +354,7 @@ function ProposalCard({ p, title, onReview, onReject, onApprove }: {
       <strong>{title}</strong>
       {p.result_type === 'reference_selection' && <Thumbs payload={p.payload as ReferenceSelectionPayload} />}
       {p.result_type === 'catalog_subject' && <SourceList sources={(p.payload as CatalogSubjectPayload).sources ?? []} compact />}
+      {p.result_type === 'catalog_change' && <ChangeList payload={p.payload as CatalogChangePayload} />}
       {p.uncertainty.length > 0 && (
         <ul className="proposal-unc">
           {p.uncertainty.slice(0, 3).map((u, i) => <li key={i}>{u.reason}</li>)}
@@ -343,7 +366,7 @@ function ProposalCard({ p, title, onReview, onReject, onApprove }: {
         {isPlan || isRefs || needsProducts
           ? <Button variant="primary" onClick={onReview}>Se gjennom</Button>
           : <Button variant="primary" onClick={onApprove}>Godkjenn</Button>}
-        {!isPlan && !isRefs && <Button onClick={onReview}>Rediger</Button>}
+        {p.result_type === 'catalog_subject' && <Button onClick={onReview}>Rediger</Button>}
         <Button variant="ghost" onClick={onReject}>Avvis</Button>
       </div>
     </article>
@@ -537,6 +560,7 @@ function ReviewDialog({ proposalId, onClose, onDone }: { proposalId: Id; onClose
 
 const KIND_LABEL: Record<string, string> = {
   catalog_subject: 'Ny miniatyr', paint_plan: 'Ny maleplan', plan_revision: 'Ny planversjon', reference_selection: 'Referansebilder',
+  catalog_change: 'Endring i katalogen',
 };
 
 function Message({ m }: { m: ResearchMessage }) {
@@ -628,4 +652,14 @@ function shortUrl(u: string): string {
   } catch {
     return u;
   }
+}
+
+function ChangeList({ payload }: { payload: CatalogChangePayload }) {
+  const lines = useView((t) => describeOps(t, payload.operations), [payload]);
+  return (
+    <ul className="change-list">
+      {lines.map((l, i) => <li key={i}>{l}</li>)}
+      {payload.note && <li className="muted">{payload.note}</li>}
+    </ul>
+  );
 }
