@@ -43,6 +43,14 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
       - Sletting skjuler bare, og miniatyren kan gjenopprettes. Deling og sammenslåing lager nye miniatyrer og skjuler originalene.
       - Agenten kan ikke røre noe utenfor arbeidsprosjektet: andre prosjekter, malingskatalogen (nye malinger krever fortsatt brukerens valg) eller biblioteket.
     - **Dokumentene bør oppdateres:** «Paintrest – databaseskjema og arkitektur» §3 og §7, og datamodell v3 §12.
+28. **BRUKERBESLUTNING 10. november 2026: agenten endrer direkte, med angre.** Det er tre soner:
+    - **Åpen:** alt i arbeidsprosjektet. I runder fra agentpanelet tar Paintrest agentens endringer i bruk med en gang: nye, endrede, delte, sammenslåtte og slettede miniatyrer, og maleplaner der alle malingene finnes i katalogen. Hver runde blir ett endringssett (`agent_change_set`, ny tabell i v4). Endringssettet lagrer før- og etterbildet av hver rad som ble endret, og «Angre» fører alt tilbake samlet. Angre nektes uten å endre noe hvis en rad er endret etterpå. Forslagene ligger igjen som logg (`change_set_id`), og `change_record` skrives som før, med `undo` ved angre.
+    - **Ferdig:** ikke i bruk ennå. Brukeren har sagt at ingenting er ferdig foreløpig. Hva som skal gjøre noe ferdig og låst (for eksempel «maleklar», at malingen er i gang, eller at katalogen er ferdig), avgjøres senere.
+    - **Globalt:** malingskatalog, bibliotek og andre prosjekter. Agenten foreslår, og brukeren godkjenner.
+    
+    Bildeutvalg og planer med malinger som ikke finnes i katalogen, er fortsatt forslag. Det samme gjelder runder brukeren starter fra en egen visning (bildejakt og maleplan), der brukeren går gjennom forslaget der.
+    
+    Dette avviker fra datamodell v3 §3, §12 og §13, og fra skjema §2 og §8, der agenten aldri skriver kanoniske data uten godkjenning. Dokumentene bør oppdateres.
 
 ## Antakelser
 

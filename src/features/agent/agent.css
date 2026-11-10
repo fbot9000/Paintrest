@@ -116,3 +116,8 @@
 .review-refs .replace input { width: 20px; height: 20px; accent-color: var(--pine); }
 .agent-pending-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .change-list { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: 13px; }
+.changeset { display: grid; gap: 4px; padding: 8px 12px; border-radius: var(--r-md); border: 1px solid var(--moss); background: rgb(195 225 163 / .08); font-size: 13px; }
+.changeset ul { margin: 0; padding-left: 18px; display: grid; gap: 2px; }
+.changeset-head { display: flex; justify-content: space-between; align-items: center; }
+.changeset.undone { border-color: var(--fore); opacity: .7; }
+.changeset.undone ul { text-decoration: line-through; }

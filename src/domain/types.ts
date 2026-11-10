@@ -332,7 +332,7 @@ export interface SourceLinkAsset {
 
 export type ChangeAction =
   | 'create' | 'update' | 'delete' | 'attach' | 'detach' | 'restore'
-  | 'link_bgg' | 'new_version' | 'deviation' | 'completion' | 'progress';
+  | 'link_bgg' | 'new_version' | 'deviation' | 'completion' | 'progress' | 'undo';
 
 export interface ChangeRecord {
   id: Id;
@@ -385,6 +385,30 @@ export interface Tables {
   research_message: Record<Id, ResearchMessage>;
   research_proposal: Record<Id, ResearchProposal>;
   context_ref: Record<Id, ContextRef>;
+  agent_change_set: Record<Id, AgentChangeSet>;
+}
+
+// ---------- Agentens direkte endringer (PROTOTYPE, brukerbeslutning 10.11.2026) ----------
+
+/** One row change: `before`/`after` are the whole row, or null when it did not exist. */
+export interface RowPatch {
+  table: string;
+  /** Row id for keyed tables; the row's JSON for list tables (composite keys). */
+  key: string;
+  before: unknown;
+  after: unknown;
+}
+
+/** Everything the agent changed directly in one turn; can be undone as a unit. */
+export interface AgentChangeSet {
+  id: Id;
+  task_id: Id;
+  created_at: Timestamp;
+  /** Short lines describing the changes (Norwegian). */
+  summary: string[];
+  proposal_ids: Id[];
+  patches: RowPatch[];
+  undone_at: Timestamp | null;
 }
 
 // ---------- Research og handlingsrom (skjema §6, §7) ----------
@@ -463,6 +487,8 @@ export interface ResearchProposal {
   ref: string;
   /** PROTOTYPE: why approval failed last time, shown on the card. */
   last_error?: string | null;
+  /** PROTOTYPE: set when the change was applied directly by the agent (open zone), as part of this change set. */
+  change_set_id?: Id | null;
 }
 
 export interface ContextRef {
@@ -475,4 +501,4 @@ export interface ContextRef {
   captured_at: Timestamp;
 }
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;

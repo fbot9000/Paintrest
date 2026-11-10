@@ -10,7 +10,7 @@ import { useApp, useView } from '../../app/context';
 import { describeOps, matchProduct, planProductRefs, productKey, proposalTitle } from '../../domain/agent';
 import type { CatalogChangePayload, CatalogSubjectPayload, PaintPlanPayload, ReferenceSelectionPayload, SourceRef } from '../../domain/agent';
 import type { ResearchEvent } from '../../domain/ai';
-import type { Id, ResearchMessage, ResearchProposal, Tables } from '../../domain/types';
+import type { AgentChangeSet, Id, ResearchMessage, ResearchProposal, Tables } from '../../domain/types';
 import { ownershipOf } from '../../domain/views';
 import { runAgentTurn } from '../../data/agent-runner';
 import { Badge, Button, Dialog, ErrorNote, Field, OwnershipFlag, ProductName, Segmented, Stepper, Swatch } from '../../ui/components';
@@ -87,7 +87,13 @@ function researchView(t: Tables, project_id: Id) {
     version: t.paint_plan_version[r.base_version_id]?.version_number ?? 0,
     stale: t.miniature_subject[r.target_id]?.current_plan_version_id !== r.base_version_id,
   }));
-  return { task, messages, proposals, targets };
+  const changeSets = Object.values(t.agent_change_set).filter((c) => c.task_id === task.id);
+  // One timeline: messages and the agent's direct changes, in the order they happened.
+  const timeline = [
+    ...messages.map((m) => ({ kind: 'message' as const, at: m.created_at, m })),
+    ...changeSets.map((c) => ({ kind: 'change' as const, at: c.created_at, c })),
+  ].sort((a, b) => a.at.localeCompare(b.at));
+  return { task, messages, proposals, targets, timeline };
 }
 
 type AiState = 'checking' | 'ready' | 'no-key' | 'no-server';
@@ -256,7 +262,9 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
           </div>
         )}
 
-        {view?.messages.map((m) => <Message key={m.id} m={m} />)}
+        {view?.timeline.map((x) => x.kind === 'message'
+          ? <Message key={x.m.id} m={x.m} />
+          : <ChangeSetCard key={x.c.id} c={x.c} onUndo={() => act(() => app.research.undoChangeSet(x.c.id))} />)}
         {busy && <LiveSteps events={live} onStop={() => abortRef.current?.abort()} />}
 
         {pending.length > 0 && (
@@ -661,5 +669,18 @@ function ChangeList({ payload }: { payload: CatalogChangePayload }) {
       {lines.map((l, i) => <li key={i}>{l}</li>)}
       {payload.note && <li className="muted">{payload.note}</li>}
     </ul>
+  );
+}
+
+/** What the agent changed directly in one turn, with undo (open zone). */
+function ChangeSetCard({ c, onUndo }: { c: AgentChangeSet; onUndo: () => void }) {
+  return (
+    <div className={`changeset ${c.undone_at ? 'undone' : ''}`}>
+      <div className="changeset-head">
+        <span className="msg-who">{c.undone_at ? 'Angret' : 'Agenten endret'}</span>
+        {!c.undone_at && <button type="button" className="agent-link small" onClick={onUndo}>Angre</button>}
+      </div>
+      <ul>{c.summary.map((l, i) => <li key={i}>{l}</li>)}</ul>
+    </div>
   );
 }

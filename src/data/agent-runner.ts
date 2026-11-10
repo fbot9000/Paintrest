@@ -14,6 +14,8 @@ export interface TurnSummary {
   created: string[];
   updated: string[];
   refused: string[];
+  /** Open zone: the change set the agent applied directly in this turn, if any. */
+  change_set_id: Id | null;
 }
 
 export async function runAgentTurn(deps: {
@@ -45,7 +47,7 @@ export async function runAgentTurn(deps: {
 
   let r;
   try {
-    r = await ai.runAgent({ context: ctx.data, messages, result_types: ctx.allowedTypes, focus }, onEvent, signal);
+    r = await ai.runAgent({ context: ctx.data, messages, result_types: ctx.allowedTypes, focus, direct_apply: !focus }, onEvent, signal);
   } catch (e) {
     const aborted = e instanceof Error && e.name === 'AbortError';
     agent.addSystemMessage(task_id, aborted ? 'Du stoppet agenten.' : `Agenten svarte ikke: ${e instanceof Error ? e.message : String(e)}`);
@@ -60,7 +62,8 @@ export async function runAgentTurn(deps: {
   });
   agent.recordSources(task_id, r.pages ?? [], read);
 
-  const summary: TurnSummary = { created: [], updated: [], refused: [] };
+  const summary: TurnSummary = { created: [], updated: [], refused: [], change_set_id: null };
+  const written: Id[] = [];
   for (const raw of r.proposals) {
     const n = normaliseProposal(raw as Record<string, unknown>, ctx.subjectRefs);
     if (!n.ok) {
@@ -69,12 +72,25 @@ export async function runAgentTurn(deps: {
     }
     const w = agent.writeProposal(task_id, n.value, 'uib', r.model);
     if (!w.ok) summary.refused.push(w.reason);
-    else (w.updated ? summary.updated : summary.created).push(w.ref);
+    else {
+      (w.updated ? summary.updated : summary.created).push(w.ref);
+      written.push(w.id);
+    }
+  }
+
+  // Panel turns (no focus): changes inside the project are applied directly and can be undone.
+  // Focused turns (image hunt, paint plan) are reviewed by the user in their own view.
+  const kept: string[] = [];
+  if (!focus && written.length) {
+    const applied = await research.applyAgentChanges(task_id, written);
+    summary.change_set_id = applied.change_set_id;
+    for (const k of applied.kept_as_proposal) kept.push(k.reason);
   }
 
   const notes = [
     ...r.warnings,
     ...summary.refused.map((x) => `Forslag avvist av omfangssjekken: ${x}`),
+    ...kept.map((x) => `Venter på deg: ${x}`),
   ].filter(Boolean);
   if (notes.length) agent.addSystemMessage(task_id, notes.join('\n'));
   return summary;

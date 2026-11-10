@@ -47,7 +47,8 @@ Panelet til høyre i hvert prosjekt. Det bruker nøkkelen og standardmodellen fr
 - Agenten leser prosjektet, miniatyrene, maleplanene og malingene dine. Den lager **utkast**: nye miniatyrer (`catalog_subject`) og maleplaner (`paint_plan`).
 - En godkjent plan kan agenten bare foreslå ny versjon av når du har trykket «Revider planen med agenten» på miniatyren. Det åpner planen som revisjonsmål (`plan_revision`).
 - Hvert forslag godkjennes for seg i én transaksjon. Maling som ikke finnes i katalogen, må du koble til et produkt eller opprette som ubekreftet før planen kan godkjennes. Er planen endret siden forslaget ble laget, stopper godkjenningen.
-- Inne i prosjektet kan agenten også foreslå å **endre, dele, slå sammen og slette** miniatyrer, og **nye versjoner** av godkjente maleplaner, uten at du åpner dem først. «Agentene skal deles i 4 fraksjoner» gir ett forslag du godkjenner med ett klikk. Slettede miniatyrer kan gjenopprettes. «Godkjenn alle» godkjenner forslag som ikke trenger valg fra deg.
+- Inne i prosjektet **endrer agenten direkte** når du skriver i panelet. Den kan lage, endre, dele, slå sammen og slette miniatyrer, og lage maleplaner med malinger som finnes i katalogen. Panelet viser «Agenten endret: …» med **Angre**, som fører hele runden tilbake. Har du endret det samme etterpå, sier angre fra i stedet for å overskrive.
+- Bildeutvalg og planer med malinger som ikke finnes i katalogen, venter på deg som forslag. «Godkjenn alle» godkjenner dem som ikke trenger valg.
 - Agenten kan ikke endre noe utenfor prosjektet. Forslag som prøver, avvises før de lagres, og panelet sier hvorfor.
 
 ## Research på nettet

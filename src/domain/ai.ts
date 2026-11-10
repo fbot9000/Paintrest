@@ -49,6 +49,8 @@ export interface AgentTurnInput {
   messages: { role: 'user' | 'assistant'; content: string }[];
   result_types: string[];
   model?: string;
+  /** Open zone: changes in the project are applied directly (the agent is told so). */
+  direct_apply?: boolean;
   /** Image hunt for one miniature (own strategy, more steps, may look at images). */
   focus?:
     | { kind: 'images'; subject_ref: string; subject_name: string; game: string; reference_image?: string | null }

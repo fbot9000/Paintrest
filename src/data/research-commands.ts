@@ -1,11 +1,12 @@
 import { CommandError } from '../domain/commands';
 import { newId, now } from '../domain/ids';
-import { matchProduct, planProductRefs, productKey } from '../domain/agent';
+import { describeOps, matchProduct, planProductRefs, productKey, proposalTitle } from '../domain/agent';
 import type { CatalogChangePayload, CatalogSubjectPayload, NormalisedProposal, PaintPlanPayload, PaletteItem, ProductRef, ProposalKind, ReferenceSelectionPayload, SourceRef, SubjectFields } from '../domain/agent';
 import type { AgentCommands, ApproveOptions, ProposalWrite, ResearchCommands } from '../domain/research';
-import type { ChangeAction, Id, MiniatureSubject, ResearchProposal, ResultType, Tables, Uncertainty } from '../domain/types';
+import type { ChangeAction, Id, MiniatureSubject, ResearchProposal, ResultType, RowPatch, Tables, Uncertainty } from '../domain/types';
 import { attachedExpansions } from '../domain/views';
 import type { Store } from './store';
+import { revertPatches } from './store';
 import { addSourceLayers, attachImages, downloadImages, setCover, sourceFor } from './images-tx';
 import type { Downloaded } from './images-tx';
 
@@ -297,6 +298,59 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
       }
     },
 
+    async applyAgentChanges(task_id, proposal_ids) {
+      const applied: Id[] = [];
+      const kept: { id: Id; reason: string }[] = [];
+      const patches: RowPatch[] = [];
+      const summary: string[] = [];
+      for (const id of proposal_ids) {
+        const t = store.getTables();
+        const p = t.research_proposal[id];
+        if (!p || p.decision !== 'pending' || p.task_id !== task_id) continue;
+        const why = needsUser(t, p);
+        if (why) { kept.push({ id, reason: why }); continue; }
+        // Described before applying, so renamed or split miniatures read as they were.
+        const lines = p.result_type === 'catalog_change'
+          ? describeOps(t, (p.payload as CatalogChangePayload).operations)
+          : [proposalTitle(t, p.result_type, p.payload)];
+        try {
+          const r = store.transactionWithDiff((tt, ws) => approve(tt, ws, id, {}));
+          patches.push(...r.patches);
+          applied.push(id);
+          summary.push(...lines);
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e);
+          tx((tt) => { const x = tt.research_proposal[id]; if (x) x.last_error = message; });
+          kept.push({ id, reason: message });
+        }
+      }
+      if (!applied.length) return { change_set_id: null, applied, kept_as_proposal: kept };
+      const change_set_id = newId();
+      tx((t) => {
+        t.agent_change_set[change_set_id] = { id: change_set_id, task_id, created_at: now(), summary, proposal_ids: applied, patches, undone_at: null };
+        for (const id of applied) { const x = t.research_proposal[id]; if (x) x.change_set_id = change_set_id; }
+      });
+      return { change_set_id, applied, kept_as_proposal: kept };
+    },
+
+    async undoChangeSet(change_set_id) {
+      tx((t, ws) => {
+        const cs = must(t.agent_change_set[change_set_id], 'Endringen');
+        if (cs.undone_at) throw new CommandError('Endringen er allerede angret');
+        const { conflicts } = revertPatches(t, cs.patches);
+        if (conflicts.length) {
+          const what = [...new Set(conflicts.map((c) => TABLE_LABEL[c.table] ?? c.table))].join(', ');
+          throw new CommandError(`Kan ikke angre: ${what} er endret etter at agenten gjorde dette. Endre tilbake for hånd, eller be agenten om å rette det.`);
+        }
+        cs.undone_at = now();
+        for (const id of cs.proposal_ids) {
+          const p = t.research_proposal[id];
+          if (p) { p.decision = 'rejected'; p.last_error = 'Angret'; p.updated_at = now(); }
+        }
+        record(t, ws, 'agent_change_set', change_set_id, 'undo', { initiated_by: 'user', task_id: cs.task_id });
+      });
+    },
+
     async rejectProposal(proposal_id) {
       tx((t, ws) => {
         const p = must(t.research_proposal[proposal_id], 'Forslaget');
@@ -307,6 +361,22 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
       });
     },
   };
+}
+
+const TABLE_LABEL: Record<string, string> = {
+  miniature_subject: 'miniatyrer', paint_plan_version: 'maleplaner', plan_element: 'maleplaner', plan_step: 'maleplaner',
+  step_material: 'maleplaner', palette_entry: 'paletten', palette_entry_subject: 'paletten', project: 'prosjektet',
+  source: 'kilder', source_link: 'kildelenker', source_asset: 'bilder', paint_product: 'malinger',
+};
+
+/** Why a proposal cannot be applied without the user (null when it can). */
+function needsUser(t: Tables, p: ResearchProposal): string | null {
+  if (p.result_type === 'reference_selection') return 'Bildeutvalg velger du selv';
+  if (p.result_type === 'paint_plan' || p.result_type === 'plan_revision') {
+    const missing = planProductRefs(p.payload as PaintPlanPayload).filter((r) => !matchProduct(t, r));
+    if (missing.length) return `Malinger som ikke finnes i katalogen: ${missing.map((m) => m.name).join(', ')}`;
+  }
+  return null;
 }
 
 /** Godkjenning (skjema §8). One proposal, one transaction. */

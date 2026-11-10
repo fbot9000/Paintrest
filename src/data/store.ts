@@ -6,7 +6,7 @@
  * On success the copy replaces the current state, is persisted, and subscribers
  * are notified.
  */
-import type { Tables, Id } from '../domain/types';
+import type { Id, RowPatch, Tables } from '../domain/types';
 import { SCHEMA_VERSION } from '../domain/types';
 
 export interface DbState {
@@ -60,6 +60,7 @@ export function emptyTables(): Tables {
     research_message: {},
     research_proposal: {},
     context_ref: {},
+    agent_change_set: {},
   };
 }
 
@@ -77,6 +78,10 @@ export function migrate(s: DbState | undefined): DbState | undefined {
   if (state.schema_version === 2) {
     // v3: source_layer (original text and translation of a source).
     state = { ...state, schema_version: 3, tables: { ...emptyTables(), ...state.tables } };
+  }
+  if (state.schema_version === 3) {
+    // v4: agent_change_set (direct agent changes with undo).
+    state = { ...state, schema_version: 4, tables: { ...emptyTables(), ...state.tables } };
   }
   return state.schema_version === SCHEMA_VERSION ? state : undefined;
 }
@@ -113,6 +118,16 @@ export class Store {
     return result;
   }
 
+  /**
+   * Like transaction(), and also returns the row-level changes it made to the
+   * tracked tables, so they can be undone later (see diffTables).
+   */
+  transactionWithDiff<T>(fn: (t: Tables, workspaceId: Id) => T): { result: T; patches: RowPatch[] } {
+    const before = this.state.tables;
+    const result = this.transaction(fn);
+    return { result, patches: diffTables(before, this.state.tables) };
+  }
+
   /** Resolves when all queued writes have reached persistence. */
   flush(): Promise<void> {
     return this.saving;
@@ -127,4 +142,70 @@ export class Store {
 
 export function isCurrentSchema(s: DbState | undefined): s is DbState {
   return !!s && s.schema_version === SCHEMA_VERSION;
+}
+
+/** Tables whose changes are undoable content. Logs and research records are kept as history. */
+const UNTRACKED = new Set<keyof Tables>(['change_record', 'research_task', 'task_scope', 'task_result_type', 'task_revision_target',
+  'research_message', 'research_proposal', 'context_ref', 'agent_change_set']);
+
+export function diffTables(a: Tables, b: Tables): RowPatch[] {
+  const out: RowPatch[] = [];
+  for (const table of Object.keys(b) as (keyof Tables)[]) {
+    if (UNTRACKED.has(table) || a[table] === b[table]) continue;
+    const before = a[table] as unknown;
+    const after = b[table] as unknown;
+    if (Array.isArray(after)) {
+      const count = (rows: unknown[]) => {
+        const m = new Map<string, number>();
+        for (const r of rows) { const k = JSON.stringify(r); m.set(k, (m.get(k) ?? 0) + 1); }
+        return m;
+      };
+      const ma = count((before as unknown[]) ?? []);
+      const mb = count(after);
+      for (const [k, n] of mb) for (let i = (ma.get(k) ?? 0); i < n; i++) out.push({ table, key: k, before: null, after: JSON.parse(k) });
+      for (const [k, n] of ma) for (let i = (mb.get(k) ?? 0); i < n; i++) out.push({ table, key: k, before: JSON.parse(k), after: null });
+    } else {
+      const ra = (before ?? {}) as Record<string, unknown>;
+      const rb = after as Record<string, unknown>;
+      for (const key of new Set([...Object.keys(ra), ...Object.keys(rb)])) {
+        if (ra[key] === rb[key]) continue;
+        if (JSON.stringify(ra[key]) === JSON.stringify(rb[key])) continue;
+        out.push({ table, key, before: ra[key] ?? null, after: rb[key] ?? null });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Reverts patches (newest first) on a draft. Refuses when a row no longer
+ * looks like it did after the change: the user (or a later turn) changed it.
+ * Returns the conflicting rows instead of overwriting them.
+ */
+export function revertPatches(t: Tables, patches: RowPatch[]): { conflicts: RowPatch[] } {
+  const same = (x: unknown, y: unknown) => JSON.stringify(x ?? null) === JSON.stringify(y ?? null);
+  const conflicts = patches.filter((p) => {
+    const table = t[p.table as keyof Tables] as unknown;
+    if (Array.isArray(table)) {
+      const present = table.some((r) => JSON.stringify(r) === p.key);
+      return p.after !== null ? !present : false;
+    }
+    return !same((table as Record<string, unknown>)[p.key], p.after);
+  });
+  if (conflicts.length) return { conflicts };
+  for (const p of [...patches].reverse()) {
+    const table = t[p.table as keyof Tables] as unknown;
+    if (Array.isArray(table)) {
+      if (p.after !== null) {
+        const i = table.findIndex((r) => JSON.stringify(r) === p.key);
+        if (i >= 0) table.splice(i, 1);
+      }
+      if (p.before !== null) table.push(structuredClone(p.before));
+    } else {
+      const rec = table as Record<string, unknown>;
+      if (p.before === null) delete rec[p.key];
+      else rec[p.key] = structuredClone(p.before);
+    }
+  }
+  return { conflicts: [] };
 }

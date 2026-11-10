@@ -51,6 +51,8 @@ export interface ResearchInput {
   model?: string;
   /** Image hunt for one miniature: a research strategy of its own, more steps and the look tool. */
   focus?: ImageFocus | PlanFocus | null;
+  /** Changes inside the project are applied directly and can be undone (open zone). */
+  direct_apply?: boolean;
 }
 
 /** Paint plan for one miniature, built from the pictures the user chose. */
@@ -94,7 +96,7 @@ export const MAX_PLAN_STEPS = 16;
 const MAX_LOOK = 8;
 const MAX_MESSAGES = 30;
 
-export function researchInstructions(context: unknown, resultTypes: string[], mode: WebMode, anyFocus: ImageFocus | PlanFocus | null = null, vision = false, imagesAttached = false): string {
+export function researchInstructions(context: unknown, resultTypes: string[], mode: WebMode, anyFocus: ImageFocus | PlanFocus | null = null, vision = false, imagesAttached = false, direct = false): string {
   const focus = anyFocus?.kind === 'images' ? anyFocus : null;
   const plan = anyFocus?.kind === 'plan' ? anyFocus : null;
   const maxSteps = focus ? MAX_IMAGE_STEPS : plan ? MAX_PLAN_STEPS : MAX_TOOL_STEPS;
@@ -165,7 +167,8 @@ Svar alltid på norsk bokmål.
 ${web}${look}${hunt}${planTask}
 
 Regler for forslag:
-- Du arbeider fritt INNE I DETTE PROSJEKTET mens brukeren setter det opp. Du kan foreslå å lage, endre, dele, slå sammen og slette miniatyrer, og nye versjoner av maleplaner, også for det som allerede er godkjent. Ikke be brukeren gjøre endringer manuelt; lag et forslag i stedet. Brukeren godkjenner med ett klikk, og slettede miniatyrer kan gjenopprettes.
+- Du arbeider fritt INNE I DETTE PROSJEKTET mens brukeren setter det opp. Du kan lage, endre, dele, slå sammen og slette miniatyrer, og lage nye versjoner av maleplaner, også for det som allerede er godkjent. Ikke be brukeren gjøre endringer manuelt; gjør det selv gjennom "proposals".
+${direct ? '- Endringene dine i prosjektet tas i bruk MED EN GANG, og brukeren kan angre hele runden med ett klikk. Si kort i meldingen hva du endret. Bildeutvalg og malinger som ikke finnes i katalogen venter på brukeren.' : '- Forslagene dine godkjennes av brukeren før de tas i bruk.'}
 - Du kan ikke endre noe utenfor prosjektet: andre prosjekter, malingskatalogen eller biblioteket.
 - Ikke dikt opp malingsnavn. Bruk eksakte produktnavn med produsent. Foretrekk malinger brukeren eier (ownership "owns").
 - Miniatyrer i prosjektet refereres med "ref" (M1, M2 …). Bruk aldri andre id-er.
@@ -245,7 +248,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   // The plan request carries the chosen pictures as input_image; dropped if the model refuses images.
   let imagesAttached = !!plan?.reference_images.length;
   const maxSteps = focus ? MAX_IMAGE_STEPS : plan ? MAX_PLAN_STEPS : MAX_TOOL_STEPS;
-  const build = () => researchInstructions(input.context, input.result_types, mode, input.focus ?? null, vision, imagesAttached);
+  const build = () => researchInstructions(input.context, input.result_types, mode, input.focus ?? null, vision, imagesAttached, !!input.direct_apply && !input.focus);
   const withImages = (): ResponsesMessage[] => {
     if (!imagesAttached || !plan) return history;
     const last = history.at(-1)!;

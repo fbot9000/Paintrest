@@ -21,6 +21,12 @@ export interface ApproveOptions {
   cover_image_url?: string;
 }
 
+export interface ApplyResult {
+  change_set_id: Id | null;
+  applied: Id[];
+  kept_as_proposal: { id: Id; reason: string }[];
+}
+
 export interface ResearchCommands {
   startTask(project_id: Id): Promise<Id>;
   closeTask(task_id: Id): Promise<void>;
@@ -37,6 +43,14 @@ export interface ResearchCommands {
   editPlanProposal(proposal_id: Id, payload: PaintPlanPayload): Promise<void>;
   approveProposal(proposal_id: Id, opts?: ApproveOptions): Promise<void>;
   rejectProposal(proposal_id: Id): Promise<void>;
+  /**
+   * Open zone (user decision 10.11.2026): applies the agent's proposals directly
+   * where no choice from the user is needed, as one undoable change set.
+   * Image selections and plans with paints missing from the catalogue stay as proposals.
+   */
+  applyAgentChanges(task_id: Id, proposal_ids: Id[]): Promise<ApplyResult>;
+  /** Reverts a change set. Refuses, without changing anything, if the rows were changed afterwards. */
+  undoChangeSet(change_set_id: Id): Promise<void>;
 }
 
 export type ProposalWrite = { ok: true; id: Id; ref: string; updated: boolean } | { ok: false; reason: string };

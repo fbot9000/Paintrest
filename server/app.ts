@@ -135,6 +135,7 @@ export function createHandler(d: AppDeps) {
             result_types: Array.isArray(body.result_types) ? body.result_types.filter((x): x is string => typeof x === 'string') : [],
             model: str(body.model) || undefined,
             focus: parseFocus(body.focus),
+            direct_apply: body.direct_apply === true,
           };
           return streamResearch(req, res, d, input);
         }
