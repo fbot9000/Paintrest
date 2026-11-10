@@ -60,7 +60,7 @@ export async function runAgentTurn(deps: {
     const sr = (p as { payload?: { sources_read?: unknown } }).payload?.sources_read;
     return Array.isArray(sr) ? (sr as SourceRead[]) : [];
   });
-  agent.recordSources(task_id, r.pages ?? [], read);
+  const newSources = agent.recordSources(task_id, r.pages ?? [], read);
 
   const summary: TurnSummary = { created: [], updated: [], refused: [], change_set_id: null };
   const written: Id[] = [];
@@ -91,6 +91,8 @@ export async function runAgentTurn(deps: {
     ...r.warnings,
     ...summary.refused.map((x) => `Forslag avvist av omfangssjekken: ${x}`),
     ...kept.map((x) => `Venter på deg: ${x}`),
+    // Nothing is stored out of sight: say which pages were kept as sources for the game.
+    ...(newSources.length ? [`Lagret ${newSources.length} ${newSources.length === 1 ? 'side' : 'sider'} som kilder for spillet: ${newSources.slice(0, 5).join(' · ')}${newSources.length > 5 ? ' …' : ''}`] : []),
   ].filter(Boolean);
   if (notes.length) agent.addSystemMessage(task_id, notes.join('\n'));
   return summary;

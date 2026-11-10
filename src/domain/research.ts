@@ -65,5 +65,6 @@ export interface AgentCommands {
    * Keeps every page the agent read as a draft source (retention draft, skjema §6),
    * with the agent's summary and original excerpt as layers, so it is not rediscovered.
    */
-  recordSources(task_id: Id, pages: PageSeen[], read: SourceRead[]): void;
+  /** Returns the titles of the sources it created, so the panel can say so. */
+  recordSources(task_id: Id, pages: PageSeen[], read: SourceRead[]): string[];
 }

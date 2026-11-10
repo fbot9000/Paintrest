@@ -145,8 +145,9 @@ export function createAgentCommands(store: Store): AgentCommands {
     },
 
     recordSources(task_id, pages, read) {
-      if (!pages.length && !read.length) return;
-      tx((t, ws) => {
+      if (!pages.length && !read.length) return [];
+      return tx((t, ws) => {
+        const created: string[] = [];
         for (const pg of pages) {
           if (Object.values(t.source).some((x) => !x.deleted_at && x.url === pg.url)) continue;
           const id = newId();
@@ -156,8 +157,10 @@ export function createAgentCommands(store: Store): AgentCommands {
             ...(pg.language ? { language: pg.language } : {}),
           };
           record(t, ws, 'source', id, 'create', { initiated_by: 'agent', task_id });
+          created.push(pg.title);
         }
-        addSourceLayers(t, read);
+        addSourceLayers(t, read, t.task_scope[task_id]?.work_project_id ?? undefined);
+        return created;
       });
     },
 
@@ -434,7 +437,7 @@ function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions, files
     const chosen = r.images.filter((i) => !opts.image_urls || opts.image_urls.includes(i.image_url));
     const assets = attachImages(t, ws, s.id, chosen, files, p.task_id, (tt, id, a) => record(t, ws, tt, id, a, who));
     const keptPages = new Set(chosen.map((i) => i.page_url));
-    addSourceLayers(t, (r.sources_read ?? []).filter((x) => keptPages.has(x.url)));
+    addSourceLayers(t, (r.sources_read ?? []).filter((x) => keptPages.has(x.url)), project_id);
     const firstAsset = chosen[0] ? assets[chosen[0].image_url] : undefined;
     if (opts.cover_image_url && assets[opts.cover_image_url]) {
       setCover(t, s.id, assets[opts.cover_image_url]!, (tt, id, a) => record(t, ws, tt, id, a, who));
@@ -486,7 +489,7 @@ function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions, files
         record(t, ws, 'source_link', id, 'attach', who);
       }
     }
-    addSourceLayers(t, plan.sources_read ?? []);
+    addSourceLayers(t, plan.sources_read ?? [], project_id);
     record(t, ws, 'paint_plan', s.id, 'new_version', who, prev?.id ?? null, pv);
   }
 

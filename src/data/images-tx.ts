@@ -151,10 +151,12 @@ export function setCover(t: Tables, subject_id: Id, asset_id: Id | null, log: Lo
  * Norwegian summary as source layers (datamodell v3 §11 SourceLayer).
  * Only for sources that exist; a layer with the same text is not added twice.
  */
-export function addSourceLayers(t: Tables, read: SourceRead[]): void {
+export function addSourceLayers(t: Tables, read: SourceRead[], project_id?: Id): void {
   for (const r of read) {
     const source = Object.values(t.source).find((x) => !x.deleted_at && x.url === r.url);
     if (!source) continue;
+    // Never write to a source that belongs to another game (see sourceBelongsTo).
+    if (project_id && !sourceBelongsTo(t, source.id, project_id)) continue;
     const add = (layer: 'original' | 'translation', language: string | null, body: string | null) => {
       if (!body?.trim()) return;
       if (Object.values(t.source_layer).some((l) => l.source_id === source.id && l.layer === layer && l.body === body)) return;
@@ -164,4 +166,17 @@ export function addSourceLayers(t: Tables, read: SourceRead[]): void {
     add('original', r.language, r.original_excerpt);
     add('translation', 'nb', r.summary);
   }
+}
+
+/**
+ * True when the source was found in this project's tasks or is linked to this
+ * project or its miniatures. Sources of unrelated games are left untouched.
+ */
+export function sourceBelongsTo(t: Tables, source_id: Id, project_id: Id): boolean {
+  const s = t.source[source_id];
+  if (!s) return false;
+  if (s.created_by_task_id && t.task_scope[s.created_by_task_id]?.work_project_id === project_id) return true;
+  return Object.values(t.source_link).some((l) => !l.deleted_at && l.source_id === source_id && (
+    (l.target_type === 'project' && l.target_id === project_id)
+    || (l.target_type === 'subject' && t.miniature_subject[l.target_id]?.project_id === project_id)));
 }

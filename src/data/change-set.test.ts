@@ -128,3 +128,34 @@ describe('agenten endrer direkte i prosjektet', () => {
     expect(Object.values(store.getTables().research_proposal).filter((p) => p.task_id === task && p.decision === 'pending')).toHaveLength(1);
   });
 });
+
+describe('agenten rører ikke andre spill', () => {
+  it('legger ikke tekst på et annet spills kilde, og sier fra om nye kilder', async () => {
+    const { store, research, agent, cmd, task } = await setup();
+    // Another game with its own kept source for the same web page.
+    const other = await cmd.createProject({ name: 'Annet spill' });
+    const otherSubject = await cmd.createSubject(other.project_id, { name: 'Ridder' });
+    await createLocalCommands(store, { fetchImage: async () => new Blob(['x'], { type: 'image/jpeg' }) })
+      .attachWebImages(otherSubject, [{ image_url: 'https://shared.example/a.jpg', page_url: 'https://shared.example/page', page_title: 'Felles side', site: 'shared.example', creator: null, caption: null }]);
+    const shared = Object.values(store.getTables().source).find((x) => x.url === 'https://shared.example/page')!;
+
+    const ai = fakeAi(() => []);
+    const original = ai.runAgent.bind(ai);
+    ai.runAgent = async (input, onEvent) => {
+      const e = await original(input, onEvent);
+      return { ...e, pages: [
+        { url: 'https://shared.example/page', title: 'Felles side', site: 'shared.example', author: null, language: 'en', image_count: 3 },
+        { url: 'https://new.example/x', title: 'Ny side', site: 'new.example', author: null, language: 'ko', image_count: 2 },
+      ], proposals: [{ type: 'reference_selection', payload: { subject: 'M1', images: [], sources_read: [
+        { url: 'https://shared.example/page', summary: 'Skal ikke havne på det andre spillets kilde.' },
+        { url: 'https://new.example/x', summary: 'Ny side om figuren.' },
+      ] } }] };
+    };
+    await runAgentTurn({ store, research, agent, ai }, task, 'Let');
+    const t = store.getTables();
+    expect(Object.values(t.source_layer).filter((l) => l.source_id === shared.id)).toHaveLength(0);
+    const fresh = Object.values(t.source).find((x) => x.url === 'https://new.example/x')!;
+    expect(Object.values(t.source_layer).some((l) => l.source_id === fresh.id && l.body === 'Ny side om figuren.')).toBe(true);
+    expect(Object.values(t.research_message).some((m) => m.role === 'system' && /Lagret 1 side som kilder for spillet: Ny side/.test(m.body))).toBe(true);
+  });
+});
