@@ -9,6 +9,7 @@ import { useCommand, useView } from '../../app/context';
 import { useRuns } from '../../app/runs';
 import type { Run } from '../../app/runs';
 import { knownSources } from '../../domain/agent';
+import type { PaintPlanPayload } from '../../domain/agent';
 import type { Id, Tables } from '../../domain/types';
 import { attachedExpansions, liveSubjects, subjectReferences } from '../../domain/views';
 import { Badge, Button, ErrorNote, FileImage } from '../../ui/components';
@@ -37,7 +38,24 @@ function view(t: Tables, project_id: Id, subject_id: Id) {
     position: `${i + 1} av ${siblings.length}`,
     refs,
     sources: knownSources(t, project_id),
+    planSourceUrls: planSourceUrls(t, s),
   };
+}
+
+/** Pages the plan (pending proposal, or the agent's notes on it) was built on, shown first on the Maleplan tab. */
+function planSourceUrls(t: Tables, s: NonNullable<Tables['miniature_subject'][string]>): string[] {
+  const p = Object.values(t.research_proposal)
+    .filter((x) => x.decision === 'pending' && (x.result_type === 'paint_plan' || x.result_type === 'plan_revision')
+      && (x.payload as PaintPlanPayload).subject_id === s.id)
+    .sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0];
+  if (!p) return [];
+  const payload = p.payload as PaintPlanPayload;
+  return [...(payload.sources_read ?? []).map((x) => x.url), ...(payload.sources ?? []).map((x) => x.url)];
+}
+
+const COLLAPSE_KEY = 'paintrest.ws.refsCollapsed';
+function readCollapsed(): boolean {
+  try { return localStorage.getItem(COLLAPSE_KEY) === '1'; } catch { return false; }
 }
 
 export function Workspace() {
@@ -55,6 +73,11 @@ export function Workspace() {
   const [zoom, setZoom] = useState(false);
   const [browseUrl, setBrowseUrl] = useState<string | null>(null);
   const [showSide, setShowSide] = useState(false);
+  const [collapsed, setCollapsedState] = useState(readCollapsed);
+  const setCollapsed = (v: boolean) => {
+    setCollapsedState(v);
+    try { localStorage.setItem(COLLAPSE_KEY, v ? '1' : '0'); } catch { /* only a convenience */ }
+  };
 
   useEffect(() => { setChosenRefs(null); setViewing(null); setBrowseUrl(null); }, [subjectId]);
   const planRefs = useMemo(() => chosenRefs
@@ -87,15 +110,25 @@ export function Workspace() {
         <div className="ws-head-actions">
           <Button variant="ghost" disabled={!data.prev} onClick={() => data.prev && navigate(`${base}/${data.prev.id}/${tab}`)} aria-label="Forrige miniatyr">‹ {data.prev?.name ?? ''}</Button>
           <Button variant="ghost" disabled={!data.next} onClick={() => data.next && navigate(`${base}/${data.next.id}/${tab}`)} aria-label="Neste miniatyr">{data.next?.name ?? ''} ›</Button>
-          {s.current_plan_version_id && <Button variant="primary" onClick={() => navigate(`/male/${s.id}`)}>Mal</Button>}
+          {s.current_plan_version_id && <Button variant="primary" onClick={() => navigate(`/male/${s.id}`)} title="Åpne planen i Painting Mode">Mal</Button>}
           <Button className="ws-side-toggle" onClick={() => setShowSide((v) => !v)} aria-expanded={showSide}>Agent og kilder</Button>
         </div>
       </header>
       <ErrorNote error={error} onClose={clearError} />
 
-      <div className={`ws-body ${showSide ? 'side-open' : ''}`}>
+      <div className={`ws-body ${showSide ? 'side-open' : ''} ${collapsed ? 'refs-collapsed' : ''}`}>
         <aside className="ws-refs" aria-label="Bilder av miniatyren">
-          {current ? (
+          <button type="button" className="ws-refs-toggle" onClick={() => setCollapsed(!collapsed)} aria-expanded={!collapsed}
+            aria-label={collapsed ? 'Vis bildekolonnen' : 'Skjul bildekolonnen'} title={collapsed ? 'Vis bildene' : 'Skjul bildene'}>{collapsed ? '›' : '‹'}</button>
+          {collapsed ? (
+            <div className="ws-refs-mini">
+              {data.refs.map((r) => (
+                <button key={r.asset.id} type="button" onClick={() => { setViewing(r.asset.id); setZoom(true); }} aria-label={`Forstørr ${r.label}`}>
+                  <FileImage fileId={r.file_id} alt="" className="ws-thumb-img" />
+                </button>
+              ))}
+            </div>
+          ) : current ? (
             <>
               <button type="button" className="ws-ref-main" onClick={() => setZoom(true)} aria-label={`Forstørr ${current.label}`}>
                 <FileImage fileId={current.file_id} alt={current.label} className="ws-ref-img" />
@@ -119,19 +152,19 @@ export function Workspace() {
                         <FileImage fileId={r.file_id} alt="" className="ws-thumb-img" />
                         {r.cover && <span className="ws-badge small">Illustrasjon</span>}
                       </button>
-                      <label className="ws-inplan" title="Agenten ser på dette bildet når den lager maleplanen">
+                      {tab === 'maleplan' && <label className="ws-inplan" title="Agenten ser på dette bildet når den lager maleplanen">
                         <input type="checkbox" checked={inPlan} onChange={(e) => setPlanRefs((cur) => {
                           const n = new Set(cur);
                           if (e.target.checked) { if (n.size < 4) n.add(r.asset.id); } else n.delete(r.asset.id);
                           return n;
                         })} />
                         I planen
-                      </label>
+                      </label>}
                     </div>
                   );
                 })}
               </div>
-              <p className="small muted">{planRefs.size} av høyst 4 bilder brukes når agenten lager maleplanen.</p>
+              {tab === 'maleplan' && <p className="small muted">{planRefs.size} av høyst 4 bilder brukes når agenten lager maleplanen.</p>}
             </>
           ) : (
             <div className="ws-refs-empty">
@@ -147,7 +180,7 @@ export function Workspace() {
           {tab === 'palett' && <PaletteTab subject={s} />}
         </main>
 
-        <aside className="ws-side" aria-label="Agenten og kildene">
+        <aside className={`ws-side ${tab === 'maleplan' ? 'compact' : ''}`} aria-label="Agenten og kildene">
           <section className="ws-agent">
             <h2 className="eyebrow">Agenten</h2>
             {activeRun?.status === 'running' ? (
@@ -161,13 +194,16 @@ export function Workspace() {
           <section className="ws-sources">
             <h2 className="eyebrow">Kilder for spillet ({data.sources.length})</h2>
             {data.sources.length === 0 && <p className="small">Sider agenten leser, og sider du lagrer bilder fra, samles her for alle miniatyrene.</p>}
+            {tab === 'maleplan' && data.planSourceUrls.length > 0 && <p className="small ws-src-hint">Kildene planen bygger på, står først. Trykk på en kilde for å se bildene.</p>}
             <ul>
-              {data.sources.map((k) => (
+              {(tab === 'maleplan' ? [...data.sources].sort((a, b) => Number(data.planSourceUrls.includes(b.source.url!)) - Number(data.planSourceUrls.includes(a.source.url!))) : data.sources).map((k) => (
                 <li key={k.source.id} className={browseUrl === k.source.url ? 'on' : ''}>
                   <button type="button" onClick={() => { setBrowseUrl(k.source.url); if (tab !== 'bilder') navigate(`${base}/${s.id}/bilder`); }}>
                     <span className="ws-src-head">
                       <strong>{k.source.title}</strong>
-                      <Badge tone={k.status === 'kept' ? 'moss' : 'neutral'}>{k.status === 'kept' ? `Lagret · ${k.asset_count}` : 'Funnet'}</Badge>
+                      {tab === 'maleplan' && data.planSourceUrls.includes(k.source.url!)
+                        ? <Badge tone="moss">Brukt i planen</Badge>
+                        : <Badge tone={k.status === 'kept' ? 'moss' : 'neutral'}>{k.status === 'kept' ? `Lagret · ${k.asset_count}` : 'Funnet'}</Badge>}
                     </span>
                     <span className="small ws-src-sub">{k.source.creator ?? ''}{k.source.language ? ` · ${languageName(k.source.language)}` : ''}</span>
                     {k.summary && <span className="small ws-src-sum">{k.summary}</span>}

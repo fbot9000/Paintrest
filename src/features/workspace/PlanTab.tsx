@@ -1,18 +1,20 @@
 /**
- * Maleplan: start the agent with the chosen pictures, edit its proposal and
- * approve it, or read the current plan. The run keeps going if the user leaves.
+ * Maleplan: the agent's proposal or the approved plan, read as text.
+ * A proposal has a status line on top (what it changes, approve, edit,
+ * discard); steps open for editing one at a time, or all with «Rediger alt».
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useApp, useView } from '../../app/context';
 import type { Run } from '../../app/runs';
 import { matchProduct, planProductRefs, productKey } from '../../domain/agent';
 import type { PaintPlanPayload } from '../../domain/agent';
 import type { Id, MiniatureSubject, Tables } from '../../domain/types';
-import { paintingView } from '../../domain/views';
-import { Button, ErrorNote, OwnershipFlag, Swatch } from '../../ui/components';
+import { paintingView, subjectPalette } from '../../domain/views';
+import { Button, ErrorNote } from '../../ui/components';
 import { startPlan } from './agentRuns';
-import { PlanEditor, ROLE_LABEL } from './PlanEditor';
+import { ElementBlock, MissingPaints, SourcesUsed } from './PlanEditor';
+import { Outline, PaletteStrip, PlanRead, docFromPayload, docFromView, markChanges } from './PlanDoc';
 
 function view(t: Tables, s: MiniatureSubject) {
   const openTasks = new Set(Object.values(t.research_task).filter((x) => x.status === 'open' && t.task_scope[x.id]?.work_project_id === s.project_id).map((x) => x.id));
@@ -23,6 +25,7 @@ function view(t: Tables, s: MiniatureSubject) {
   return {
     proposal,
     current: paintingView(t, s.id),
+    palette: subjectPalette(t, s).map((p) => ({ name: p.product.name, hex: p.product.swatch_hex })),
     products: Object.values(t.paint_product).filter((p) => !p.deleted_at).sort((a, b) => a.name.localeCompare(b.name, 'nb')),
     t,
   };
@@ -36,20 +39,32 @@ export function PlanTab({ subject: s, game, run, planFileIds }: { subject: Minia
   const [choices, setChoices] = useState<Record<string, Id | 'create'>>({});
   const [busy, setBusy] = useState<null | 'save' | 'approve'>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editAll, setEditAll] = useState(false);
+  const [editSummary, setEditSummary] = useState(false);
+  const [showCurrent, setShowCurrent] = useState(false);
   const proposalId = data.proposal?.id ?? null;
   const stamp = data.proposal?.updated_at ?? null;
 
   useEffect(() => {
     setDraft(data.proposal ? structuredClone(data.proposal.payload as PaintPlanPayload) : null);
-    setChoices({});
+    setChoices({}); setEditAll(false); setEditSummary(false); setShowCurrent(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proposalId, stamp]);
 
   const running = run?.status === 'running';
   const current = data.current;
   const hasPlan = !!current?.elements.length;
+  const currentDoc = useMemo(() => (current && hasPlan ? docFromView(current) : []), [current, hasPlan]);
+  const diff = useMemo(() => {
+    if (!draft) return null;
+    const doc = docFromPayload(data.t, draft);
+    return hasPlan ? markChanges(doc, currentDoc) : { elements: doc, changed: 0, added: 0, removed: [] as string[] };
+  }, [draft, data.t, hasPlan, currentDoc]);
   const refs = draft ? planProductRefs(draft) : [];
-  const unresolved = refs.filter((r) => !matchProduct(data.t, r) && !choices[productKey(r)]);
+  const missing = refs.filter((r) => !matchProduct(data.t, r));
+  const unresolved = missing.filter((r) => !choices[productKey(r)]);
+  const dirty = !!draft && !!data.proposal && JSON.stringify(draft) !== JSON.stringify(data.proposal.payload);
+  const openPalette = () => navigate(`/p/${s.project_id}/m/${s.id}/palett`);
 
   const update = (fn: (d: PaintPlanPayload) => void) => setDraft((cur) => {
     if (!cur) return cur;
@@ -72,21 +87,20 @@ export function PlanTab({ subject: s, game, run, planFileIds }: { subject: Minia
   };
 
   const start = () => startPlan(app, s, game, planFileIds);
+  const n = planFileIds.length;
+  const revision = hasPlan && !!data.proposal;
+  const nextVersion = (current?.plan?.version_number ?? 0) + 1;
 
   return (
     <div className="wsp">
       <div className="ws-toolbar">
         <div>
           <h2>Maleplan</h2>
-          <p className="small muted">
-            Agenten ser på {planFileIds.length ? `${planFileIds.length} valgte bilder` : 'miniatyren (ingen bilder valgt)'}, leser maleguider og foreslår arbeidsmåte,
-            deler og steg med eksakte malinger, og en palett. Velg bildene i kolonnen til venstre.
-          </p>
+          {!data.proposal && hasPlan && <p className="small muted">Gjeldende plan · versjon {current?.plan?.version_number}</p>}
         </div>
         <div className="ws-toolbar-actions">
-          {hasPlan && <Button onClick={() => navigate(`/male/${s.id}`)}>Åpne i Painting Mode</Button>}
           {!data.proposal && (
-            <Button variant="primary" disabled={running} onClick={start}>
+            <Button variant={hasPlan ? 'secondary' : 'primary'} disabled={running} onClick={start}>
               {running ? 'Agenten lager forslag …' : hasPlan ? 'Lag ny versjon med AI' : 'Lag maleplan med AI'}
             </Button>
           )}
@@ -94,62 +108,96 @@ export function PlanTab({ subject: s, game, run, planFileIds }: { subject: Minia
       </div>
       <ErrorNote error={error ?? data.proposal?.last_error ?? null} onClose={() => setError(null)} />
 
-      {data.proposal && draft ? (
+      {data.proposal && draft && diff ? (
         <>
-          <p className="small muted">
-            {data.proposal.result_type === 'plan_revision' ? 'Forslag til ny versjon. Den gjeldende planen beholdes som historikk.' : 'Forslag til maleplan.'} Rediger fritt før du godkjenner.
-          </p>
-          <PlanEditor draft={draft} update={update} products={data.products} t={data.t} choices={choices} setChoices={setChoices}
-            unresolvedCount={unresolved.length} onRetry={start} busy={!!busy || running} />
-          <div className="ws-savebar">
-            <span>{unresolved.length ? `Velg eller opprett ${unresolved.length} maling(er) før du godkjenner` : 'Klar til godkjenning'}</span>
-            <span className="ws-savebar-actions">
-              <Button variant="ghost" disabled={!!busy} onClick={() => app.research.rejectProposal(data.proposal!.id)}>Forkast forslaget</Button>
-              <Button disabled={!!busy} onClick={() => act('save')}>{busy === 'save' ? 'Lagrer …' : 'Lagre endringer'}</Button>
+          <div className="pd-status" role="region" aria-label="Status for forslaget">
+            <div className="pd-status-text">
+              <strong>{revision ? `Forslag til versjon ${nextVersion}` : 'Forslag til maleplan'}</strong>
+              <span className="small">
+                {revision
+                  ? [diff.changed && `${diff.changed} ${diff.changed === 1 ? 'endret steg' : 'endrede steg'}`, diff.added && `${diff.added} ${diff.added === 1 ? 'nytt steg' : 'nye steg'}`, diff.removed.length && `fjerner ${diff.removed.join(', ')}`].filter(Boolean).join(' · ') || 'Ingen endringer i stegene'
+                  : `${draft.elements.length} deler · ${draft.elements.reduce((a, e) => a + e.steps.length, 0)} steg`}
+                {unresolved.length > 0 && <> · <a href="#plan-mangler" className="pd-status-warn">{unresolved.length} {unresolved.length === 1 ? 'maling må' : 'malinger må'} velges før godkjenning</a></>}
+                {dirty && ' · ulagrede endringer'}
+              </span>
+            </div>
+            <div className="pd-status-actions">
+              {dirty && <Button disabled={!!busy} onClick={() => act('save')}>{busy === 'save' ? 'Lagrer …' : 'Lagre endringer'}</Button>}
+              <Button variant="ghost" onClick={() => setEditAll((v) => !v)} aria-pressed={editAll}>{editAll ? 'Ferdig med redigering' : 'Rediger alt'}</Button>
+              <Button variant="ghost" disabled={!!busy} onClick={() => app.research.rejectProposal(data.proposal!.id)}>Forkast</Button>
               <Button variant="primary" disabled={!!busy || unresolved.length > 0} onClick={() => act('approve')}>
-                {busy === 'approve' ? 'Godkjenner …' : data.proposal.result_type === 'plan_revision' ? 'Godkjenn som ny versjon' : 'Godkjenn maleplanen'}
+                {busy === 'approve' ? 'Godkjenner …' : revision ? `Godkjenn som versjon ${nextVersion}` : 'Godkjenn maleplanen'}
               </Button>
-            </span>
+            </div>
           </div>
+
+          {revision && (
+            <div className="pd-switch" role="group" aria-label="Vis">
+              <button type="button" aria-pressed={!showCurrent} onClick={() => setShowCurrent(false)}>Forslaget</button>
+              <button type="button" aria-pressed={showCurrent} onClick={() => setShowCurrent(true)}>Gjeldende versjon {current?.plan?.version_number}</button>
+            </div>
+          )}
+
+          {showCurrent && current ? (
+            <>
+              {current.plan?.summary && <p className="pd-summary">{current.plan.summary}</p>}
+              <Outline elements={currentDoc} />
+              <PlanRead elements={currentDoc} />
+            </>
+          ) : (
+            <>
+              <MissingPaints missing={missing} products={data.products} choices={choices} setChoices={setChoices} />
+              {editSummary || editAll ? (
+                <div className="pd-summary-edit">
+                  <label htmlFor="plan-summary" className="eyebrow">Arbeidsmåte og fargevalg</label>
+                  <textarea id="plan-summary" value={draft.summary ?? ''} rows={4} onChange={(e) => update((d) => { d.summary = e.target.value; })} />
+                  {!editAll && <span><Button onClick={() => setEditSummary(false)}>Ferdig</Button></span>}
+                </div>
+              ) : (
+                <p className="pd-summary">
+                  {draft.summary || <em className="muted">Ingen beskrivelse av arbeidsmåten.</em>}{' '}
+                  <button type="button" className="link small" onClick={() => setEditSummary(true)}>Rediger</button>
+                </p>
+              )}
+              <PaletteStrip items={(draft.palette ?? []).map((p) => ({ name: p.product.name, hex: matchProduct(data.t, p.product)?.swatch_hex ?? p.product.hex ?? null }))}
+                note="Legges i Palett-fanen når du godkjenner, og redigeres der." />
+              <Outline elements={diff.elements} />
+              <div className="pd-elements">
+                {draft.elements.map((el, ei) => (
+                  <ElementBlock key={ei} el={el} doc={diff.elements[ei]!} index={ei} products={data.products} t={data.t} editAll={editAll}
+                    onChange={(fn) => update((d) => fn(d.elements[ei]!))}
+                    onRemove={() => update((d) => { d.elements.splice(ei, 1); })}
+                    onMove={(dir) => update((d) => { const [x] = d.elements.splice(ei, 1); d.elements.splice(Math.max(0, ei + dir), 0, x!); })} />
+                ))}
+                <span><Button onClick={() => update((d) => { d.elements.push({ kind: 'part', name: `Ny del ${d.elements.length + 1}`, steps: [{ instruction: '', materials: [], mix: null }] }); })}>+ Legg til del</Button></span>
+              </div>
+              <SourcesUsed sources={draft.sources_read ?? []} />
+              <p className="small muted">Ikke fornøyd? <button type="button" className="link small" onClick={start} disabled={!!busy || running}>Be agenten lage et nytt forslag</button>. Endringene dine her beholdes til du forkaster dette forslaget.</p>
+            </>
+          )}
         </>
       ) : hasPlan && current ? (
-        <div className="wsp-current">
-          <div className="wsp-current-head">
-            <h3>Gjeldende plan · versjon {current.plan?.version_number}</h3>
-          </div>
-          {current.plan?.summary && <p className="wsp-summary">{current.plan.summary}</p>}
-          {current.elements.map((ev) => (
-            <section key={ev.element.id} className={`wsp-el ${ev.element.kind}`}>
-              <h4>{ev.element.name} <span className="eyebrow">{ev.element.kind === 'operation' ? 'Felles operasjon' : 'Del'}</span></h4>
-              <ol>
-                {ev.steps.map((sv) => (
-                  <li key={sv.step.id}>
-                    <p>{sv.step.instruction || <em className="muted">Ingen instruks</em>}</p>
-                    {sv.materials.length > 0 && (
-                      <ul className="wsp-mats">
-                        {sv.materials.map((m) => (
-                          <li key={m.material.id}>
-                            <Swatch hex={m.product.swatch_hex} size={18} />
-                            <span className="small">{ROLE_LABEL[m.material.role]}</span>
-                            <strong className="small">{m.product.name}</strong>
-                            <span className="small muted">{[m.product.manufacturer, m.product.range_name].filter(Boolean).join(' · ')}</span>
-                            <OwnershipFlag ownership={m.ownership} />
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            </section>
-          ))}
-        </div>
+        <>
+          {current.plan?.summary && <p className="pd-summary">{current.plan.summary}</p>}
+          <PaletteStrip items={data.palette} note="" onOpen={openPalette} />
+          <Outline elements={currentDoc} />
+          <PlanRead elements={currentDoc} />
+        </>
       ) : (
         <div className="ws-empty">
           <p>{running ? 'Agenten lager et forslag. Du kan følge med til høyre, eller gjøre noe annet i mellomtiden.' : 'Miniatyren har ingen maleplan ennå.'}</p>
           {!running && <p className="small muted">Velg bildene planen skal bygge på i kolonnen til venstre, og trykk «Lag maleplan med AI».</p>}
         </div>
       )}
+
+      <details className="wsp-help">
+        <summary className="small">Hvordan lager agenten maleplanen?</summary>
+        <p className="small muted">
+          Agenten ser på {n ? `${n} ${n === 1 ? 'valgt bilde' : 'valgte bilder'}` : 'miniatyren (ingen bilder valgt)'} av miniatyren, leser maleguider og foreslår arbeidsmåte,
+          deler og steg med eksakte malinger, og en palett. Du velger bildene med «I planen» i kolonnen til venstre (høyst 4).
+          Et forslag endrer ingenting før du godkjenner det, og en ny versjon beholder den gamle som historikk.
+        </p>
+      </details>
     </div>
   );
 }

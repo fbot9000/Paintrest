@@ -108,10 +108,14 @@ Trykk på bildet eller navnet på et miniatyrkort. Da åpnes verkstedet for mini
     - Kryss av, velg én illustrasjon og trykk «Lagre».
   - **Maleplan:**
     - «Lag maleplan med AI» bruker bildene du har krysset av. Agenten foreslår arbeidsmåte, deler og steg med eksakte malinger, og en palett.
-    - Du redigerer forslaget fritt og godkjenner det.
+    - Planen leses som tekst: sammendrag, en rad med fargene i paletten, en oversikt over delene (trykk for å hoppe) og stegene med malingene som små merker. Eierskap vises bare når noe mangler.
+    - Et forslag har en statuslinje øverst med «Godkjenn», «Rediger alt» og «Forkast». For en ny versjon står det hva som er endret, nye og endrede steg er markert, og du kan bytte til den gjeldende versjonen.
+    - Du redigerer ett steg om gangen med «Rediger» (vises når du holder over steget), eller alt med «Rediger alt». Navn, flytting og sletting av deler ligger i «⋯»-menyen.
+    - Paletten fra forslaget legges i Palett-fanen når du godkjenner, og redigeres der.
     - Uten forslag vises den gjeldende planen.
   - **Palett:** malingene miniatyren males med, gruppert per del. Du kan legge til malinger, endre rolle og del, og fjerne rader.
-- **Høyre: agenten og kildene.** Her ser du hva agenten gjør akkurat nå, med «Stopp», og resultatet når den er ferdig. Under ligger alle kildene for spillet, både lagrede og funnet av agenten, med språk og norsk sammendrag. Trykk på en kilde for å hente bilder fra den.
+- **Bildekolonnen kan skjules** med ‹ øverst. Da står bare små bilder igjen, og valget huskes. «I planen» vises bare i Maleplan-fanen.
+- **Høyre: agenten og kildene.** I Maleplan-fanen vises kildene kort, og de planen bygger på står først. Her ser du hva agenten gjør akkurat nå, med «Stopp», og resultatet når den er ferdig. Under ligger alle kildene for spillet, både lagrede og funnet av agenten, med språk og norsk sammendrag. Trykk på en kilde for å hente bilder fra den.
 - **Forrige og neste** øverst flytter deg mellom miniatyrene i prosjektet og beholder fanen du står på.
 - **Agenten fortsetter mens du gjør noe annet.** Du kan bytte fane eller gå tilbake til galleriet. Miniatyrkortet viser «Agenten jobber …». Kjøringen lever i nettleserfanen, så laster du siden på nytt, stopper den.
 - **På iPad** ligger agent og kilder bak knappen «Agent og kilder».

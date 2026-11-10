@@ -45,3 +45,81 @@
   .plan-images { position: static; }
   .plan-thumbs { grid-template-columns: repeat(4, 1fr); }
 }
+
+/* ---------- Lesevisning av maleplanen (PlanDoc) ---------- */
+.pd-status {
+  position: sticky; top: 0; z-index: 3;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 14px; margin: 0 -4px; border-radius: var(--r-md);
+  background: var(--pine); color: var(--on-dark); box-shadow: var(--shadow);
+}
+.pd-status-text { display: grid; gap: 2px; }
+.pd-status-text strong { font-size: 16px; }
+.pd-status-warn { color: #f3c9a8; font-weight: 600; }
+.pd-status-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.pd-status .btn-ghost { color: var(--on-dark); border-color: var(--fore); }
+.pd-status .btn-secondary { background: var(--card); color: var(--ink); }
+.pd-switch { display: inline-flex; gap: 0; border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; align-self: flex-start; }
+.pd-switch button { border: 0; background: var(--card); padding: 6px 12px; cursor: pointer; font: inherit; font-size: 13px; }
+.pd-switch button[aria-pressed="true"] { background: var(--pine); color: var(--on-dark); }
+
+.pd-summary { font-size: 16px; line-height: 1.55; max-width: 80ch; margin: 0; }
+.pd-summary-edit { display: grid; gap: 6px; max-width: 90ch; }
+.pd-summary-edit textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--paper); resize: vertical; font: inherit; }
+
+.pd-palette { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.pd-swatches { display: inline-flex; gap: 3px; flex-wrap: wrap; }
+.pd-swatches > span { display: inline-flex; }
+
+.pd-outline { display: flex; gap: 6px; flex-wrap: wrap; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+.pd-outline button { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+.pd-outline button:hover { border-color: var(--pine); }
+.pd-outline button span { color: var(--muted); font-size: 12px; margin-left: 2px; }
+.pd-outline button.changed { border-color: var(--warn); }
+
+.pd-elements { display: grid; gap: 22px; }
+.pd-el { display: grid; gap: 8px; scroll-margin-top: 80px; }
+.pd-el-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.pd-el h3 { font-family: var(--font-serif); font-weight: 400; font-size: 21px; margin: 0; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.pd-el ol { margin: 0; padding-left: 30px; display: grid; gap: 4px; }
+.pd-el ol > li::marker { color: var(--muted); font-size: 13px; }
+.pd-rename { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex: 1; }
+.pd-rename input, .pd-rename select { min-height: 34px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--card); padding: 0 8px; }
+.pd-rename input { flex: 1; min-width: 180px; font-weight: 600; }
+
+.pd-step { position: relative; display: grid; gap: 5px; padding: 6px 70px 6px 8px; border-radius: var(--r-sm); border-left: 3px solid transparent; }
+.pd-step:hover, .pd-step:focus-within { background: var(--panel); }
+.pd-step.changed { border-left-color: var(--warn); }
+.pd-step.new { border-left-color: var(--moss); }
+.pd-step p { margin: 0; line-height: 1.5; max-width: 85ch; }
+.pd-step-actions { position: absolute; right: 8px; top: 6px; opacity: 0; transition: opacity .1s; }
+.pd-step:hover .pd-step-actions, .pd-step:focus-within .pd-step-actions { opacity: 1; }
+@media (hover: none) { .pd-step-actions { opacity: 1; } }
+.pd-paints { display: flex; gap: 6px; flex-wrap: wrap; }
+.pd-paint { display: inline-flex; gap: 6px; align-items: center; padding: 2px 8px 2px 4px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); font-size: 13px; }
+.pd-paint strong { font-weight: 600; }
+.pd-paint.warn { border-color: var(--warn); }
+.pd-role { color: var(--muted); }
+.pd-flag { color: var(--warn); font-size: 12px; font-weight: 600; }
+.pd-change { font: 600 10px var(--font-mono); text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px; border-radius: 4px; vertical-align: middle; }
+.pd-change.changed { background: #f3c9a8; color: var(--pine); }
+.pd-change.new { background: var(--moss-soft); color: var(--pine); }
+
+.pd-editing { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--pine); border-radius: var(--r-md); background: var(--card); }
+.pd-editing-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+
+.pd-more { position: relative; }
+.pd-more > summary { list-style: none; cursor: pointer; width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--r-sm); color: var(--muted); font-size: 18px; }
+.pd-more > summary::-webkit-details-marker { display: none; }
+.pd-more > summary:hover, .pd-more[open] > summary { background: var(--panel); color: var(--ink); }
+.pd-menu { position: absolute; right: 0; top: 34px; z-index: 4; min-width: 180px; display: grid; padding: 4px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow); }
+.pd-menu button { text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: var(--r-sm); cursor: pointer; font: inherit; font-size: 14px; }
+.pd-menu button:hover { background: var(--panel); }
+.danger, .pd-menu button.danger { color: var(--warn); }
+
+.plan-missing { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--warn); border-radius: var(--r-md); background: #fbf3ec; scroll-margin-top: 80px; }
+.plan-step textarea { font: inherit; }
+.plan-mats li select:nth-of-type(2) { flex: 0 1 320px; }
+.wsp-help { margin-top: auto; padding-top: 12px; }
+.wsp-help summary { cursor: pointer; color: var(--muted); }
+.wsp-help p { margin-top: 6px; max-width: 80ch; }

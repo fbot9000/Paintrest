@@ -146,3 +146,17 @@
 .wsi-play { position: absolute; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: rgba(0,0,0,.6); color: #fff; font-size: 18px; }
 .wsi-video-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 @media (max-width: 700px) { .wsi-anchor { grid-template-columns: 1fr; } }
+
+/* Sammenleggbar bildekolonne og kompakte kilder */
+.ws-refs { position: relative; }
+.ws-refs-toggle { position: absolute; right: 6px; top: 6px; z-index: 2; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); cursor: pointer; font-size: 15px; line-height: 1; color: var(--muted); }
+.ws-refs-toggle:hover { color: var(--ink); border-color: var(--pine); }
+.ws-body.refs-collapsed { grid-template-columns: 64px minmax(0, 1fr) 340px; }
+.ws-body.refs-collapsed .ws-refs { padding: 40px 8px 12px; }
+.ws-refs-mini { display: grid; gap: 6px; }
+.ws-refs-mini button { padding: 0; border: 0; border-radius: var(--r-sm); overflow: hidden; aspect-ratio: 1; cursor: zoom-in; background: var(--card); }
+.ws-side.compact .ws-src-sum, .ws-side.compact .ws-src-sub { display: none; }
+.ws-side.compact .ws-sources li { padding: 6px 10px; }
+.ws-src-hint { color: var(--soft-dark); }
+@media (max-width: 1180px) { .ws-body.refs-collapsed { grid-template-columns: 64px minmax(0, 1fr); } }
+@media (max-width: 860px) { .ws-body.refs-collapsed { grid-template-columns: 1fr; } }

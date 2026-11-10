@@ -1,135 +1,150 @@
 /**
- * Editor for a plan proposal: approach, palette, parts and steps with paints.
- * The user curates the agent's proposal freely before approving it.
+ * Editing a plan proposal. The proposal is read as text (PlanDoc); a step or
+ * a part opens for editing only when the user asks, or everything at once
+ * with «Rediger alt». The user curates the agent's proposal before approving.
  */
-import { useMemo } from 'react';
-import { matchProduct, planProductRefs, productKey } from '../../domain/agent';
-import type { PaintPlanPayload, PlanElementPayload, PlanStepPayload, ProductRef } from '../../domain/agent';
+import { useState } from 'react';
+import { matchProduct, productKey } from '../../domain/agent';
+import type { PlanElementPayload, PlanStepPayload, ProductRef, SourceRead } from '../../domain/agent';
 import type { Id, MaterialRole, PaintProduct, Tables } from '../../domain/types';
 import { ownershipOf } from '../../domain/views';
 import { Badge, Button, OwnershipFlag, Swatch } from '../../ui/components';
+import { ChangeBadge, ROLE_LABEL, StepRead, closeMenu, elementId } from './PlanDoc';
+import type { DocElement } from './PlanDoc';
 import './plan.css';
 
+export { ROLE_LABEL };
 const ROLES: MaterialRole[] = ['base', 'shade', 'layer', 'highlight', 'wash', 'glaze', 'mix', 'other'];
-export const ROLE_LABEL: Record<MaterialRole, string> = {
-  base: 'Base', shade: 'Shade', layer: 'Lag', highlight: 'Høylys', wash: 'Wash', glaze: 'Glasur', mix: 'Blanding', other: 'Annet',
-};
 
-export function PlanEditor({ draft, update, products, t, choices, setChoices, unresolvedCount, onRetry, busy }: {
-  draft: PaintPlanPayload;
-  update: (fn: (d: PaintPlanPayload) => void) => void;
+/** Paints the agent named that are not in the catalogue: choose a product or create it as unconfirmed. */
+export function MissingPaints({ missing, products, choices, setChoices }: {
+  missing: ProductRef[];
   products: PaintProduct[];
-  t: Tables;
   choices: Record<string, Id | 'create'>;
   setChoices: (c: Record<string, Id | 'create'>) => void;
-  unresolvedCount: number;
-  onRetry: () => void;
-  busy: boolean;
 }) {
-  const refs = useMemo(() => planProductRefs(draft), [draft]);
-  const missing = refs.filter((r) => !matchProduct(t, r));
-  const swatch = (r: ProductRef) => matchProduct(t, r)?.swatch_hex ?? r.hex ?? null;
-
+  if (!missing.length) return null;
+  const open = missing.filter((r) => !choices[productKey(r)]).length;
   return (
-    <div className="plan-editor">
-      <div className="plan-summary">
-        <label htmlFor="plan-summary" className="eyebrow">Arbeidsmåte og fargevalg</label>
-        <textarea id="plan-summary" value={draft.summary ?? ''} onChange={(e) => update((d) => { d.summary = e.target.value; })} rows={3} />
+    <div className="plan-missing" id="plan-mangler">
+      <div className="plan-missing-head">
+        <span><strong>{missing.length} {missing.length === 1 ? 'maling finnes' : 'malinger finnes'} ikke i katalogen.</strong> <span className="small">Velg et produkt du har, eller opprett {missing.length === 1 ? 'den' : 'dem'} som ubekreftet.</span></span>
+        {open > 0 && (
+          <button type="button" className="link small" onClick={() => setChoices({ ...choices, ...Object.fromEntries(missing.filter((r) => !choices[productKey(r)]).map((r) => [productKey(r), 'create' as const])) })}>
+            Opprett alle som ubekreftet
+          </button>
+        )}
       </div>
-
-      {(draft.palette?.length ?? 0) > 0 && (
-        <div className="plan-palette">
-          <span className="eyebrow">Palett for miniatyren ({draft.palette!.length})</span>
-          <ul>
-            {draft.palette!.map((p, i) => {
-              const m = matchProduct(t, p.product);
-              return (
-                <li key={i}>
-                  <Swatch hex={swatch(p.product)} size={26} />
-                  <span className="plan-pal-name">
-                    <strong>{p.product.name}</strong>
-                    <span className="small muted">{[p.product.manufacturer, p.product.range].filter(Boolean).join(' · ')}</span>
-                    <span className="small">{[p.part, p.role_label].filter(Boolean).join(' · ')}</span>
-                  </span>
-                  {m ? <OwnershipFlag ownership={ownershipOf(t, m.id)} /> : <Badge tone="warn">Ikke i katalogen</Badge>}
-                  <button type="button" className="link small" onClick={() => update((d) => { d.palette!.splice(i, 1); })} aria-label={`Fjern ${p.product.name} fra paletten`}>Fjern</button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-
-      {missing.length > 0 && (
-        <div className="plan-missing">
-          <div className="plan-missing-head">
-            <span className="eyebrow">Malinger som ikke finnes i katalogen ({missing.length})</span>
-            <button type="button" className="link small" onClick={() => setChoices({ ...choices, ...Object.fromEntries(missing.filter((r) => !choices[productKey(r)]).map((r) => [productKey(r), 'create' as const])) })}>
-              Opprett alle som ubekreftet
-            </button>
-          </div>
-          <ul>
-            {missing.map((r) => {
-              const key = productKey(r);
-              return (
-                <li key={key}>
-                  <Swatch hex={r.hex ?? null} size={20} />
-                  <span><strong>{r.name}</strong> <span className="small muted">{[r.manufacturer, r.range].filter(Boolean).join(' · ') || 'ukjent produsent'}</span></span>
-                  <select aria-label={`Produkt for ${r.name}`} value={choices[key] ?? ''} onChange={(e) => setChoices({ ...choices, [key]: e.target.value as Id | 'create' })}>
-                    <option value="">Velg …</option>
-                    <option value="create">Opprett som ubekreftet produkt</option>
-                    {products.map((x) => <option key={x.id} value={x.id}>{x.name}{x.manufacturer ? ` (${x.manufacturer})` : ''}</option>)}
-                  </select>
-                </li>
-              );
-            })}
-          </ul>
-          {unresolvedCount > 0 && <p className="small muted">Velg eller opprett {unresolvedCount} maling(er) før planen kan godkjennes.</p>}
-        </div>
-      )}
-
-      <div className="plan-elements">
-        {draft.elements.map((el, ei) => (
-          <ElementEditor key={ei} el={el} products={products} t={t} swatch={swatch}
-            onChange={(fn) => update((d) => fn(d.elements[ei]!))}
-            onRemove={() => update((d) => { d.elements.splice(ei, 1); })}
-            onMove={(dir) => update((d) => { const [x] = d.elements.splice(ei, 1); d.elements.splice(Math.max(0, ei + dir), 0, x!); })} />
-        ))}
-        <Button onClick={() => update((d) => { d.elements.push({ kind: 'part', name: `Ny del ${d.elements.length + 1}`, steps: [{ instruction: '', materials: [], mix: null }] }); })}>
-          + Legg til del
-        </Button>
-      </div>
-
-      {(draft.sources_read?.length ?? 0) > 0 && (
-        <details className="img-read">
-          <summary>Kilder agenten brukte ({draft.sources_read!.length})</summary>
-          <ul>
-            {draft.sources_read!.map((r) => (
-              <li key={r.url}>
-                <a href={r.url} target="_blank" rel="noreferrer">{r.title}</a>
-                {r.summary && <p className="small">{r.summary}</p>}
-                {r.original_excerpt && <p className="small muted img-orig" lang={r.language ?? undefined}>{r.original_excerpt}</p>}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-      <p className="small muted">Ikke fornøyd? <button type="button" className="link small" onClick={onRetry} disabled={busy}>Be agenten lage et nytt forslag</button>. Det erstatter ikke endringene dine før du forkaster dette.</p>
+      <ul>
+        {missing.map((r) => {
+          const key = productKey(r);
+          return (
+            <li key={key}>
+              <Swatch hex={r.hex ?? null} size={18} />
+              <span><strong>{r.name}</strong> <span className="small muted">{[r.manufacturer, r.range].filter(Boolean).join(' · ') || 'ukjent produsent'}</span></span>
+              <select aria-label={`Produkt for ${r.name}`} value={choices[key] ?? ''} onChange={(e) => setChoices({ ...choices, [key]: e.target.value as Id | 'create' })}>
+                <option value="">Velg …</option>
+                <option value="create">Opprett som ubekreftet produkt</option>
+                {products.map((x) => <option key={x.id} value={x.id}>{x.name}{x.manufacturer ? ` (${x.manufacturer})` : ''}</option>)}
+              </select>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
 
-function ElementEditor({ el, products, t, swatch, onChange, onRemove, onMove }: {
+export function SourcesUsed({ sources }: { sources: SourceRead[] }) {
+  if (!sources.length) return null;
+  return (
+    <details className="img-read">
+      <summary>Kilder agenten brukte ({sources.length})</summary>
+      <ul>
+        {sources.map((r) => (
+          <li key={r.url}>
+            <a href={r.url} target="_blank" rel="noreferrer">{r.title}</a>
+            {r.summary && <p className="small">{r.summary}</p>}
+            {r.original_excerpt && <p className="small muted img-orig" lang={r.language ?? undefined}>{r.original_excerpt}</p>}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+interface ElementProps {
   el: PlanElementPayload;
+  doc: DocElement;
+  index: number;
   products: PaintProduct[];
   t: Tables;
-  swatch: (r: ProductRef) => string | null;
+  editAll: boolean;
   onChange: (fn: (e: PlanElementPayload) => void) => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
-}) {
+}
+
+/** One part of a proposal: read as text, with editing per step and a «⋯» menu for the part. */
+export function ElementBlock(p: ElementProps) {
+  const { el, doc, index, onChange } = p;
+  const [editing, setEditing] = useState<number | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  if (p.editAll) return <ElementEditor {...p} />;
+
   return (
-    <section className={`plan-el ${el.kind}`}>
+    <section id={elementId(index)} className={`pd-el ${el.kind}`}>
+      <div className="pd-el-head">
+        {renaming ? (
+          <span className="pd-rename">
+            <input aria-label="Navn på delen" value={el.name} autoFocus onChange={(e) => onChange((x) => { x.name = e.target.value; })}
+              onKeyDown={(e) => { if (e.key === 'Enter') setRenaming(false); }} />
+            <select aria-label="Type" value={el.kind} onChange={(e) => onChange((x) => { x.kind = e.target.value as 'operation' | 'part'; })}>
+              <option value="operation">Felles operasjon</option>
+              <option value="part">Del</option>
+            </select>
+            <Button onClick={() => setRenaming(false)}>Ferdig</Button>
+          </span>
+        ) : (
+          <h3>{el.name} <span className="eyebrow">{el.kind === 'operation' ? 'Felles' : 'Del'}</span> <ChangeBadge change={doc.change} /></h3>
+        )}
+        <details className="pd-more">
+          <summary aria-label={`Flere valg for ${el.name}`}>⋯</summary>
+          <div className="pd-menu">
+            <button type="button" onClick={(e) => { closeMenu(e); setRenaming(true); }}>Gi nytt navn</button>
+            <button type="button" onClick={(e) => { closeMenu(e); onChange((x) => { x.steps.push({ instruction: '', materials: [], mix: null }); }); setEditing(el.steps.length); }}>Legg til steg</button>
+            <button type="button" onClick={(e) => { closeMenu(e); p.onMove(-1); }}>Flytt opp</button>
+            <button type="button" onClick={(e) => { closeMenu(e); p.onMove(1); }}>Flytt ned</button>
+            <button type="button" className="danger" onClick={(e) => { closeMenu(e); p.onRemove(); }}>Fjern delen</button>
+          </div>
+        </details>
+      </div>
+      <ol>
+        {el.steps.map((st, si) => (
+          <li key={si}>
+            {editing === si ? (
+              <div className="pd-editing">
+                <StepEditor st={st} products={p.products} t={p.t} onChange={(fn) => onChange((x) => fn(x.steps[si]!))} />
+                <span className="pd-editing-actions">
+                  <button type="button" className="link small danger" onClick={() => { onChange((x) => { x.steps.splice(si, 1); }); setEditing(null); }}>Fjern steget</button>
+                  <Button onClick={() => setEditing(null)}>Ferdig</Button>
+                </span>
+              </div>
+            ) : (
+              <StepRead s={doc.steps[si] ?? { instruction: st.instruction, materials: [], mix: null, change: null }}
+                actions={<button type="button" className="link small" onClick={() => setEditing(si)} aria-label={`Rediger steg ${si + 1} i ${el.name}`}>Rediger</button>} />
+            )}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/** The full form for a part («Rediger alt»). */
+function ElementEditor({ el, index, products, t, onChange, onRemove, onMove }: ElementProps) {
+  return (
+    <section id={elementId(index)} className={`plan-el ${el.kind}`}>
       <div className="plan-el-head">
         <select aria-label="Type" value={el.kind} onChange={(e) => onChange((x) => { x.kind = e.target.value as 'operation' | 'part'; })}>
           <option value="operation">Felles operasjon</option>
@@ -139,14 +154,13 @@ function ElementEditor({ el, products, t, swatch, onChange, onRemove, onMove }: 
         <span className="plan-el-actions">
           <button type="button" className="link small" onClick={() => onMove(-1)} aria-label="Flytt opp">↑</button>
           <button type="button" className="link small" onClick={() => onMove(1)} aria-label="Flytt ned">↓</button>
-          <button type="button" className="link small" onClick={onRemove}>Fjern del</button>
+          <button type="button" className="link small danger" onClick={onRemove}>Fjern del</button>
         </span>
       </div>
       <ol>
         {el.steps.map((st, si) => (
           <li key={si}>
-            <StepEditor st={st} products={products} t={t} swatch={swatch}
-              onChange={(fn) => onChange((x) => fn(x.steps[si]!))}
+            <StepEditor st={st} products={products} t={t} onChange={(fn) => onChange((x) => fn(x.steps[si]!))}
               onRemove={() => onChange((x) => { x.steps.splice(si, 1); })} />
           </li>
         ))}
@@ -156,13 +170,12 @@ function ElementEditor({ el, products, t, swatch, onChange, onRemove, onMove }: 
   );
 }
 
-function StepEditor({ st, products, t, swatch, onChange, onRemove }: {
+function StepEditor({ st, products, t, onChange, onRemove }: {
   st: PlanStepPayload;
   products: PaintProduct[];
   t: Tables;
-  swatch: (r: ProductRef) => string | null;
   onChange: (fn: (s: PlanStepPayload) => void) => void;
-  onRemove: () => void;
+  onRemove?: () => void;
 }) {
   const fromProduct = (p: PaintProduct): ProductRef => ({ manufacturer: p.manufacturer, range: p.range_name, name: p.name, hex: p.swatch_hex });
   return (
@@ -173,7 +186,7 @@ function StepEditor({ st, products, t, swatch, onChange, onRemove }: {
           const match = matchProduct(t, m.product);
           return (
             <li key={mi}>
-              <Swatch hex={swatch(m.product)} size={20} />
+              <Swatch hex={match?.swatch_hex ?? m.product.hex ?? null} size={18} />
               <select aria-label="Rolle" value={m.role} onChange={(e) => onChange((x) => { x.materials[mi]!.role = e.target.value as MaterialRole; })}>
                 {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
               </select>
@@ -184,8 +197,8 @@ function StepEditor({ st, products, t, swatch, onChange, onRemove }: {
                 {!match && <option value="__agent">{m.product.name}{m.product.manufacturer ? ` (${m.product.manufacturer})` : ''} – agentens forslag</option>}
                 {products.map((x) => <option key={x.id} value={x.id}>{x.name}{x.manufacturer ? ` (${x.manufacturer})` : ''}</option>)}
               </select>
-              {match ? <OwnershipFlag ownership={ownershipOf(t, match.id)} /> : <Badge tone="warn">Ny</Badge>}
-              <button type="button" className="link small" onClick={() => onChange((x) => { x.materials.splice(mi, 1); })} aria-label="Fjern malingen">×</button>
+              {match ? ownershipOf(t, match.id) !== 'owns' && <OwnershipFlag ownership={ownershipOf(t, match.id)} /> : <Badge tone="warn">Ny</Badge>}
+              <button type="button" className="link small" onClick={() => onChange((x) => { x.materials.splice(mi, 1); })} aria-label={`Fjern ${m.product.name} fra steget`}>×</button>
             </li>
           );
         })}
@@ -199,7 +212,7 @@ function StepEditor({ st, products, t, swatch, onChange, onRemove }: {
           <option value="">+ Legg til maling …</option>
           {products.map((x) => <option key={x.id} value={x.id}>{x.name}{x.manufacturer ? ` (${x.manufacturer})` : ''}</option>)}
         </select>
-        <button type="button" className="link small" onClick={onRemove}>Fjern steg</button>
+        {onRemove && <button type="button" className="link small danger" onClick={onRemove}>Fjern steg</button>}
       </div>
     </div>
   );
