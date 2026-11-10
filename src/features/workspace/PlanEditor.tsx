@@ -5,7 +5,7 @@
  */
 import { useState } from 'react';
 import { matchProduct, productKey } from '../../domain/agent';
-import type { PlanElementPayload, PlanStepPayload, ProductRef, SourceRead } from '../../domain/agent';
+import type { PlanElementPayload, PlanStepPayload, ProductRef } from '../../domain/agent';
 import type { Id, MaterialRole, PaintProduct, Tables } from '../../domain/types';
 import { ownershipOf } from '../../domain/views';
 import { Badge, Button, OwnershipFlag, Swatch } from '../../ui/components';
@@ -28,10 +28,10 @@ export function MissingPaints({ missing, products, choices, setChoices }: {
   return (
     <div className="plan-missing" id="plan-mangler">
       <div className="plan-missing-head">
-        <span><strong>{missing.length} {missing.length === 1 ? 'maling finnes' : 'malinger finnes'} ikke i katalogen.</strong> <span className="small">Velg et produkt du har, eller opprett {missing.length === 1 ? 'den' : 'dem'} som ubekreftet.</span></span>
+        <strong>Ikke i katalogen</strong>
         {open > 0 && (
           <button type="button" className="link small" onClick={() => setChoices({ ...choices, ...Object.fromEntries(missing.filter((r) => !choices[productKey(r)]).map((r) => [productKey(r), 'create' as const])) })}>
-            Opprett alle som ubekreftet
+            Opprett alle
           </button>
         )}
       </div>
@@ -52,24 +52,6 @@ export function MissingPaints({ missing, products, choices, setChoices }: {
         })}
       </ul>
     </div>
-  );
-}
-
-export function SourcesUsed({ sources }: { sources: SourceRead[] }) {
-  if (!sources.length) return null;
-  return (
-    <details className="img-read">
-      <summary>Kilder agenten brukte ({sources.length})</summary>
-      <ul>
-        {sources.map((r) => (
-          <li key={r.url}>
-            <a href={r.url} target="_blank" rel="noreferrer">{r.title}</a>
-            {r.summary && <p className="small">{r.summary}</p>}
-            {r.original_excerpt && <p className="small muted img-orig" lang={r.language ?? undefined}>{r.original_excerpt}</p>}
-          </li>
-        ))}
-      </ul>
-    </details>
   );
 }
 
@@ -106,7 +88,7 @@ export function ElementBlock(p: ElementProps) {
             <Button onClick={() => setRenaming(false)}>Ferdig</Button>
           </span>
         ) : (
-          <h3>{el.name} <span className="eyebrow">{el.kind === 'operation' ? 'Felles' : 'Del'}</span> <ChangeBadge change={doc.change} /></h3>
+          <h3>{el.name} <ChangeBadge change={doc.change} /></h3>
         )}
         <details className="pd-more">
           <summary aria-label={`Flere valg for ${el.name}`}>⋯</summary>

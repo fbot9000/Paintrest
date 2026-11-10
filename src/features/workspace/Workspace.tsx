@@ -18,6 +18,8 @@ import { runs } from '../../app/runs';
 import { ImagesTab } from './ImagesTab';
 import { PaletteTab } from './PaletteTab';
 import { PlanTab } from './PlanTab';
+import { closeMenu } from './PlanDoc';
+import './plan.css';
 import './workspace.css';
 
 export type Tab = 'bilder' | 'maleplan' | 'palett';
@@ -92,15 +94,16 @@ export function Workspace() {
   const { s } = data;
   const base = `/p/${projectId}/m`;
   const activeRun = [imagesRun, planRun].filter((r): r is Run => !!r).sort((a, b) => b.started_at.localeCompare(a.started_at))[0] ?? null;
+  // The right column belongs to finding pictures; elsewhere it shows only while the agent works, or when asked for.
+  const sideShown = tab === 'bilder' || activeRun?.status === 'running' || showSide;
 
   return (
     <div className="ws">
       <header className="ws-head">
         <Link to={`/p/${projectId}/miniatyrer`} className="ws-back">← Miniatyrer</Link>
         <div className="ws-title">
-          <span className="eyebrow">{data.game} · {data.expansion} · {data.position}</span>
-          <h1>{s.name}</h1>
-          <span className="small muted">{s.grouping === 'group' ? `Malegruppe · ${s.physical_count} figurer` : 'Enkeltfigur'}{s.plan_state === 'approved' ? ' · har maleplan' : ''}</span>
+          <span className="eyebrow" title={data.position}>{data.game}{data.expansion !== 'Grunnspill' ? ` · ${data.expansion}` : ''}</span>
+          <h1>{s.name}{s.grouping === 'group' && <span className="ws-count"> ×{s.physical_count}</span>}</h1>
         </div>
         <nav className="ws-tabs" aria-label="Arbeid med miniatyren">
           <NavLink to={`${base}/${s.id}/bilder`} className={tab === 'bilder' ? 'active' : ''}>Bilder {imagesRun?.status === 'running' && <span className="ws-dot" aria-label="agenten jobber" />}</NavLink>
@@ -111,12 +114,12 @@ export function Workspace() {
           <Button variant="ghost" disabled={!data.prev} onClick={() => data.prev && navigate(`${base}/${data.prev.id}/${tab}`)} aria-label="Forrige miniatyr">‹ {data.prev?.name ?? ''}</Button>
           <Button variant="ghost" disabled={!data.next} onClick={() => data.next && navigate(`${base}/${data.next.id}/${tab}`)} aria-label="Neste miniatyr">{data.next?.name ?? ''} ›</Button>
           {s.current_plan_version_id && <Button variant="primary" onClick={() => navigate(`/male/${s.id}`)} title="Åpne planen i Painting Mode">Mal</Button>}
-          <Button className="ws-side-toggle" onClick={() => setShowSide((v) => !v)} aria-expanded={showSide}>Agent og kilder</Button>
+          <Button className={`ws-side-toggle ${tab !== 'bilder' ? 'always' : ''}`} onClick={() => setShowSide((v) => !v)} aria-expanded={sideShown}>Kilder</Button>
         </div>
       </header>
       <ErrorNote error={error} onClose={clearError} />
 
-      <div className={`ws-body ${showSide ? 'side-open' : ''} ${collapsed ? 'refs-collapsed' : ''}`}>
+      <div className={`ws-body ${showSide ? 'side-open' : ''} ${sideShown ? '' : 'side-hidden'} ${collapsed ? 'refs-collapsed' : ''}`}>
         <aside className="ws-refs" aria-label="Bilder av miniatyren">
           <button type="button" className="ws-refs-toggle" onClick={() => setCollapsed(!collapsed)} aria-expanded={!collapsed}
             aria-label={collapsed ? 'Vis bildekolonnen' : 'Skjul bildekolonnen'} title={collapsed ? 'Vis bildene' : 'Skjul bildene'}>{collapsed ? '›' : '‹'}</button>
@@ -132,16 +135,17 @@ export function Workspace() {
             <>
               <button type="button" className="ws-ref-main" onClick={() => setZoom(true)} aria-label={`Forstørr ${current.label}`}>
                 <FileImage fileId={current.file_id} alt={current.label} className="ws-ref-img" />
-                {current.cover && <span className="ws-badge">Illustrasjon</span>}
               </button>
               <div className="ws-ref-meta">
-                <strong>{current.label}</strong>
-                <span className="small muted">{current.source.title}{current.source.creator ? ` · ${current.source.creator}` : ''}</span>
-                <span className="ws-ref-actions">
-                  {!current.cover && <button type="button" className="link small" onClick={() => run((c) => c.setSubjectCover(s.id, current.asset.id))}>Gjør til illustrasjon</button>}
-                  {current.source.url && <a className="small" href={current.source.url} target="_blank" rel="noreferrer">Kilde ↗</a>}
-                  <button type="button" className="link small" onClick={() => run((c) => c.detachSubjectImage(s.id, current.asset.id))}>Fjern</button>
-                </span>
+                <span className="small" title={[current.label, current.source.title, current.source.creator].filter(Boolean).join(' · ')}>{current.source.creator ?? current.source.title}</span>
+                <details className="pd-more">
+                  <summary aria-label="Valg for bildet">⋯</summary>
+                  <div className="pd-menu">
+                    {!current.cover && <button type="button" onClick={(e) => { closeMenu(e); run((c) => c.setSubjectCover(s.id, current.asset.id)); }}>Gjør til illustrasjon</button>}
+                    {current.source.url && <button type="button" onClick={(e) => { closeMenu(e); window.open(current.source.url!, '_blank', 'noreferrer'); }}>Åpne kilden ↗</button>}
+                    <button type="button" className="danger" onClick={(e) => { closeMenu(e); run((c) => c.detachSubjectImage(s.id, current.asset.id)); }}>Fjern bildet</button>
+                  </div>
+                </details>
               </div>
               <div className="ws-thumbs">
                 {data.refs.map((r) => {
@@ -150,21 +154,22 @@ export function Workspace() {
                     <div key={r.asset.id} className={`ws-thumb ${current.asset.id === r.asset.id ? 'on' : ''}`}>
                       <button type="button" onClick={() => setViewing(r.asset.id)} aria-label={`Vis ${r.label}`}>
                         <FileImage fileId={r.file_id} alt="" className="ws-thumb-img" />
-                        {r.cover && <span className="ws-badge small">Illustrasjon</span>}
+                        {r.cover && <span className="ws-star" title="Illustrasjon" aria-label="Illustrasjon">★</span>}
                       </button>
-                      {tab === 'maleplan' && <label className="ws-inplan" title="Agenten ser på dette bildet når den lager maleplanen">
-                        <input type="checkbox" checked={inPlan} onChange={(e) => setPlanRefs((cur) => {
-                          const n = new Set(cur);
-                          if (e.target.checked) { if (n.size < 4) n.add(r.asset.id); } else n.delete(r.asset.id);
-                          return n;
-                        })} />
-                        I planen
-                      </label>}
+                      {tab === 'maleplan' && (
+                        <button type="button" className={`ws-inplan ${inPlan ? 'on' : ''}`} aria-pressed={inPlan}
+                          title={inPlan ? 'Agenten ser på dette bildet når den lager maleplanen' : 'Ta med i maleplanen (høyst 4)'}
+                          aria-label={`${r.label}: med i maleplanen`}
+                          onClick={() => setPlanRefs((cur) => {
+                            const n = new Set(cur);
+                            if (!inPlan) { if (n.size < 4) n.add(r.asset.id); } else n.delete(r.asset.id);
+                            return n;
+                          })}>✓</button>
+                      )}
                     </div>
                   );
                 })}
               </div>
-              {tab === 'maleplan' && <p className="small muted">{planRefs.size} av høyst 4 bilder brukes når agenten lager maleplanen.</p>}
             </>
           ) : (
             <div className="ws-refs-empty">
@@ -181,32 +186,24 @@ export function Workspace() {
         </main>
 
         <aside className={`ws-side ${tab === 'maleplan' ? 'compact' : ''}`} aria-label="Agenten og kildene">
-          <section className="ws-agent">
-            <h2 className="eyebrow">Agenten</h2>
-            {activeRun?.status === 'running' ? (
-              <div className="ws-live"><LiveSteps events={activeRun.events} onStop={() => runs.stop(s.id, activeRun.kind)} /></div>
-            ) : activeRun ? (
-              <RunResult run={activeRun} />
-            ) : (
-              <p className="small">Ingen kjøring for denne miniatyren ennå. Agenten fortsetter selv om du bytter fane eller går til galleriet.</p>
-            )}
-          </section>
+          {activeRun && (
+            <section className="ws-agent">
+              {activeRun.status === 'running'
+                ? <div className="ws-live"><LiveSteps events={activeRun.events} onStop={() => runs.stop(s.id, activeRun.kind)} /></div>
+                : <RunResult run={activeRun} />}
+            </section>
+          )}
           <section className="ws-sources">
-            <h2 className="eyebrow">Kilder for spillet ({data.sources.length})</h2>
-            {data.sources.length === 0 && <p className="small">Sider agenten leser, og sider du lagrer bilder fra, samles her for alle miniatyrene.</p>}
-            {tab === 'maleplan' && data.planSourceUrls.length > 0 && <p className="small ws-src-hint">Kildene planen bygger på, står først. Trykk på en kilde for å se bildene.</p>}
+            <h2 className="eyebrow">Kilder ({data.sources.length})</h2>
             <ul>
               {(tab === 'maleplan' ? [...data.sources].sort((a, b) => Number(data.planSourceUrls.includes(b.source.url!)) - Number(data.planSourceUrls.includes(a.source.url!))) : data.sources).map((k) => (
                 <li key={k.source.id} className={browseUrl === k.source.url ? 'on' : ''}>
-                  <button type="button" onClick={() => { setBrowseUrl(k.source.url); if (tab !== 'bilder') navigate(`${base}/${s.id}/bilder`); }}>
+                  <button type="button" onClick={() => { setBrowseUrl(k.source.url); if (tab !== 'bilder') navigate(`${base}/${s.id}/bilder`); }}
+                    title={[k.source.creator, k.source.language && languageName(k.source.language), k.status === 'kept' ? `lagret, ${k.asset_count} bilder` : 'funnet av agenten', k.summary].filter(Boolean).join(' · ')}>
                     <span className="ws-src-head">
                       <strong>{k.source.title}</strong>
-                      {tab === 'maleplan' && data.planSourceUrls.includes(k.source.url!)
-                        ? <Badge tone="moss">Brukt i planen</Badge>
-                        : <Badge tone={k.status === 'kept' ? 'moss' : 'neutral'}>{k.status === 'kept' ? `Lagret · ${k.asset_count}` : 'Funnet'}</Badge>}
+                      {tab === 'maleplan' && data.planSourceUrls.includes(k.source.url!) && <Badge tone="moss">I planen</Badge>}
                     </span>
-                    <span className="small ws-src-sub">{k.source.creator ?? ''}{k.source.language ? ` · ${languageName(k.source.language)}` : ''}</span>
-                    {k.summary && <span className="small ws-src-sum">{k.summary}</span>}
                   </button>
                   <a className="small" href={k.source.url!} target="_blank" rel="noreferrer" aria-label="Åpne siden">↗</a>
                 </li>
@@ -233,7 +230,7 @@ function RunResult({ run: r }: { run: Run }) {
     <div className="ws-result">
       <span className="small">
         {label} {r.status === 'done' ? 'ferdig' : r.status === 'stopped' ? 'stoppet' : 'feilet'}
-        {r.finished_at ? ` kl. ${new Date(r.finished_at).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}` : ''} · {r.pages.length} sider lest
+        {r.finished_at ? ` kl. ${new Date(r.finished_at).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}` : ''}
       </span>
       {final && final.type === 'final' && <p>{final.message}</p>}
       {final && final.type === 'final' && final.warnings.map((w, i) => <p key={i} className="small ws-warn">{w}</p>)}

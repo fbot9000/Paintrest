@@ -103,13 +103,14 @@ export function markChanges(next: DocElement[], current: DocElement[]): { elemen
 
 const STATUS_LABEL: Record<Exclude<PaintStatus, 'owns'>, string> = { missing: 'ikke i katalogen', not_owned: 'eier ikke', unknown: 'ukjent om du eier' };
 
+/** A paint in a step: swatch and name. Role, maker and ownership are in the tooltip; only a missing paint is marked. */
 export function PaintChip({ m }: { m: DocMaterial }) {
+  const warn = m.status === 'missing' || m.status === 'not_owned';
   return (
-    <span className={`pd-paint ${m.status === 'missing' || m.status === 'not_owned' ? 'warn' : ''}`} title={[m.maker, m.status !== 'owns' ? STATUS_LABEL[m.status] : 'eier'].filter(Boolean).join(' · ')}>
-      <Swatch hex={m.hex} size={14} />
-      <strong>{m.name}</strong>
-      <span className="pd-role">{m.role_label ?? ROLE_LABEL[m.role]}</span>
-      {(m.status === 'missing' || m.status === 'not_owned') && <span className="pd-flag">{STATUS_LABEL[m.status]}</span>}
+    <span className={`pd-paint ${warn ? 'warn' : ''}`} title={[m.role_label ?? ROLE_LABEL[m.role], m.maker, m.status !== 'owns' ? STATUS_LABEL[m.status] : null].filter(Boolean).join(' · ')}>
+      <Swatch hex={m.hex} size={12} />
+      {m.name}
+      {warn && <span className="pd-flag" aria-label={STATUS_LABEL[m.status as 'missing' | 'not_owned']}>!</span>}
     </span>
   );
 }
@@ -125,24 +126,20 @@ export function Outline({ elements }: { elements: DocElement[] }) {
       {elements.map((el, i) => (
         <button key={i} type="button" className={el.change ? 'changed' : ''}
           onClick={() => document.getElementById(elementId(i))?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-          {el.name} <span>{el.steps.length}</span>
+          {el.name}
         </button>
       ))}
     </nav>
   );
 }
 
-export function PaletteStrip({ items, note, onOpen }: { items: { name: string; hex: string | null }[]; note: string; onOpen?: () => void }) {
+/** The palette as a row of swatches (names in the tooltip). Opens the Palett tab when it can. */
+export function PaletteStrip({ items, onOpen }: { items: { name: string; hex: string | null }[]; onOpen?: () => void }) {
   if (!items.length) return null;
-  return (
-    <div className="pd-palette">
-      <span className="eyebrow">Palett · {items.length} malinger</span>
-      <span className="pd-swatches">
-        {items.map((p, i) => <span key={i} title={p.name}><Swatch hex={p.hex} size={18} /></span>)}
-      </span>
-      <span className="small muted">{note}{onOpen && <> <button type="button" className="link small" onClick={onOpen}>Åpne Palett →</button></>}</span>
-    </div>
-  );
+  const swatches = items.map((p, i) => <span key={i} title={p.name}><Swatch hex={p.hex} size={18} /></span>);
+  return onOpen
+    ? <button type="button" className="pd-palette" onClick={onOpen} title="Åpne paletten" aria-label={`Palett: ${items.length} malinger`}>{swatches}</button>
+    : <div className="pd-palette" aria-label={`Palett: ${items.length} malinger`}>{swatches}</div>;
 }
 
 export function ChangeBadge({ change }: { change: Change }) {
@@ -172,7 +169,7 @@ export function PlanRead({ elements }: { elements: DocElement[] }) {
     <div className="pd-elements">
       {elements.map((el, i) => (
         <section key={i} id={elementId(i)} className={`pd-el ${el.kind}`}>
-          <h3>{el.name} <span className="eyebrow">{el.kind === 'operation' ? 'Felles' : 'Del'}</span> <ChangeBadge change={el.change} /></h3>
+          <h3>{el.name} <ChangeBadge change={el.change} /></h3>
           <ol>{el.steps.map((s, si) => <li key={si}><StepRead s={s} /></li>)}</ol>
         </section>
       ))}

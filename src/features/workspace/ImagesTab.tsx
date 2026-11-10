@@ -6,13 +6,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useApp, useCommand, useView } from '../../app/context';
 import type { Run } from '../../app/runs';
-import type { HuntAnchor, ImageKind, ReferenceImage, ReferenceSelectionPayload, VideoRef } from '../../domain/agent';
+import type { HuntAnchor, ReferenceImage, ReferenceSelectionPayload, VideoRef } from '../../domain/agent';
 import type { Id, MiniatureSubject, Tables } from '../../domain/types';
 import { subjectReferences } from '../../domain/views';
-import { IMAGE_KIND_LABEL } from '../../data/images-tx';
-import { Badge, Button, ErrorNote, ImagePicker } from '../../ui/components';
+import { Button, ErrorNote, ImagePicker } from '../../ui/components';
 import { startImageHunt } from './agentRuns';
-import { languageName } from './Workspace';
 
 interface Candidate extends ReferenceImage {
   proposal_id: Id | null;
@@ -113,7 +111,7 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
   const anchorCandidate: Candidate | null = anchor?.anchor.image_url ? {
     image_url: anchor.anchor.image_url, page_url: anchor.anchor.page_url ?? anchor.anchor.image_url,
     page_title: anchor.anchor.page_title ?? '', site: anchor.anchor.site ?? '', creator: anchor.anchor.painter,
-    caption: anchor.anchor.painter ? `Offisielt bilde, malt av ${anchor.anchor.painter}` : 'Offisielt bilde',
+    caption: null,
     kind: anchor.anchor.kind === 'painted' ? 'official' : anchor.anchor.kind, proposal_id: anchor.proposal_id,
   } : null;
   const rest = dedupe(data.suggested).filter((c) => c.image_url !== anchorCandidate?.image_url);
@@ -134,14 +132,11 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
   return (
     <div className="wsi">
       <div className="ws-toolbar">
-        <div>
-          <h2>Bilder</h2>
-          <p className="small muted">Agenten finner først det beste offisielle bildet av {s.name} (utgiver, Kickstarter eller Gamefound, BoardGameGeek), og leter så bredt etter malte versjoner og malevideoer, på flere språk.</p>
-          {phase && <p className="small wsi-phase">{phase}</p>}
-        </div>
+        <div>{phase && <p className="small wsi-phase">{phase}</p>}</div>
         <div className="ws-toolbar-actions">
           <ImagePicker onPick={(f) => cmdRun((c) => c.setSubjectImage(s.id, f, f.name))}>Last opp bilde</ImagePicker>
-          <Button variant="primary" disabled={running} onClick={() => startImageHunt(app, s, game, referenceFileId)}>
+          <Button variant="primary" disabled={running} onClick={() => startImageHunt(app, s, game, referenceFileId)}
+            title={`Agenten finner først det beste offisielle bildet (utgiver, Kickstarter eller Gamefound, BoardGameGeek), og leter så bredt etter malte versjoner og malevideoer, på flere språk.`}>
             {running ? 'Agenten leter …' : data.suggested.length ? 'Let etter flere' : 'Let etter bilder med AI'}
           </Button>
         </div>
@@ -151,8 +146,7 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
       {anchor && (
         <section className="wsi-section">
           <div className="wsi-section-head">
-            <h3>Offisielt anker</h3>
-            <span className="small muted">Det beste offisielle bildet agenten fant og kontrollerte. Resten av jakten er sammenlignet med det.</span>
+            <h3 title="Det beste offisielle bildet agenten fant og kontrollerte. Resten av jakten er sammenlignet med det.">Offisielt bilde</h3>
           </div>
           {anchorCandidate ? (
             <div className="wsi-anchor">
@@ -160,19 +154,14 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
                 on={selected.has(anchorCandidate.image_url)} cover={cover === anchorCandidate.image_url}
                 onToggle={(on) => toggle(anchorCandidate, on)} onCover={() => { setCover(anchorCandidate.image_url); toggle(anchorCandidate, true); }}
                 proxy={app.ai.imageProxyUrl(anchorCandidate.image_url)} />
-              <div className="wsi-anchor-text">
-                <span className="wsi-badges">
-                  <Badge tone="moss">Offisielt anker</Badge>
-                  {anchor.anchor.kind && <Badge tone={anchor.anchor.kind === 'concept_art' ? 'dark' : 'neutral'}>{IMAGE_KIND_LABEL[anchor.anchor.kind === 'painted' ? 'official' : anchor.anchor.kind]}</Badge>}
-                </span>
-                {anchor.anchor.painter && <p><strong>Malt av {anchor.anchor.painter}</strong> <span className="small muted">(oppgitt av kilden)</span></p>}
-                {anchor.anchor.description && <p className="small"><span className="eyebrow">Kjennetegn</span><br />{anchor.anchor.description}</p>}
-                {anchor.anchor.why && <p className="small wsi-reason">{anchor.anchor.why}</p>}
-                {anchor.anchor.page_url && <a className="small" href={anchor.anchor.page_url} target="_blank" rel="noreferrer">{anchor.anchor.page_title || anchor.anchor.site} ↗</a>}
+              <div className="wsi-anchor-text" title={anchor.anchor.why ?? undefined}>
+                {anchor.anchor.painter && <p><strong>Malt av {anchor.anchor.painter}</strong></p>}
+                {anchor.anchor.description && <p>{anchor.anchor.description}</p>}
+                {anchor.anchor.page_url && <a className="small" href={anchor.anchor.page_url} target="_blank" rel="noreferrer">{anchor.anchor.site || anchor.anchor.page_title} ↗</a>}
               </div>
             </div>
           ) : (
-            <p className="small ws-note">Agenten fant ikke et offisielt bilde av {s.name}{anchor.anchor.why ? `: ${anchor.anchor.why}` : '.'} Resten av jakten bygger på beskrivelser{anchor.anchor.description ? ` (${anchor.anchor.description})` : ''}.</p>
+            <p className="small muted" title={anchor.anchor.why ?? undefined}>Fant ikke et offisielt bilde.</p>
           )}
         </section>
       )}
@@ -180,19 +169,20 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
       {rest.length > 0 && (
         <section className="wsi-section">
           <div className="wsi-section-head">
-            <h3>Agentens forslag ({rest.length})</h3>
-            <button type="button" className="link small" onClick={() => data.proposals.forEach((p) => cmdRun(() => app.research.rejectProposal(p.id)))}>Forkast forslagene</button>
+            <h3>Forslag</h3>
+            <button type="button" className="link small" onClick={() => data.proposals.forEach((p) => cmdRun(() => app.research.rejectProposal(p.id)))}>Forkast</button>
           </div>
-          {official.length > 0 && <><h4 className="wsi-sub">Offisielle bilder og konseptkunst ({official.length})</h4>{grid(official, true)}</>}
-          {painted.length > 0 && <><h4 className="wsi-sub">Malt av andre ({painted.length})</h4>{grid(painted, true)}</>}
+          {official.length > 0 && painted.length > 0 && <h4 className="wsi-sub">Offisielle og konsept</h4>}
+          {official.length > 0 && grid(official, true)}
+          {official.length > 0 && painted.length > 0 && <h4 className="wsi-sub">Malt av andre</h4>}
+          {painted.length > 0 && grid(painted, true)}
         </section>
       )}
 
       {videos.length > 0 && (
         <section className="wsi-section">
           <div className="wsi-section-head">
-            <h3>Malevideoer ({videos.length})</h3>
-            <span className="small muted">Agenten kan ikke se videoene. Tittel og kanal er hentet fra YouTube; begrunnelsen bygger på tittel og søketreff.</span>
+            <h3 title="Agenten kan ikke se videoene. Tittel og kanal er hentet fra YouTube.">Videoer</h3>
           </div>
           <ul className="wsi-videos">
             {videos.map((v) => (
@@ -206,14 +196,13 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
       {livePages.length > 0 && (
         <section className="wsi-section">
           <div className="wsi-section-head">
-            <h3>{running ? 'Sider agenten leser nå' : 'Sider agenten leste'} ({livePages.length})</h3>
-            <span className="small muted">Bilder rett fra sidene, uten agentens vurdering. Du kan velge med en gang.</span>
+            <h3 title="Bilder rett fra sidene, uten agentens vurdering">{running ? 'Sidene agenten leser' : 'Sidene agenten leste'}</h3>
           </div>
           {livePages.map((p) => (
             <details key={p.url} className="wsi-page" open={livePages.length <= 2}>
               <summary>
                 <strong>{p.title}</strong>
-                <span className="small muted"> · {p.site}{p.language ? ` · ${languageName(p.language)}` : ''} · {p.candidates.length} bilder</span>
+                <span className="small muted"> · {p.candidates.length}</span>
                 <a className="small" href={p.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}> ↗</a>
               </summary>
               {grid(p.candidates, false)}
@@ -225,18 +214,16 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
       {browseUrl && (
         <section className="wsi-section">
           <div className="wsi-section-head">
-            <h3>Fra kilde: {page?.title ?? 'leser …'}</h3>
-            <button type="button" className="link small" onClick={() => setBrowseUrl(null)}>Lukk kilden</button>
+            <h3>{page?.title ?? 'Leser …'}</h3>
+            <button type="button" className="link small" onClick={() => setBrowseUrl(null)}>Lukk</button>
           </div>
-          {busy === 'page' && <p className="small muted">Leser siden …</p>}
           {page && grid(page.candidates, false)}
         </section>
       )}
 
       {!data.suggested.length && !videos.length && !anchor && !livePages.length && !browseUrl && (
         <div className="ws-empty">
-          <p>Ingen kandidater ennå.</p>
-          <p className="small muted">Trykk «Let etter bilder med AI», velg en kilde i kolonnen til høyre, eller last opp et bilde.</p>
+          <p>Ingen bilder å velge mellom ennå.</p>
         </div>
       )}
 
@@ -266,12 +253,10 @@ function VideoCard({ v, saved, proxy, onSave }: { v: VideoRef; saved: boolean; p
         <span className="wsi-play" aria-hidden>▶</span>
       </a>
       <div className="wsi-meta">
-        <strong className="small">{v.title}</strong>
-        {v.channel && <span className="small muted">{v.channel}</span>}
-        {v.why && <span className="small wsi-reason">{v.why}</span>}
+        <a className="wsi-video-title" href={v.url} target="_blank" rel="noreferrer" title={v.why ?? undefined}>{v.title}</a>
         <span className="wsi-video-actions">
-          <a className="small" href={v.url} target="_blank" rel="noreferrer">Se på YouTube ↗</a>
-          {saved ? <Badge tone="moss">Lagret som kilde</Badge> : <button type="button" className="link small" onClick={onSave}>Lagre som kilde</button>}
+          {v.channel && <span className="small muted">{v.channel}</span>}
+          {saved ? <span className="small muted">Lagret</span> : <button type="button" className="link small" onClick={onSave}>Lagre</button>}
         </span>
       </div>
     </li>
@@ -295,26 +280,19 @@ function CandidateCard({ c, reasons, saved, on, cover, onToggle, onCover, proxy 
         {on && <span className="wsi-check" aria-hidden>✓</span>}
       </button>
       <div className="wsi-meta">
-        {reasons && (
-          <span className="wsi-badges">
-            {c.confidence && <Badge tone={c.confidence === 'high' ? 'moss' : c.confidence === 'low' ? 'warn' : 'neutral'}>{CONFIDENCE[c.confidence]}</Badge>}
-            {c.kind && <Badge tone={c.kind === 'concept_art' ? 'dark' : 'neutral'}>{IMAGE_KIND_LABEL[c.kind as ImageKind]}</Badge>}
-          </span>
-        )}
-        {c.caption && <span className="small">{c.caption}</span>}
-        {reasons && c.reason && <span className="small wsi-reason">{c.reason}</span>}
-        {c.original_text && (
-          <details className="wsi-orig">
-            <summary className="small">{reasons ? 'Originaltekst' : 'Tekst rundt bildet'}{c.page_language ? ` (${languageName(c.page_language)})` : ''}</summary>
-            <p className="small muted" lang={c.page_language ?? undefined}>{c.original_text}</p>
-          </details>
-        )}
-        <a className="small muted" href={c.page_url} target="_blank" rel="noreferrer">{c.creator ?? c.site} ↗</a>
-        {!saved && (
-          <label className="wsi-cover">
-            <input type="radio" checked={cover} onChange={onCover} /> Illustrasjon
-          </label>
-        )}
+        {reasons && c.reason
+          ? <span className="small wsi-reason" title={[c.caption, c.original_text].filter(Boolean).join('\n\n')}>
+              {c.confidence && c.confidence !== 'high' && <span className={`wsi-conf ${c.confidence}`}>{CONFIDENCE[c.confidence]}. </span>}{c.reason}
+            </span>
+          : c.caption && <span className="small">{c.caption}</span>}
+        <span className="wsi-card-foot">
+          <a className="small muted" href={c.page_url} target="_blank" rel="noreferrer" title={c.page_title}>{c.creator ?? c.site} ↗</a>
+          {on && !saved && (
+            <label className="wsi-cover">
+              <input type="radio" checked={cover} onChange={onCover} /> Illustrasjon
+            </label>
+          )}
+        </span>
       </div>
     </div>
   );

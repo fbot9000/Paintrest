@@ -172,8 +172,9 @@ function References({ view, index, onIndex, onZoom }:
           </button>
           <p className="pm-ref-caption">
             <strong>{cur.label}</strong>
-            <span className="small muted">{cur.source.title}{cur.source.creator ? ` · ${cur.source.creator}` : ''}</span>
-            {cur.source.url && <a className="small pm-ref-link" href={cur.source.url} target="_blank" rel="noreferrer">Åpne kilden ↗</a>}
+            {cur.source.url
+              ? <a className="small pm-ref-link" href={cur.source.url} target="_blank" rel="noreferrer" title={cur.source.title}>{cur.source.creator ?? cur.source.title} ↗</a>
+              : <span className="small muted">{cur.source.creator ?? cur.source.title}</span>}
           </p>
           {refs.length > 1 && (
             <div className="pm-thumbs">
@@ -188,7 +189,6 @@ function References({ view, index, onIndex, onZoom }:
       ) : (
         <div className="pm-ref-empty">
           <p>Ingen referansebilder.</p>
-          <p className="small muted">Legg til et bilde under «Rediger» på miniatyren.</p>
         </div>
       )}
     </aside>

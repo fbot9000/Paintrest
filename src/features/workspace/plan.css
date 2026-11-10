@@ -123,3 +123,17 @@
 .wsp-help { margin-top: auto; padding-top: 12px; }
 .wsp-help summary { cursor: pointer; color: var(--muted); }
 .wsp-help p { margin-top: 6px; max-width: 80ch; }
+
+/* Mindre småtekst */
+.pd-plan-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.pd-summary-row { display: flex; gap: 10px; align-items: flex-start; }
+.pd-hover { opacity: 0; transition: opacity .1s; flex-shrink: 0; }
+.pd-summary-row:hover .pd-hover, .pd-hover:focus { opacity: 1; }
+@media (hover: none) { .pd-hover { opacity: 1; } }
+button.pd-palette { border: 0; background: none; padding: 2px 0; cursor: pointer; }
+.pd-palette { display: flex; gap: 3px; flex-wrap: wrap; align-items: center; }
+.pd-palette > span { display: inline-flex; }
+.pd-paint { gap: 5px; padding: 1px 8px 1px 5px; font-size: 13px; font-weight: 500; }
+.pd-flag { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: var(--warn); color: #fff; font-size: 10px; font-weight: 700; }
+.pd-step { padding-right: 60px; }
+.pd-status .btn { min-height: 36px; padding-inline: 12px; }
