@@ -70,6 +70,17 @@ Trykk på bildet på et miniatyrkort. Da åpnes «Bilder for …»:
 
 Kryss av for bildene du vil beholde, velg ett som «Illustrasjon» og trykk «Lagre». Bildene lastes ned og lagres med kilde. En kilde eller et bilde som er lagret fra før, gjenbrukes.
 
+## Maleplan og palett per miniatyr
+
+Når bildene er på plass, trykker du «Neste: maleplan →» i bildevisningen, eller «✦ Lag maleplan og palett med AI» på miniatyrkortet.
+
+1. Velg opptil 4 av miniatyrens bilder. Agenten ser på dem.
+2. «Lag maleplan med AI»: agenten analyserer fargesoner og uttrykk og leter etter maleguider. Kildene du allerede har funnet for spillet, leses først. Den foreslår arbeidsmåte, felles operasjoner og deler med steg og eksakte malinger, og en palett for miniatyren. Malinger du eier, foretrekkes.
+3. Rediger fritt: arbeidsmåte, delnavn og rekkefølge, instruksjoner, malinger og roller. Du kan legge til eller fjerne steg, deler og palettrader. Malinger som ikke finnes i katalogen, kobler du til et produkt eller oppretter som ubekreftet, også alle på én gang.
+4. «Godkjenn maleplanen» skriver planen (eller en ny versjon av den) og paletten. Painting Mode viser arbeidsmåte og palett øverst.
+
+Alle sider agenten leser, lagres automatisk som kilder for spillet («Funnet av agenten»). Da slipper agenten å finne dem på nytt, og du kan hente bilder fra dem under «Fra lagrede kilder».
+
 ## Dette er med
 
 | Bit | Innhold |

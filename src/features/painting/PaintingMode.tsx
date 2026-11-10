@@ -222,6 +222,29 @@ function Overview({ view, onOpen }: { view: PaintingView; onOpen: (id: Id) => vo
   };
   return (
     <div className="pm-overview">
+      {view.plan?.summary && (
+        <section className="pm-summary">
+          <h2 className="eyebrow">Arbeidsmåte</h2>
+          <p>{view.plan.summary}</p>
+        </section>
+      )}
+      {view.palette.length > 0 && (
+        <section>
+          <h2 className="eyebrow">Palett</h2>
+          <ul className="pm-palette">
+            {view.palette.map((p) => (
+              <li key={p.entry.id} title={[p.entry.note, p.entry.role_label].filter(Boolean).join(' · ')}>
+                <Swatch hex={p.product.swatch_hex} size={26} />
+                <span className="pm-pal-text">
+                  <strong>{p.product.name}</strong>
+                  <span className="small muted">{[p.entry.note, p.entry.role_label].filter(Boolean).join(' · ') || (p.project_wide ? 'Hele prosjektet' : '')}</span>
+                </span>
+                <OwnershipFlag ownership={p.ownership} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {ops.length > 0 && (
         <section>
           <h2 className="eyebrow">Felles operasjoner</h2>

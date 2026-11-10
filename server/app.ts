@@ -10,7 +10,7 @@ import { hostedSearchOf } from './provider.ts';
 import type { ResponsesProvider } from './provider.ts';
 import { runResearch } from './research-agent.ts';
 import { lookAtImages } from './vision.ts';
-import type { ImageFocus, ResearchEvent, ResearchInput } from './research-agent.ts';
+import type { ImageFocus, PlanFocus, ResearchEvent, ResearchInput } from './research-agent.ts';
 import { SEARCH_PROVIDERS } from './search.ts';
 import type { SearchProviderId, WebSearch } from './search.ts';
 
@@ -173,9 +173,22 @@ async function streamResearch(req: IncomingMessage, res: ServerResponse, d: AppD
   res.end();
 }
 
-function parseFocus(v: unknown): ImageFocus | null {
+const DATA_IMAGE = /^data:image\/(jpeg|png|webp);base64,/;
+
+function parseFocus(v: unknown): ImageFocus | PlanFocus | null {
   if (!v || typeof v !== 'object') return null;
   const f = v as Record<string, unknown>;
+  if (f.kind === 'plan') {
+    return {
+      kind: 'plan',
+      subject_ref: str(f.subject_ref).slice(0, 12),
+      subject_name: str(f.subject_name).slice(0, 120),
+      game: str(f.game).slice(0, 160),
+      reference_images: (Array.isArray(f.reference_images) ? f.reference_images : [])
+        .filter((x): x is string => typeof x === 'string' && DATA_IMAGE.test(x) && x.length < 700_000).slice(0, 4),
+      revision: f.revision === true,
+    };
+  }
   if (f.kind !== 'images') return null;
   const ref = typeof f.reference_image === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(f.reference_image) && f.reference_image.length < 1_500_000
     ? f.reference_image : null;

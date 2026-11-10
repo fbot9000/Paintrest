@@ -126,3 +126,8 @@
   .pm-plan { padding: 16px; }
 }
 .pm-ref-link { color: var(--fore); font-weight: 500; }
+.pm-summary p { font-size: 16px; line-height: 1.5; max-width: 70ch; }
+.pm-palette { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.pm-palette li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-sm); }
+.pm-pal-text { display: grid; min-width: 0; }
+.pm-pal-text strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

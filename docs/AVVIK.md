@@ -27,6 +27,13 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 21. **Eldre åpne oppgaver får nye resultattyper.** Skjema §7 sier at systemet setter resultattypene når oppgaven opprettes. Når Paintrest får en ny type, legger systemet den til på åpne prosjektoppgaver i det øyeblikket brukeren starter en runde. Det skrives en `change_record` med `initiated_by = user`. Agenten kan ikke gjøre dette selv.
 22. **Kildelag fra bildejakt.** Når du lagrer bilder fra en bildejakt, får siden de kom fra to `source_layer`-rader: `original` med et kort utdrag på kildens språk, og `translation` (nb) med agentens sammendrag. Oversettelsen er laget av modellen og er ikke kontrollert. `source_layer` kom med migreringen til v3.
 23. **Bildejakt er et eget oppdrag.** «Let med AI» for en miniatyr har egen instruks, høyst 24 steg i stedet for 12, og handlingen «look». Kandidatene får sikkerhet (`confidence`), begrunnelse på norsk (`reason`) og originaltekst. Feltene ligger i forslagets nyttelast og finnes ikke i skjemaet.
+24. **Kilder agenten leser, lagres automatisk som utkast.** Hver side agenten åpner, lagres som `source` med `retention = draft` og `created_by_task_id`, sammen med agentens sammendrag og originalutdrag som kildelag. Utkastene vises som «Funnet av agenten» for alle miniatyrene i spillet, og agenten får dem i `known_sources`. De lenkes ikke kanonisk til noe før du lagrer bilder eller godkjenner et forslag som bruker dem. Da blir de `kept`. Dette følger skjema §6.
+25. **Maleplan med palett.** Maleplanoppdraget («Lag maleplan og palett med AI») sender de valgte bildene av miniatyren som `input_image` sammen med forespørselen. Avviser modellen bilder, fortsetter oppdraget uten dem. Godkjenning skriver i én transaksjon:
+    - planversjonen, med `paint_plan_version.summary` (ikke i skjemaet)
+    - `palette_entry` med `scope_kind = subjects` for miniatyren, der delen står i `note` og rollen i `role_label`, og `content_revision` økes
+    - lenker med `use = method` til kildene som ble brukt
+    - farge (`swatch_hex`) fra agenten på malinger som opprettes som ubekreftet. Fargen er omtrentlig.
+26. **Du kan redigere planforslaget før godkjenning** (`editPlanProposal`): arbeidsmåte, deler, steg, malinger og roller, og palett. Miniatyren forslaget gjelder, kan ikke byttes.
 
 ## Antakelser
 

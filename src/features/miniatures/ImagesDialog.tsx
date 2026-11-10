@@ -16,6 +16,7 @@ import { runAgentTurn } from '../../data/agent-runner';
 import { IMAGE_KIND_LABEL } from '../../data/images-tx';
 import { Badge, Button, Dialog, ErrorNote, FileImage, ImagePicker, Segmented } from '../../ui/components';
 import { LiveSteps, useAgentActions } from '../agent/AgentPanel';
+import { imageDataUrl } from '../../ui/imageData';
 import './images.css';
 
 type Tab = 'ai' | 'sources' | 'upload';
@@ -23,29 +24,6 @@ type Tab = 'ai' | 'sources' | 'upload';
 interface Candidate extends ReferenceImage {
   /** Set when the candidate comes from an agent proposal. */
   proposal_id: Id | null;
-}
-
-/**
- * The miniature's current illustration, scaled to at most 512 px, as a JPEG data URL.
- * The agent compares candidates against it. Vector placeholders are skipped.
- */
-async function referenceImage(app: ReturnType<typeof useApp>, file_id: Id | null): Promise<string | null> {
-  if (!file_id) return null;
-  const f = app.store.getTables().stored_file[file_id];
-  if (!f || !/^image\/(jpeg|png|webp|gif)/.test(f.media_type)) return null;
-  try {
-    const url = await app.cmd.getFileUrl(file_id);
-    if (!url) return null;
-    const bmp = await createImageBitmap(await (await fetch(url)).blob());
-    const scale = Math.min(1, 512 / Math.max(bmp.width, bmp.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(bmp.width * scale);
-    canvas.height = Math.round(bmp.height * scale);
-    canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.85);
-  } catch {
-    return null;
-  }
 }
 
 function view(t: Tables, subject_id: Id, project_id: Id) {
@@ -64,7 +42,7 @@ function view(t: Tables, subject_id: Id, project_id: Id) {
   return { s, game, saved, savedUrls, proposals, fromAgent, read, sources: knownSources(t, project_id) };
 }
 
-export function ImagesDialog({ subjectId, projectId, onClose }: { subjectId: Id; projectId: Id; onClose: () => void }) {
+export function ImagesDialog({ subjectId, projectId, onClose, onNext }: { subjectId: Id; projectId: Id; onClose: () => void; onNext?: () => void }) {
   const app = useApp();
   const { run, error, clearError } = useCommand();
   const data = useView((t) => view(t, subjectId, projectId), [subjectId, projectId]);
@@ -110,7 +88,7 @@ export function ImagesDialog({ subjectId, projectId, onClose }: { subjectId: Id;
       const ref = Object.entries(refs).find(([, id]) => id === s.id)?.[0] ?? s.name;
       const prompt = `Finn konseptillustrasjon og bilder av miniatyren «${s.name}» fra spillet «${data.game}». `
         + 'Gjør grundig research på flere språk og foreslå kandidater med begrunnelse; jeg vurderer bildene selv.';
-      const reference = await referenceImage(app, data.saved.find((r) => r.cover)?.file_id ?? data.saved[0]?.file_id ?? null);
+      const reference = await imageDataUrl(app.store.getTables(), app.cmd, data.saved.find((r) => r.cover)?.file_id ?? data.saved[0]?.file_id ?? null);
       await runAgentTurn({ store: app.store, research: app.research, agent: app.agent, ai: app.ai }, task, prompt,
         (e) => setLive((cur) => [...cur, e]), ac.signal,
         { kind: 'images', subject_ref: ref, subject_name: s.name, game: data.game, reference_image: reference });
@@ -179,6 +157,7 @@ export function ImagesDialog({ subjectId, projectId, onClose }: { subjectId: Id;
           <Button variant="ghost" className="push-left" onClick={discardProposals} disabled={!!busy}>Forkast AI-forslagene</Button>
         )}
         <Button onClick={onClose}>Lukk</Button>
+        {onNext && data.saved.length > 0 && selected.size === 0 && <Button onClick={onNext}>Neste: maleplan →</Button>}
         <Button variant="primary" onClick={save} disabled={!!busy || selected.size === 0}>
           {busy === 'save' ? 'Henter og lagrer …' : `Lagre ${selected.size || ''} ${selected.size === 1 ? 'bilde' : 'bilder'}`.replace('  ', ' ')}
         </Button>
@@ -247,14 +226,18 @@ export function ImagesDialog({ subjectId, projectId, onClose }: { subjectId: Id;
       {tab === 'sources' && (
         <div className="img-sources">
           {data.sources.length === 0 ? (
-            <p className="small muted">Ingen kilder er lagret for dette spillet ennå. Når du lagrer bilder fra en side, dukker siden opp her for de andre miniatyrene.</p>
+            <p className="small muted">Ingen kilder for dette spillet ennå. Sider agenten leser, og sider du lagrer bilder fra, dukker opp her for alle miniatyrene i spillet.</p>
           ) : (
             <ul>
               {data.sources.map((k) => (
                 <li key={k.source.id}>
                   <button type="button" className={page?.url === k.source.url ? 'on' : ''} onClick={() => openSource(k.source.url!)} disabled={!!busy}>
-                    <strong>{k.source.title}</strong>
-                    <span className="small muted">{k.source.creator ?? ''} · {k.asset_count} lagret</span>
+                    <span className="img-src-head">
+                      <strong>{k.source.title}</strong>
+                      <Badge tone={k.status === 'kept' ? 'moss' : 'neutral'}>{k.status === 'kept' ? `Lagret · ${k.asset_count} bilder` : 'Funnet av agenten'}</Badge>
+                    </span>
+                    <span className="small muted">{k.source.creator ?? ''}{k.source.language ? ` · ${languageName(k.source.language)}` : ''}</span>
+                    {k.summary && <span className="small">{k.summary}</span>}
                   </button>
                 </li>
               ))}

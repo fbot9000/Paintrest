@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildAgentContext, normaliseProposal, productKey } from '../domain/agent';
+import { buildAgentContext, knownSources, normaliseProposal, productKey } from '../domain/agent';
 import type { NormalisedProposal, PaintPlanPayload } from '../domain/agent';
 import { memoryPersistence } from './persistence';
 import { createAgentCommands, createResearchCommands } from './research-commands';
 import { createLocalCommands } from './local-commands';
 import { buildSampleData } from './seed';
 import { Store, migrate } from './store';
+import { paintingView } from '../domain/views';
 
 async function setup() {
   const p = memoryPersistence();
@@ -179,6 +180,70 @@ describe('bildejakt: kildetekst og oversettelse', () => {
       ['original', 'ko', '발로르 도색 완료'], ['translation', 'nb', 'Maleren viser ferdig malt Balor.'],
     ]);
     expect(Object.values(t.source).some((x) => x.url === 'https://other.example/x')).toBe(false);
+  });
+});
+
+describe('maleplan med palett', () => {
+  it('godkjenning gir planversjon med sammendrag, palett for miniatyren, farge på nye malinger og metodekilde', async () => {
+    const { store, agent, research, task, subject, project } = await setup();
+    const s = subject('The Ancient One');
+    const w = agent.writeProposal(task, {
+      result_type: 'paint_plan', update_of: null, evidence: 'synthesized', uncertainty: [],
+      payload: {
+        subject_id: s.id, note: null, summary: 'Svart grunning, slapchop og grønne glasurer.',
+        elements: [{ kind: 'part', name: 'Hud', steps: [
+          { instruction: 'Base', materials: [{ product: { manufacturer: 'Citadel', range: null, name: 'Caliban Green' }, role: 'base', role_label: null }], mix: null },
+          { instruction: 'Glasur', materials: [{ product: { manufacturer: 'Vallejo', range: 'Xpress', name: 'Lizard Green', hex: '#4a7a2a' }, role: 'glaze', role_label: null }], mix: null },
+        ] }],
+        palette: [
+          { product: { manufacturer: 'Citadel', range: null, name: 'Caliban Green' }, role_label: 'hud – base', part: 'Hud' },
+          { product: { manufacturer: 'Vallejo', range: 'Xpress', name: 'Lizard Green', hex: '#4a7a2a' }, role_label: 'hud – glasur', part: 'Hud' },
+        ],
+        sources: [{ url: 'https://guide.example/x', title: 'Guide', author: null, opened: true }],
+        sources_read: [{ url: 'https://guide.example/x', title: 'Guide', site: 'guide.example', language: 'ja', summary: 'Guiden bruker grønne glasurer.', original_excerpt: '緑のグレーズ' }],
+      },
+    }, 'uib', 'm');
+    if (!w.ok) throw new Error(w.reason);
+    const key = productKey({ manufacturer: 'Vallejo', range: 'Xpress', name: 'Lizard Green' });
+    await research.approveProposal(w.id, { product_choices: { [key]: 'create' } });
+    const t = store.getTables();
+    const pv = t.paint_plan_version[subject('The Ancient One').current_plan_version_id!]!;
+    expect(pv.summary).toBe('Svart grunning, slapchop og grønne glasurer.');
+    const pal = paintingView(t, s.id)!.palette;
+    expect(pal.filter((x) => !x.project_wide).map((x) => [x.product.name, x.entry.role_label])).toEqual([['Caliban Green', 'hud – base'], ['Lizard Green', 'hud – glasur']]);
+    expect(Object.values(t.paint_product).find((x) => x.name === 'Lizard Green')!.swatch_hex).toBe('#4a7a2a');
+    expect(Object.values(t.source_link).some((l) => l.use === 'method' && l.target_id === s.id)).toBe(true);
+    expect(Object.values(t.source_layer).some((l) => l.layer === 'translation' && l.body === 'Guiden bruker grønne glasurer.')).toBe(true);
+    expect(t.project[project.id]!.content_revision).toBe(1);
+  });
+
+  it('brukeren kan redigere planforslaget før godkjenning', async () => {
+    const { store, agent, research, task, subject } = await setup();
+    const w = agent.writeProposal(task, plan(subject('The Ancient One').id), 'uib', 'm');
+    if (!w.ok) throw new Error(w.reason);
+    const p = store.getTables().research_proposal[w.id]!.payload as PaintPlanPayload;
+    await research.editPlanProposal(w.id, { ...p, elements: [{ ...p.elements[0]!, name: 'Kropp og hud', steps: [{ ...p.elements[0]!.steps[0]!, instruction: 'Tynn base i to strøk' }, { instruction: '', materials: [], mix: null }] }] });
+    const after = store.getTables().research_proposal[w.id]!.payload as PaintPlanPayload;
+    expect(after.elements[0]!.name).toBe('Kropp og hud');
+    expect(after.elements[0]!.steps).toHaveLength(1);
+    await expect(research.editPlanProposal(w.id, { ...after, subject_id: subject('Merlin').id })).rejects.toThrow(/byttes/);
+  });
+});
+
+describe('kilder agenten har lest', () => {
+  it('lagres som utkast for spillet, med sammendrag, og blir kjente kilder', async () => {
+    const { store, agent, task, project } = await setup();
+    agent.recordSources(task,
+      [{ url: 'https://blog.example/a', title: 'A', site: 'blog.example', author: null, language: 'ko', image_count: 5 }],
+      [{ url: 'https://blog.example/a', title: 'A', site: 'blog.example', language: 'ko', summary: 'Viser fomorianerne.', original_excerpt: '포모리안' }]);
+    agent.recordSources(task, [{ url: 'https://blog.example/a', title: 'A', site: 'blog.example', author: null, language: 'ko', image_count: 5 }], []);
+    const t = store.getTables();
+    const drafts = Object.values(t.source).filter((x) => x.url === 'https://blog.example/a');
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]).toMatchObject({ retention: 'draft', created_by_task_id: task, language: 'ko' });
+    const known = knownSources(t, project.id).find((k) => k.source.url === 'https://blog.example/a')!;
+    expect(known).toMatchObject({ status: 'found', summary: 'Viser fomorianerne.' });
+    expect(JSON.stringify(buildAgentContext(t, task).data)).toContain('"status":"found"');
   });
 });
 

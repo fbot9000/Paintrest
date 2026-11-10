@@ -13,7 +13,7 @@
 import { UserError } from './credential-store.ts';
 import type { PageResult } from './fetch-page.ts';
 import { HostedToolError, VisionUnsupportedError } from './provider.ts';
-import type { HostedSearch, ResponsesProvider } from './provider.ts';
+import type { HostedSearch, ResponsesMessage, ResponsesProvider } from './provider.ts';
 import type { SearchHit, WebSearch } from './search.ts';
 
 export type ResearchEvent =
@@ -25,8 +25,18 @@ export type ResearchEvent =
   | { type: 'look'; count: number; why: string | null }
   | { type: 'look_done'; summary: string }
   | { type: 'tool_error'; action: string; target: string; error: string }
-  | { type: 'final'; message: string; proposals: unknown[]; model: string; warnings: string[]; trace: TraceStep[] }
+  | { type: 'final'; message: string; proposals: unknown[]; model: string; warnings: string[]; trace: TraceStep[]; pages: PageSeen[] }
   | { type: 'error'; error: string };
+
+/** A page the agent opened in this turn; the client stores it as a draft source. */
+export interface PageSeen {
+  url: string;
+  title: string;
+  site: string;
+  author: string | null;
+  language: string | null;
+  image_count: number;
+}
 
 export interface TraceStep {
   action: 'search' | 'open' | 'look';
@@ -40,7 +50,19 @@ export interface ResearchInput {
   result_types: string[];
   model?: string;
   /** Image hunt for one miniature: a research strategy of its own, more steps and the look tool. */
-  focus?: ImageFocus | null;
+  focus?: ImageFocus | PlanFocus | null;
+}
+
+/** Paint plan for one miniature, built from the pictures the user chose. */
+export interface PlanFocus {
+  kind: 'plan';
+  subject_ref: string;
+  subject_name: string;
+  game: string;
+  /** Up to 4 pictures of the miniature (data URLs), shown to the model with the request. */
+  reference_images: string[];
+  /** True when the miniature already has an approved plan that is opened for revision. */
+  revision: boolean;
 }
 
 export interface ImageFocus {
@@ -68,11 +90,14 @@ export type WebMode = 'hosted' | 'search' | 'none';
 
 export const MAX_TOOL_STEPS = 12;
 export const MAX_IMAGE_STEPS = 24;
+export const MAX_PLAN_STEPS = 16;
 const MAX_LOOK = 8;
 const MAX_MESSAGES = 30;
 
-export function researchInstructions(context: unknown, resultTypes: string[], mode: WebMode, focus: ImageFocus | null = null, vision = false): string {
-  const maxSteps = focus ? MAX_IMAGE_STEPS : MAX_TOOL_STEPS;
+export function researchInstructions(context: unknown, resultTypes: string[], mode: WebMode, anyFocus: ImageFocus | PlanFocus | null = null, vision = false, imagesAttached = false): string {
+  const focus = anyFocus?.kind === 'images' ? anyFocus : null;
+  const plan = anyFocus?.kind === 'plan' ? anyFocus : null;
+  const maxSteps = focus ? MAX_IMAGE_STEPS : plan ? MAX_PLAN_STEPS : MAX_TOOL_STEPS;
   const sourceRules = `Kildekrav (viktig):
 - Påstander om hvilke miniatyrer og hvor mange som finnes, skal bygge på kilder. Oppgi dem i "sources" med eksakt URL.
 - Bilder du foreslår, må være fra bildelisten på en side du har åpnet med "open". Bruk eksakt bilde-URL og sidens URL. Ikke gjett eller lag bilde-URL-er.
@@ -118,11 +143,26 @@ For hvert bilde i "images" i reference_selection, legg til:
 og legg til i payload:
   "sources_read": [{"url": "https://…", "language": "ko", "summary": "norsk sammendrag av hva siden viser og sier om figuren", "original_excerpt": "kort utdrag på originalspråket"}]
 Lag ETT reference_selection-forslag for ${focus.subject_ref}. Lag ikke andre forslagstyper i dette oppdraget.` : '';
+  const planTask = plan ? `
+
+OPPDRAG: MALEPLAN for miniatyren «${plan.subject_name}» (${plan.subject_ref}) fra spillet «${plan.game}».
+${imagesAttached ? `Brukerens melding har ${plan.reference_images.length} bilde(r) av miniatyren som brukeren har valgt som referanse. Planen skal gjenskape uttrykket i dem.` : 'Du har ingen bilder av miniatyren; bygg på kilder og beskrivelser.'}
+Arbeid slik:
+1. Analyser uttrykket: hvilke deler og fargesoner figuren har (for eksempel kappe, hud, rustning, våpen, base), hvilke farger, hvor mørk og kontrastrik den er, og eventuelle effekter (glød, OSL, rust).
+2. Let etter maleguider for denne figuren eller lignende uttrykk${mode !== 'none' ? ' (åpne known_sources først; koreanske og japanske malere oppgir ofte malingene sine, og agenten må oversette)' : ''}. Bruk det kildene faktisk sier om malinger og metode.
+3. Velg en arbeidsmåte som passer (for eksempel svart grunning med zenithal og slapchop, kontrastmaling, eller lagvis med glasur) og begrunn kort.
+4. Lag ETT paint_plan-forslag for ${plan.subject_ref}${plan.revision ? ' (ny versjon av den åpnede planen)' : ''}: felles operasjoner først (grunning, zenithal, avslutning), så én del per fargesone. Hvert steg har en konkret instruks og eksakte malinger med produsent, serie og navn, og rolle. Foretrekk malinger med ownership "owns". Mangler brukeren en maling, foreslå den du mener er best, og nevn et eiet alternativ i "uncertainty".
+5. Legg i payload:
+   "summary": norsk sammendrag av arbeidsmåte og fargevalg (3–6 setninger),
+   "palette": [{"product": {"manufacturer": "…", "range": "…", "name": "…", "hex": "#rrggbb"}, "role_label": "kappe – skygge", "part": "Kappe"}] – én rad per maling planen bruker, med omtrentlig farge,
+   "sources" og "sources_read" (med norsk sammendrag) for kildene du brukte.
+   Gi også "hex" (omtrentlig farge) på hvert "product" i stegene.
+Lag ikke andre forslagstyper i dette oppdraget.` : '';
   return `Du er researchagenten i Paintrest, et personlig arbeidsverktøy for miniatyrmaling.
 Du hjelper brukeren å kartlegge miniatyrer i brettspillprosjekter, finne referansebilder og lage maleplaner med eksakte malingsprodukter.
 Svar alltid på norsk bokmål.
 
-${web}${look}${hunt}
+${web}${look}${hunt}${planTask}
 
 Regler for forslag:
 - Du foreslår. Brukeren godkjenner. Du kan ikke endre godkjente data.
@@ -147,7 +187,7 @@ Forslagsformer i "proposals":
      "materials": [{"product": {"manufacturer": "Citadel", "range": "Base", "name": "Caliban Green"}, "role": "base|shade|layer|highlight|wash|glaze|mix|other", "role_label": null}],
      "mix": null}]}]}}
 For reference_selection: velg bilder som viser akkurat denne miniatyren eller figuren tydelig. "kind" er concept_art (konseptillustrasjon eller kunst av figuren), official (utgiverens bilde av miniatyren), painted (malt av en hobbymaler) eller other. Skriv i caption hva bildet viser og hvem som laget eller malte det, når kilden sier det. Ikke ta med bilder av andre figurer, logoer eller esker.
-"known_sources" i konteksten er sider brukeren allerede har lagret for dette spillet. Åpne dem først når du leter etter bilder; de har ofte flere bilder enn de som er lagret.
+"known_sources" i konteksten er sider som allerede er funnet for dette spillet: "kept" er lagret av brukeren, "found" er lest av agenten tidligere (med norsk sammendrag når det finnes). Ikke søk etter dem på nytt; åpne dem direkte når du trenger tekst eller bilder derfra, og bruk søk til å finne NYE sider.
 
 Kontekst (det du kan lese; endres bare av brukeren):
 ${JSON.stringify(context)}`;
@@ -192,9 +232,20 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
 
   let mode: WebMode = deps.hostedSearch ? 'hosted' : deps.search?.configured() ? 'search' : 'none';
   const focus = input.focus?.kind === 'images' ? input.focus : null;
+  const plan = input.focus?.kind === 'plan' ? input.focus : null;
   let vision = !!deps.lookAtImages;
-  const maxSteps = focus ? MAX_IMAGE_STEPS : MAX_TOOL_STEPS;
-  const build = () => researchInstructions(input.context, input.result_types, mode, focus, vision);
+  // The plan request carries the chosen pictures as input_image; dropped if the model refuses images.
+  let imagesAttached = !!plan?.reference_images.length;
+  const maxSteps = focus ? MAX_IMAGE_STEPS : plan ? MAX_PLAN_STEPS : MAX_TOOL_STEPS;
+  const build = () => researchInstructions(input.context, input.result_types, mode, input.focus ?? null, vision, imagesAttached);
+  const withImages = (): ResponsesMessage[] => {
+    if (!imagesAttached || !plan) return history;
+    const last = history.at(-1)!;
+    return [...history.slice(0, -1), {
+      role: 'user',
+      content: [{ type: 'input_text', text: last.content }, ...plan.reference_images.slice(0, 4).map((u) => ({ type: 'input_image' as const, image_url: u }))],
+    }];
+  };
   let instructions = build();
   const work: { role: 'user' | 'assistant'; content: string }[] = [];
   const opened = new Map<string, PageResult>();
@@ -204,16 +255,25 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   let nudged = false;
   let model = input.model ?? '';
 
-  emit({ type: 'status', text: focus ? `Bildejakt for ${focus.subject_name}` : mode === 'hosted' ? 'Agenten søker via UiB' : mode === 'search' ? 'Agenten planlegger søket' : 'Agenten svarer uten nettilgang' });
+  emit({ type: 'status', text: plan ? `Maleplan for ${plan.subject_name}${imagesAttached ? ` · ${plan.reference_images.length} bilder` : ''}` : focus ? `Bildejakt for ${focus.subject_name}` : mode === 'hosted' ? 'Agenten søker via UiB' : mode === 'search' ? 'Agenten planlegger søket' : 'Agenten svarer uten nettilgang' });
 
   for (let round = 0; round < maxSteps + 4; round++) {
     if (deps.signal?.aborted) throw new UserError('Avbrutt');
     let out;
     try {
-      out = await deps.provider.respond([...history, ...work], {
+      out = await deps.provider.respond([...withImages(), ...work], {
         model: input.model, instructions, timeoutMs: 180_000, hostedSearch: mode === 'hosted' ? deps.hostedSearch : null,
       });
     } catch (e) {
+      if (imagesAttached && e instanceof UserError && !(e instanceof HostedToolError) && /feil (400|415|422)/i.test(e.message)) {
+        imagesAttached = false;
+        vision = false;
+        instructions = build();
+        emit({ type: 'tool_error', action: 'look', target: 'bildene av miniatyren', error: `Modellen godtok ikke bilder (${e.message}). Fortsetter uten bildene.` });
+        trace.push({ action: 'look', target: 'bildene av miniatyren', result: 'Ikke støttet, fortsatte uten bilder' });
+        round--;
+        continue;
+      }
       if (!(e instanceof HostedToolError) || mode !== 'hosted') throw e;
       // UiB rejected the built-in search: fall back to Paintrest's search, or none.
       mode = deps.search?.configured() ? 'search' : 'none';
@@ -248,12 +308,12 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       const warning = isRefusal(out.text)
         ? `Modellen ${model} avslo forespørselen og svarte: «${out.text.trim().slice(0, 160)}».${where} Prøv igjen, omformuler, eller velg en annen standardmodell under AI og nettsøk.`
         : `Svaret var ikke i forventet format, så eventuelle forslag ble ikke lest inn.${where}`;
-      emit(finalEvent(isRefusal(out.text) ? 'Agenten fikk ikke svar fra modellen denne gangen.' : out.text.trim(), [], model, [warning], trace));
+      emit(finalEvent(isRefusal(out.text) ? 'Agenten fikk ikke svar fra modellen denne gangen.' : out.text.trim(), [], model, [warning], trace, opened));
       return;
     }
     if (action.action === 'final') {
       const checked = verifyProposals(action.proposals, opened, searched);
-      emit(finalEvent(action.message, checked.proposals, model, checked.warnings, trace));
+      emit(finalEvent(action.message, checked.proposals, model, checked.warnings, trace, opened));
       return;
     }
     const allowed = action.action === 'look'
@@ -281,7 +341,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       }
       emit({ type: 'look', count: urls.length, why: action.why });
       try {
-        const verdict = await deps.lookAtImages!(urls, action.question || `Viser bildene ${focus?.subject_name ?? 'figuren'}?`, focus?.reference_image ?? null);
+        const verdict = await deps.lookAtImages!(urls, action.question || `Viser bildene ${focus?.subject_name ?? 'figuren'}?`, focus?.reference_image ?? plan?.reference_images[0] ?? null);
         emit({ type: 'look_done', summary: verdict.slice(0, 300) });
         trace.push({ action: 'look', target: `${urls.length} bilder`, result: verdict.slice(0, 160) });
         work.push({ role: 'user', content: `Vurdering av bildene:\n${verdict}` });
@@ -329,7 +389,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       }
     }
   }
-  emit(finalEvent('Agenten ble ikke ferdig innen grensen for antall steg.', [], model, [], trace));
+  emit(finalEvent('Agenten ble ikke ferdig innen grensen for antall steg.', [], model, [], trace, opened));
 }
 
 function formatPage(p: PageResult): string {
@@ -389,6 +449,15 @@ export function verifyProposals(proposals: unknown[], opened: Map<string, PageRe
       p.evidence = 'synthesized';
     }
 
+    if (p.type === 'paint_plan' && Array.isArray(payload.sources_read)) {
+      payload.sources_read = payload.sources_read.flatMap((x: Record<string, unknown>) => {
+        const page = typeof x?.url === 'string' ? opened.get(normUrl(x.url)) : undefined;
+        if (!page) return [];
+        return [{ url: page.url, title: page.title, site: page.site, language: typeof x.language === 'string' ? x.language.slice(0, 12) : page.language,
+          summary: typeof x.summary === 'string' ? x.summary.slice(0, 800) : null, original_excerpt: typeof x.original_excerpt === 'string' ? x.original_excerpt.slice(0, 600) : null }];
+      });
+    }
+
     if (p.type === 'reference_selection') {
       const imgs = Array.isArray(payload.images) ? payload.images : [];
       const kept = imgs.flatMap((i: Record<string, unknown>) => {
@@ -432,6 +501,10 @@ export function verifyProposals(proposals: unknown[], opened: Map<string, PageRe
   return { proposals: out, warnings };
 }
 
-function finalEvent(message: string, proposals: unknown[], model: string, warnings: string[], trace: TraceStep[]): ResearchEvent {
-  return { type: 'final', message: message || 'Agenten ga et tomt svar.', proposals, model, warnings, trace };
+function finalEvent(message: string, proposals: unknown[], model: string, warnings: string[], trace: TraceStep[], opened: Map<string, PageResult>): ResearchEvent {
+  const pages = new Map<string, PageSeen>();
+  for (const p of opened.values()) {
+    pages.set(p.url, { url: p.url, title: p.title, site: p.site, author: p.author, language: p.language, image_count: p.images.length });
+  }
+  return { type: 'final', message: message || 'Agenten ga et tomt svar.', proposals, model, warnings, trace, pages: [...pages.values()] };
 }

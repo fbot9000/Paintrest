@@ -39,6 +39,7 @@
 
 .dialog { border: 0; padding: 0; border-radius: var(--r-lg); background: var(--card); color: var(--ink); width: min(520px, calc(100vw - 32px)); box-shadow: var(--shadow); }
 .dialog-wide { width: min(760px, calc(100vw - 32px)); }
+.dialog-xwide { width: min(1180px, calc(100vw - 32px)); }
 .dialog::backdrop { background: rgb(20 39 34 / .45); }
 .dialog-body { padding: 24px; display: grid; gap: 18px; }
 .dialog-content { display: grid; gap: 16px; }

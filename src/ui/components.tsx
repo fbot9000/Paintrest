@@ -34,8 +34,8 @@ export function ErrorNote({ error, onClose }: { error: string | null; onClose?: 
   );
 }
 
-export function Dialog({ open, onClose, title, children, footer, wide }:
-  { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
+export function Dialog({ open, onClose, title, children, footer, wide, xwide }:
+  { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; wide?: boolean; xwide?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current;
@@ -46,7 +46,7 @@ export function Dialog({ open, onClose, title, children, footer, wide }:
   return (
     <dialog
       ref={ref}
-      className={`dialog ${wide ? 'dialog-wide' : ''}`}
+      className={`dialog ${wide ? 'dialog-wide' : ''} ${xwide ? 'dialog-xwide' : ''}`}
       onCancel={(e) => { e.preventDefault(); onClose(); }}
       onClick={(e) => { if (e.target === ref.current) onClose(); }}
     >

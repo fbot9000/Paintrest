@@ -6,7 +6,8 @@
  *   always checked against the task's scope before anything is written.
  */
 import type { NormalisedProposal } from './agent';
-import type { CatalogSubjectPayload } from './agent';
+import type { CatalogSubjectPayload, PaintPlanPayload, SourceRead } from './agent';
+import type { PageSeen } from './ai';
 import type { Id } from './types';
 
 export interface ApproveOptions {
@@ -32,6 +33,8 @@ export interface ResearchCommands {
    */
   syncResultTypes(task_id: Id): Promise<void>;
   editCatalogProposal(proposal_id: Id, payload: CatalogSubjectPayload): Promise<void>;
+  /** The user curates a plan proposal before approval: steps, paints, palette. */
+  editPlanProposal(proposal_id: Id, payload: PaintPlanPayload): Promise<void>;
   approveProposal(proposal_id: Id, opts?: ApproveOptions): Promise<void>;
   rejectProposal(proposal_id: Id): Promise<void>;
 }
@@ -44,4 +47,9 @@ export interface AgentCommands {
   /** Creates a draft, or updates the agent's own pending draft when `update_of` names one. */
   writeProposal(task_id: Id, p: NormalisedProposal, provider: string, model_id: string): ProposalWrite;
   recordContext(task_id: Id, refs: { target_type: 'project' | 'paint_plan'; target_id: Id; revision: string }[]): void;
+  /**
+   * Keeps every page the agent read as a draft source (retention draft, skjema §6),
+   * with the agent's summary and original excerpt as layers, so it is not rediscovered.
+   */
+  recordSources(task_id: Id, pages: PageSeen[], read: SourceRead[]): void;
 }

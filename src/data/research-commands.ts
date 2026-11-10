@@ -1,7 +1,7 @@
 import { CommandError } from '../domain/commands';
 import { newId, now } from '../domain/ids';
 import { matchProduct, planProductRefs, productKey } from '../domain/agent';
-import type { CatalogSubjectPayload, NormalisedProposal, PaintPlanPayload, ProductRef, ProposalKind, ReferenceSelectionPayload, SourceRef } from '../domain/agent';
+import type { CatalogSubjectPayload, NormalisedProposal, PaintPlanPayload, PaletteItem, ProductRef, ProposalKind, ReferenceSelectionPayload, SourceRef } from '../domain/agent';
 import type { AgentCommands, ApproveOptions, ProposalWrite, ResearchCommands } from '../domain/research';
 import type { ChangeAction, Id, ResearchProposal, ResultType, Tables } from '../domain/types';
 import { attachedExpansions } from '../domain/views';
@@ -127,6 +127,23 @@ export function createAgentCommands(store: Store): AgentCommands {
       }
     },
 
+    recordSources(task_id, pages, read) {
+      if (!pages.length && !read.length) return;
+      tx((t, ws) => {
+        for (const pg of pages) {
+          if (Object.values(t.source).some((x) => !x.deleted_at && x.url === pg.url)) continue;
+          const id = newId();
+          t.source[id] = {
+            id, workspace_id: ws, kind: 'article', title: pg.title, creator: pg.author ?? pg.site, url: pg.url, locator: null,
+            analysis_state: 'stored', retention: 'draft', created_by_task_id: task_id, created_at: now(), deleted_at: null,
+            ...(pg.language ? { language: pg.language } : {}),
+          };
+          record(t, ws, 'source', id, 'create', { initiated_by: 'agent', task_id });
+        }
+        addSourceLayers(t, read);
+      });
+    },
+
     recordContext(task_id, refs) {
       tx((t) => {
         const ts = now();
@@ -234,6 +251,22 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
       });
     },
 
+    async editPlanProposal(proposal_id, payload) {
+      tx((t) => {
+        const p = must(t.research_proposal[proposal_id], 'Forslaget');
+        if (p.decision !== 'pending' || (p.result_type !== 'paint_plan' && p.result_type !== 'plan_revision')) throw new CommandError('Forslaget kan ikke endres');
+        const before = p.payload as PaintPlanPayload;
+        // The subject and task cannot be changed by curation; only content.
+        if (payload.subject_id !== before.subject_id) throw new CommandError('Miniatyren kan ikke byttes');
+        const elements = payload.elements
+          .map((e) => ({ ...e, name: e.name.trim() || 'Del', steps: e.steps.filter((st) => st.instruction.trim() || st.materials.length || st.mix) }))
+          .filter((e) => e.steps.length);
+        if (!elements.length) throw new CommandError('Planen må ha minst ett steg');
+        p.payload = { ...before, ...payload, elements };
+        p.updated_at = now();
+      });
+    },
+
     async approveProposal(proposal_id, opts: ApproveOptions = {}) {
       try {
         const files = await downloadSelected(store, deps, proposal_id, opts);
@@ -334,7 +367,7 @@ function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions, files
     const pv = newId();
     t.paint_plan_version[pv] = {
       id: pv, subject_id: s.id, version_number, state: 'approved', origin: 'proposal',
-      supersedes_id: prev?.id ?? null, created_at: now(),
+      supersedes_id: prev?.id ?? null, created_at: now(), summary: plan.summary ?? null,
     };
     plan.elements.forEach((el, ei) => {
       const eid = newId();
@@ -356,12 +389,47 @@ function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions, files
     if (prev) prev.state = 'superseded';
     s.current_plan_version_id = pv;
     s.plan_state = 'approved';
+    addPalette(t, ws, project_id, s.id, plan.palette ?? [], products, who);
+    for (const src of plan.sources ?? []) {
+      const source_id = sourceFor(t, ws, { url: src.url, title: src.title, creator: src.author, kind: 'article' }, p.task_id, (tt, id, a) => record(t, ws, tt, id, a, who));
+      if (!Object.values(t.source_link).some((l) => !l.deleted_at && l.source_id === source_id && l.target_type === 'subject' && l.target_id === s.id && l.use === 'method')) {
+        const id = newId();
+        t.source_link[id] = { id, source_id, target_type: 'subject', target_id: s.id, use: 'method', layer_id: null, deleted_at: null };
+        record(t, ws, 'source_link', id, 'attach', who);
+      }
+    }
+    addSourceLayers(t, plan.sources_read ?? []);
     record(t, ws, 'paint_plan', s.id, 'new_version', who, prev?.id ?? null, pv);
   }
 
   p.decision = 'approved';
   p.updated_at = now();
   p.last_error = null;
+}
+
+/**
+ * The miniature's palette (datamodell v3 §8): one palette entry per product,
+ * scoped to this subject. Existing entries for the same product and subject
+ * are kept; the project's content revision goes up when anything is added.
+ */
+function addPalette(t: Tables, ws: Id, project_id: Id, subject_id: Id, items: PaletteItem[], products: Record<string, Id>, who: Who) {
+  let added = 0;
+  for (const it of items) {
+    const product_id = products[productKey(it.product)];
+    if (!product_id) continue;
+    const exists = Object.values(t.palette_entry).some((e) => !e.deleted_at && e.project_id === project_id && e.product_id === product_id
+      && e.scope_kind === 'subjects' && t.palette_entry_subject.some((x) => x.palette_entry_id === e.id && x.subject_id === subject_id));
+    if (exists) continue;
+    const id = newId();
+    t.palette_entry[id] = {
+      id, project_id, product_id, role_label: it.role_label, note: it.part, scope_kind: 'subjects',
+      expansion_id: null, category_label: null, deleted_at: null,
+    };
+    t.palette_entry_subject.push({ palette_entry_id: id, subject_id });
+    record(t, ws, 'palette_entry', id, 'create', who);
+    added++;
+  }
+  if (added && t.project[project_id]) t.project[project_id]!.content_revision++;
 }
 
 /** Every product must be an existing id, an unambiguous match, or created by the user here (skjema §8 step 3). */
@@ -375,7 +443,7 @@ function resolveProducts(t: Tables, ws: Id, refs: ProductRef[], choices: Record<
       const id = newId();
       t.paint_product[id] = {
         id, workspace_id: ws, manufacturer: ref.manufacturer, range_name: ref.range, name: ref.name,
-        product_kind: 'other', coverage: null, finish: null, identity_status: 'unconfirmed', swatch_hex: null,
+        product_kind: 'other', coverage: null, finish: null, identity_status: 'unconfirmed', swatch_hex: ref.hex ?? null,
         created_at: now(), deleted_at: null,
       };
       record(t, ws, 'paint_product', id, 'create', { ...who, initiated_by: 'user' });

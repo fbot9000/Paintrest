@@ -167,6 +167,8 @@ export interface PaintPlanVersion {
   origin: VersionOrigin;
   supersedes_id: Id | null;
   created_at: Timestamp;
+  /** PROTOTYPE: short description of the approach and colour choices. Not in skjema. */
+  summary?: string | null;
 }
 
 export type ElementKind = 'operation' | 'part';
@@ -283,6 +285,8 @@ export interface Source {
   created_by_task_id: Id | null;
   created_at: Timestamp;
   deleted_at: Timestamp | null;
+  /** PROTOTYPE: the page's language when known (html lang or guessed). */
+  language?: string | null;
 }
 
 export interface SourceAsset {

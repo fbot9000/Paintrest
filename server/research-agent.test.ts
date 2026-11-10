@@ -258,3 +258,38 @@ describe('sidelesing for bildejakt', () => {
     expect(rewriteForReading('https://blog.naver.com/PostView.naver?blogId=p&logNo=9')).toBe('https://m.blog.naver.com/p/9');
   });
 });
+
+describe('maleplan-oppdrag', () => {
+  const focus = { kind: 'plan' as const, subject_ref: 'M1', subject_name: 'Balor', game: 'Avalon', reference_images: ['data:image/jpeg;base64,AAAA', 'data:image/jpeg;base64,BBBB'], revision: false };
+
+  it('sender bildene med forespørselen og har egen instruks', async () => {
+    const seen: { input: unknown; instructions?: string }[] = [];
+    const provider = { respond: async (input: unknown, opts: { instructions?: string }) => {
+      seen.push({ input, instructions: opts.instructions });
+      return { text: '{"action":"final","message":"ok","proposals":[]}', model: 'm', usage: null, searches: [], citations: [] };
+    } } as unknown as ResponsesProvider;
+    await runResearch({ provider, search: null, openPage: async () => PAGE },
+      { context: {}, messages: [{ role: 'user', content: 'Lag maleplan' }], result_types: ['paint_plan'], focus }, () => {});
+    const last = (seen[0]!.input as { content: unknown }[]).at(-1)!.content as { type: string }[];
+    expect(last.map((c) => c.type)).toEqual(['input_text', 'input_image', 'input_image']);
+    expect(seen[0]!.instructions).toContain('OPPDRAG: MALEPLAN');
+    expect(seen[0]!.instructions).toContain('"palette"');
+  });
+
+  it('fortsetter uten bildene hvis modellen avviser dem', async () => {
+    const { UserError } = await import('./credential-store.ts');
+    let i = 0;
+    const inputs: unknown[] = [];
+    const provider = { respond: async (input: unknown) => {
+      inputs.push(input);
+      if (i++ === 0) throw new UserError('Tjenesten svarte med feil 400: image input not supported', 502);
+      return { text: '{"action":"final","message":"ok","proposals":[]}', model: 'm', usage: null, searches: [], citations: [] };
+    } } as unknown as ResponsesProvider;
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider, search: null, openPage: async () => PAGE },
+      { context: {}, messages: [{ role: 'user', content: 'Lag maleplan' }], result_types: ['paint_plan'], focus }, (e) => events.push(e));
+    expect(typeof ((inputs[1] as { content: unknown }[]).at(-1)!.content)).toBe('string');
+    expect(events.some((e) => e.type === 'tool_error' && e.action === 'look')).toBe(true);
+    expect(events.at(-1)?.type).toBe('final');
+  });
+});

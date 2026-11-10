@@ -14,6 +14,15 @@ export interface ProductRef {
   manufacturer: string | null;
   range: string | null;
   name: string;
+  /** Approximate colour from the agent; used as swatch when the product is created. */
+  hex?: string | null;
+}
+
+/** One paint in the miniature's palette, with what it is used for. */
+export interface PaletteItem {
+  product: ProductRef;
+  role_label: string | null;
+  part: string | null;
 }
 
 /** A web page the agent searched or opened (verified on the server). */
@@ -94,6 +103,10 @@ export interface PaintPlanPayload {
   elements: PlanElementPayload[];
   note: string | null;
   sources?: SourceRef[];
+  /** Plan focus: the approach and colour choices in a few sentences (Norwegian). */
+  summary?: string | null;
+  palette?: PaletteItem[];
+  sources_read?: SourceRead[];
 }
 
 /** What the server hands back for each proposal, before validation. */
@@ -192,7 +205,15 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
       };
     });
     if (!elements.length) return { ok: false, reason: 'Maleplanen har ingen deler' };
-    return { ok: true, value: { ...common, result_type: 'paint_plan', payload: { subject_id, elements, note: str(o.note).trim() || null, sources: sourceRefs(o.sources) } } };
+    const palette: PaletteItem[] = arr(o.palette).flatMap((x) => {
+      const po = obj(x);
+      const product = productRef(po.product);
+      return product ? [{ product, role_label: str(po.role_label).trim() || null, part: str(po.part).trim() || null }] : [];
+    });
+    return { ok: true, value: { ...common, result_type: 'paint_plan', payload: {
+      subject_id, elements, note: str(o.note).trim() || null, sources: sourceRefs(o.sources),
+      summary: str(o.summary).trim() || null, palette, sources_read: sourcesRead(o.sources_read),
+    } } };
   }
 
   if (raw.type === 'reference_selection') {
@@ -218,13 +239,7 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
       }];
     });
     if (!images.length) return { ok: false, reason: 'Bildeutvalget har ingen gyldige bilder' };
-    const sources_read: SourceRead[] = arr(o.sources_read).flatMap((x) => {
-      const so = obj(x);
-      const url = str(so.url).trim();
-      if (!/^https?:\/\//.test(url)) return [];
-      return [{ url, title: str(so.title).trim() || url, site: str(so.site).trim() || hostOf(url), language: str(so.language).trim() || null,
-        summary: str(so.summary).trim() || null, original_excerpt: str(so.original_excerpt).trim() || null }];
-    });
+    const sources_read = sourcesRead(o.sources_read);
     return { ok: true, value: { ...common, result_type: 'reference_selection', payload: { subject_id, images, note: str(o.note).trim() || null, sources_read } } };
   }
 
@@ -259,6 +274,7 @@ export function planProductRefs(p: PaintPlanPayload): ProductRef[] {
     for (const m of s.materials) out.set(productKey(m.product), m.product);
     for (const c of s.mix?.components ?? []) out.set(productKey(c.product), c.product);
   }
+  for (const x of p.palette ?? []) if (!out.has(productKey(x.product))) out.set(productKey(x.product), x.product);
   return [...out.values()];
 }
 
@@ -342,22 +358,44 @@ export function buildAgentContext(t: Tables, task_id: Id): AgentContext {
       miniatures: subjectData,
       paints,
       your_pending_proposals: pending,
-      known_sources: knownSources(t, project.id).map((k) => ({ url: k.source.url, title: k.source.title, saved_images: k.asset_count })),
+      known_sources: knownSources(t, project.id).slice(0, 60).map((k) => ({
+        url: k.source.url, title: k.source.title, status: k.status, saved_images: k.asset_count,
+        ...(k.summary ? { summary: k.summary.slice(0, 300) } : {}),
+      })),
     },
   };
 }
 
-/** Kept web sources already linked to this project or its miniatures: reusable for the same game. */
-export function knownSources(t: Tables, project_id: Id) {
+export interface KnownSource {
+  source: import('./types').Source;
+  asset_count: number;
+  /** kept: the user saved images or evidence from it; found: the agent read it (draft). */
+  status: 'kept' | 'found';
+  summary: string | null;
+}
+
+/**
+ * Web sources for this game: kept sources linked to the project or its
+ * miniatures, and draft sources the agent read in this project's tasks.
+ */
+export function knownSources(t: Tables, project_id: Id): KnownSource[] {
   const subjectIds = new Set(Object.values(t.miniature_subject).filter((s) => s.project_id === project_id).map((s) => s.id));
   const ids = new Set(Object.values(t.source_link)
     .filter((l) => !l.deleted_at && ((l.target_type === 'subject' && subjectIds.has(l.target_id)) || (l.target_type === 'project' && l.target_id === project_id)))
     .map((l) => l.source_id));
+  for (const s of Object.values(t.source)) {
+    if (s.created_by_task_id && t.task_scope[s.created_by_task_id]?.work_project_id === project_id) ids.add(s.id);
+  }
   return [...ids]
     .map((id) => t.source[id])
     .filter((x): x is NonNullable<typeof x> => !!x && !x.deleted_at && !!x.url)
-    .map((source) => ({ source, asset_count: Object.values(t.source_asset).filter((a) => a.source_id === source.id && !a.deleted_at).length }))
-    .sort((a, b) => b.asset_count - a.asset_count);
+    .map((source) => ({
+      source,
+      asset_count: Object.values(t.source_asset).filter((a) => a.source_id === source.id && !a.deleted_at).length,
+      status: source.retention === 'kept' ? 'kept' as const : 'found' as const,
+      summary: Object.values(t.source_layer).find((l) => l.source_id === source.id && l.layer === 'translation' && !l.deleted_at)?.body ?? null,
+    }))
+    .sort((a, b) => Number(b.status === 'kept') - Number(a.status === 'kept') || b.asset_count - a.asset_count);
 }
 
 export function proposalTitle(t: Tables, type: ResultType, payload: unknown): string {
@@ -391,6 +429,16 @@ function arr(v: unknown): unknown[] {
 function str(v: unknown): string {
   return typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
 }
+function sourcesRead(v: unknown): SourceRead[] {
+  return arr(v).flatMap((x) => {
+    const so = obj(x);
+    const url = str(so.url).trim();
+    if (!/^https?:\/\//.test(url)) return [];
+    return [{ url, title: str(so.title).trim() || url, site: str(so.site).trim() || hostOf(url), language: str(so.language).trim() || null,
+      summary: str(so.summary).trim() || null, original_excerpt: str(so.original_excerpt).trim() || null }];
+  });
+}
+
 function sourceRefs(v: unknown): SourceRef[] {
   return arr(v).flatMap((x) => {
     const o = obj(x);
@@ -410,5 +458,6 @@ function productRef(v: unknown): ProductRef | null {
   const o = obj(v);
   const name = str(o.name).trim();
   if (!name) return null;
-  return { manufacturer: str(o.manufacturer).trim() || null, range: str(o.range).trim() || null, name };
+  const hex = str(o.hex).trim();
+  return { manufacturer: str(o.manufacturer).trim() || null, range: str(o.range).trim() || null, name, hex: /^#[0-9a-fA-F]{6}$/.test(hex) ? hex.toLowerCase() : null };
 }

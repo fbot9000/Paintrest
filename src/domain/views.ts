@@ -141,6 +141,29 @@ export interface ReferenceView {
   label: string;
 }
 
+export interface PaletteView {
+  entry: import('./types').PaletteEntry;
+  product: PaintProduct;
+  ownership: Ownership;
+  /** True when the entry is for the whole project, not this miniature only. */
+  project_wide: boolean;
+}
+
+/** The miniature's palette: entries for this subject, then project-wide entries (datamodell v3 §8). */
+export function subjectPalette(t: Tables, subject: MiniatureSubject): PaletteView[] {
+  return Object.values(t.palette_entry)
+    .filter((e) => !e.deleted_at && e.project_id === subject.project_id && (
+      e.scope_kind === 'project'
+      || (e.scope_kind === 'subjects' && t.palette_entry_subject.some((x) => x.palette_entry_id === e.id && x.subject_id === subject.id))
+      || (e.scope_kind === 'expansion' && e.expansion_id === subject.expansion_id)
+      || (e.scope_kind === 'category' && !!subject.category_label && e.category_label === subject.category_label)))
+    .flatMap((entry) => {
+      const product = t.paint_product[entry.product_id];
+      return product ? [{ entry, product, ownership: ownershipOf(t, product.id), project_wide: entry.scope_kind !== 'subjects' }] : [];
+    })
+    .sort((a, b) => Number(a.project_wide) - Number(b.project_wide) || (a.entry.note ?? '').localeCompare(b.entry.note ?? '', 'nb'));
+}
+
 export interface PaintingView {
   subject: MiniatureSubject;
   project: Project;
@@ -151,6 +174,7 @@ export interface PaintingView {
   open_deviations: LocalDeviation[];
   completions: PaintCompletion[];
   last_opened_element_id: Id | null;
+  palette: PaletteView[];
 }
 
 export function paintingView(t: Tables, subject_id: Id): PaintingView | undefined {
@@ -235,6 +259,7 @@ export function paintingView(t: Tables, subject_id: Id): PaintingView | undefine
       .filter((c) => c.subject_id === subject_id)
       .sort((a, b) => b.created_at.localeCompare(a.created_at)),
     last_opened_element_id: last?.element.id ?? null,
+    palette: subjectPalette(t, subject),
   };
 }
 

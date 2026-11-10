@@ -4,6 +4,7 @@
  * drafts are written through the agent's own command set (skjema §7).
  */
 import { buildAgentContext, normaliseProposal } from '../domain/agent';
+import type { SourceRead } from '../domain/agent';
 import type { AgentTurnInput, AiGateway, ResearchEvent } from '../domain/ai';
 import type { AgentCommands, ResearchCommands } from '../domain/research';
 import type { Id } from '../domain/types';
@@ -52,6 +53,12 @@ export async function runAgentTurn(deps: {
   }
 
   agent.addAssistantMessage(task_id, r.message || 'Agenten ga et tomt svar.', r.model, r.trace);
+  // Every page read becomes a draft source for the game, so it is not rediscovered later.
+  const read = r.proposals.flatMap((p) => {
+    const sr = (p as { payload?: { sources_read?: unknown } }).payload?.sources_read;
+    return Array.isArray(sr) ? (sr as SourceRead[]) : [];
+  });
+  agent.recordSources(task_id, r.pages ?? [], read);
 
   const summary: TurnSummary = { created: [], updated: [], refused: [] };
   for (const raw of r.proposals) {

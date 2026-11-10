@@ -7,8 +7,8 @@ import type { Expansion, Grouping, MiniatureSubject } from '../../domain/types';
 import { assetFileId, attachedExpansions, deletedSubjects, liveSubjects, physicalStatus } from '../../domain/views';
 import type { PhysicalStatus } from '../../domain/views';
 import { Badge, Button, Dialog, ErrorNote, Field, FileImage, ImagePicker, Segmented, Stepper } from '../../ui/components';
-import { useAgentActions } from '../agent/AgentPanel';
 import { ImagesDialog } from './ImagesDialog';
+import { PlanDialog } from './PlanDialog';
 import './miniatures.css';
 
 type Filter = 'all' | 'base' | string;
@@ -26,7 +26,7 @@ export function MiniaturesPage() {
   const [onlyActive, setOnlyActive] = useState(false);
   const [editing, setEditing] = useState<MiniatureSubject | 'new' | null>(null);
   const [imagesFor, setImagesFor] = useState<string | null>(null);
-  const agentActions = useAgentActions(projectId);
+  const [planFor, setPlanFor] = useState<string | null>(null);
 
   const shown = data.subjects.filter(({ s, status }) => {
     if (onlyActive && status !== 'in_progress') return false;
@@ -83,9 +83,7 @@ export function MiniaturesPage() {
               expansion={data.expansions.find((e) => e.id === s.expansion_id)}
               onEdit={() => setEditing(s)}
               onImages={() => setImagesFor(s.id)}
-              onAgent={() => (s.current_plan_version_id
-                ? run(() => agentActions.revisePlan(s.id, s.name))
-                : agentActions.suggestPlan(s.name))}
+              onAgent={() => setPlanFor(s.id)}
               onPaint={async () => {
                 if (!s.current_plan_version_id) await run((c) => c.createEmptyPlan(s.id));
                 navigate(`/male/${s.id}`);
@@ -104,7 +102,8 @@ export function MiniaturesPage() {
         </p>
       )}
 
-      {imagesFor && <ImagesDialog subjectId={imagesFor} projectId={projectId} onClose={() => setImagesFor(null)} />}
+      {imagesFor && <ImagesDialog subjectId={imagesFor} projectId={projectId} onClose={() => setImagesFor(null)} onNext={() => { setPlanFor(imagesFor); setImagesFor(null); }} />}
+      {planFor && <PlanDialog subjectId={planFor} projectId={projectId} onClose={() => setPlanFor(null)} />}
 
       {editing && (
         <SubjectDialog
@@ -161,7 +160,7 @@ function MiniCard({ s, status, fileId, expansion, onEdit, onPaint, onAgent, onIm
           <Button onClick={onEdit}>Rediger</Button>
         </div>
         <button type="button" className="mini-agent" onClick={onAgent}>
-          ✦ {s.current_plan_version_id ? 'Revider planen med agenten' : 'Be agenten foreslå maleplan'}
+          ✦ {s.current_plan_version_id ? 'Maleplan og palett · ny versjon med AI' : 'Lag maleplan og palett med AI'}
         </button>
       </div>
     </article>
