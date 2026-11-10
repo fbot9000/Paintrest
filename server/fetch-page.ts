@@ -25,6 +25,57 @@ export interface PageResult {
   images: PageImage[];
   /** html lang, or guessed from the script (ko, ja, zh) when missing. */
   language: string | null;
+  /** Set when the page is a YouTube video: what YouTube says about it. */
+  video?: VideoInfo;
+}
+
+/** A YouTube video, as YouTube's oEmbed endpoint describes it. Paintrest cannot watch it. */
+export interface VideoInfo {
+  url: string;
+  video_id: string;
+  title: string;
+  channel: string | null;
+  channel_url: string | null;
+  thumbnail_url: string | null;
+}
+
+export interface FetchOptions {
+  allowLocal?: boolean;
+  fetchImpl?: typeof fetch;
+  /** Override for tests; defaults to YouTube's own oEmbed endpoint. */
+  oembedBase?: string;
+}
+
+const OEMBED = 'https://www.youtube.com/oembed';
+
+/** The video id in a YouTube address (watch, youtu.be, shorts, embed, live), or null. */
+export function youtubeId(raw: string): string | null {
+  let u: URL;
+  try { u = new URL(raw); } catch { return null; }
+  const host = u.hostname.replace(/^(www\.|m\.|music\.)/, '');
+  const ok = (id: string | null | undefined) => (id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null);
+  if (host === 'youtu.be') return ok(u.pathname.split('/')[1]);
+  if (host !== 'youtube.com' && host !== 'youtube-nocookie.com') return null;
+  if (u.pathname === '/watch') return ok(u.searchParams.get('v'));
+  const [kind, id] = u.pathname.split('/').filter(Boolean);
+  return kind && ['shorts', 'embed', 'live', 'v'].includes(kind) ? ok(id) : null;
+}
+
+/** Title, channel and thumbnail of a YouTube video through oEmbed. Throws if YouTube does not know it. */
+export async function fetchVideo(rawUrl: string, opts: FetchOptions = {}): Promise<VideoInfo> {
+  const id = youtubeId(rawUrl);
+  if (!id) throw new UserError('Ikke en YouTube-video', 400);
+  const url = `https://www.youtube.com/watch?v=${id}`;
+  const res = await guardedGet(`${opts.oembedBase ?? OEMBED}?url=${encodeURIComponent(url)}&format=json`, {
+    maxBytes: 64 * 1024, timeoutMs: 15_000, accept: 'application/json', allowLocal: opts.allowLocal, fetchImpl: opts.fetchImpl,
+  });
+  if (res.status >= 400) throw new UserError(`YouTube kjenner ikke videoen (${res.status})`, 502);
+  let o: Record<string, unknown>;
+  try { o = JSON.parse(res.body.toString('utf8')); } catch { throw new UserError('Uventet svar fra YouTube', 502); }
+  const s = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  const title = s(o.title);
+  if (!title) throw new UserError('YouTube oppga ingen tittel', 502);
+  return { url, video_id: id, title, channel: s(o.author_name), channel_url: s(o.author_url), thumbnail_url: s(o.thumbnail_url) };
 }
 
 const MAX_TEXT = 7000;
@@ -49,7 +100,16 @@ export function rewriteForReading(raw: string): string {
   return raw;
 }
 
-export async function fetchPage(rawUrl: string, opts: { allowLocal?: boolean; fetchImpl?: typeof fetch } = {}): Promise<PageResult> {
+export async function fetchPage(rawUrl: string, opts: FetchOptions = {}): Promise<PageResult> {
+  // YouTube pages are scripts; oEmbed gives what can be known without watching.
+  if (youtubeId(rawUrl)) {
+    const v = await fetchVideo(rawUrl, opts);
+    return {
+      url: v.url, title: v.title, site: 'youtube.com', author: v.channel, language: null, video: v,
+      text: `YouTube-video «${v.title}»${v.channel ? ` fra kanalen ${v.channel}` : ''}. Paintrest kan ikke se eller høre videoen; bare tittel, kanal og miniatyrbilde er kjent.`,
+      images: v.thumbnail_url ? [{ url: v.thumbnail_url, alt: v.title, caption: 'Miniatyrbilde fra videoen', context: null }] : [],
+    };
+  }
   const page = await fetchOnce(rewriteForReading(rawUrl), opts);
   // Some blogs (older Naver layouts) still wrap the post in a frame: follow it once.
   if (page.frameSrc && page.result.images.length < 2) {
@@ -61,7 +121,7 @@ export async function fetchPage(rawUrl: string, opts: { allowLocal?: boolean; fe
   return page.result;
 }
 
-async function fetchOnce(rawUrl: string, opts: { allowLocal?: boolean; fetchImpl?: typeof fetch }) {
+async function fetchOnce(rawUrl: string, opts: FetchOptions) {
   const res = await guardedGet(rawUrl, {
     maxBytes: 3 * 1024 * 1024, timeoutMs: 20_000,
     accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5',
@@ -101,6 +161,14 @@ export function extract(pageUrl: string, html: string): PageResult {
     add(src, img.getAttribute('alt') ?? '', caption, block ? nearbyText(block) : null);
     if (images.length >= MAX_IMAGES) break;
   }
+  // Campaign pages (Kickstarter, Gamefound) and shops built with scripts often keep their pictures
+  // in embedded data rather than in <img>. Take image addresses from the page source as a fallback.
+  if (images.length < 4) {
+    for (const src of imageUrlsInSource(html)) {
+      add(src, '', null, 'Funnet i sidens data, ikke som synlig bilde');
+      if (images.length >= MAX_IMAGES) break;
+    }
+  }
   const language = root.querySelector('html')?.getAttribute('lang')?.trim().slice(0, 12) || null;
 
   for (const el of root.querySelectorAll('script, style, noscript, nav, footer, header, form, svg, iframe')) el.remove();
@@ -108,6 +176,18 @@ export function extract(pageUrl: string, html: string): PageResult {
   const text = body.structuredText.replace(/\n{3,}/g, '\n\n').replace(/[ \t]+/g, ' ').trim().slice(0, MAX_TEXT);
 
   return { url: pageUrl, title, site: new URL(pageUrl).hostname.replace(/^www\./, ''), author, text, images, language: language ?? guessLanguage(text) };
+}
+
+/** Image addresses written anywhere in the page source, also JSON-escaped ones. */
+export function imageUrlsInSource(html: string): string[] {
+  const text = html.replace(/\\u002[fF]/g, '/').replace(/\\\//g, '/');
+  const out: string[] = [];
+  for (const m of text.matchAll(/https?:\/\/[^\s"'<>()\\]+?\.(?:jpe?g|png|webp)(?:\?[^\s"'<>()\\]*)?(?=[\s"'<>()\\]|$)/gi)) {
+    const u = m[0].replace(/&amp;/g, '&');
+    if (!out.includes(u)) out.push(u);
+    if (out.length >= MAX_IMAGES * 2) break;
+  }
+  return out;
 }
 
 /** The nearest block-level ancestor of an image (a paragraph, list item or content block). */

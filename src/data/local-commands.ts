@@ -8,7 +8,7 @@ import type {
 import { currentPlanVersion, liveExpansionsOfGame } from '../domain/views';
 import type { Store } from './store';
 import { buildSampleData } from './seed';
-import { attachImages, downloadImages, setCover } from './images-tx';
+import { attachImages, downloadImages, setCover, sourceFor } from './images-tx';
 
 type Rec = {
   target_type: string;
@@ -359,6 +359,22 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
           setCover(t, subject_id, assets[cover_image_url]!, (tt, id, a) => record(t, ws, { target_type: tt, target_id: id, action: a }));
           record(t, ws, { target_type: 'miniature_subject', target_id: subject_id, action: 'update' });
         }
+      });
+    },
+
+    async saveVideoSource(subject_id, video) {
+      if (!/^https:\/\/(www\.)?youtube\.com\/watch\?v=/.test(video.url)) throw new CommandError('Bare YouTube-videoer kan lagres her');
+      tx((t, ws) => {
+        const s = must(t.miniature_subject[subject_id], 'Miniatyren');
+        if (s.deleted_at) throw new CommandError('Miniatyren er slettet');
+        const log = (tt: Parameters<typeof record>[2]['target_type'], id: Id, a: Parameters<typeof record>[2]['action']) => record(t, ws, { target_type: tt, target_id: id, action: a });
+        const source_id = sourceFor(t, ws, { url: video.url, title: video.title, creator: video.channel, kind: 'video' }, null, log);
+        t.source[source_id]!.kind = 'video';
+        const linked = Object.values(t.source_link).some((l) => !l.deleted_at && l.source_id === source_id && l.target_type === 'subject' && l.target_id === subject_id);
+        if (linked) return;
+        const id = newId();
+        t.source_link[id] = { id, source_id, target_type: 'subject', target_id: subject_id, use: 'method', layer_id: null, deleted_at: null };
+        log('source_link', id, 'attach');
       });
     },
 

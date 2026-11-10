@@ -11,7 +11,8 @@
  * UiB's endpoint for all its model families.
  */
 import { UserError } from './credential-store.ts';
-import type { PageResult } from './fetch-page.ts';
+import type { PageResult, VideoInfo } from './fetch-page.ts';
+import { youtubeId } from './fetch-page.ts';
 import { HostedToolError, VisionUnsupportedError } from './provider.ts';
 import type { HostedSearch, ResponsesMessage, ResponsesProvider } from './provider.ts';
 import type { SearchHit, WebSearch } from './search.ts';
@@ -26,6 +27,8 @@ export type ResearchEvent =
       images?: { url: string; alt: string; caption: string | null; context: string | null }[] }
   | { type: 'look'; count: number; why: string | null }
   | { type: 'look_done'; summary: string }
+  | { type: 'phase'; phase: 'official' | 'broad'; text: string }
+  | { type: 'anchor'; anchor: HuntAnchor }
   | { type: 'tool_error'; action: string; target: string; error: string }
   | { type: 'final'; message: string; proposals: unknown[]; model: string; warnings: string[]; trace: TraceStep[]; pages: PageSeen[] }
   | { type: 'error'; error: string };
@@ -41,7 +44,7 @@ export interface PageSeen {
 }
 
 export interface TraceStep {
-  action: 'search' | 'open' | 'look';
+  action: 'search' | 'open' | 'look' | 'anchor';
   target: string;
   result: string;
 }
@@ -78,6 +81,33 @@ export interface ImageFocus {
   reference_image?: string | null;
 }
 
+/** The best official picture of the miniature, chosen and checked in phase 1 of an image hunt. */
+export interface HuntAnchor {
+  image_url: string | null;
+  page_url: string | null;
+  page_title: string | null;
+  site: string | null;
+  kind: 'official' | 'concept_art' | 'painted' | null;
+  painter: string | null;
+  description: string | null;
+  why: string | null;
+}
+
+export interface HuntState {
+  phase: 'official' | 'broad';
+  anchor: HuntAnchor | null;
+}
+
+/** A video the agent found, confirmed by YouTube. */
+export interface VideoFound {
+  url: string;
+  video_id: string;
+  title: string;
+  channel: string | null;
+  thumbnail_url: string | null;
+  why: string | null;
+}
+
 export interface ResearchDeps {
   provider: ResponsesProvider;
   search: WebSearch | null;
@@ -86,6 +116,10 @@ export interface ResearchDeps {
   openPage: (url: string) => Promise<PageResult>;
   /** Shows images to the model and returns its written assessment. */
   lookAtImages?: (imageUrls: string[], question: string, reference: string | null) => Promise<string>;
+  /** Fetches an image as a data URL (the anchor becomes the reference for «look»). */
+  imageAsDataUrl?: (url: string) => Promise<string>;
+  /** Asks YouTube about a video (oEmbed). */
+  videoInfo?: (url: string) => Promise<VideoInfo>;
   signal?: AbortSignal;
 }
 
@@ -93,12 +127,15 @@ export interface ResearchDeps {
 export type WebMode = 'hosted' | 'search' | 'none';
 
 export const MAX_TOOL_STEPS = 12;
-export const MAX_IMAGE_STEPS = 24;
+export const MAX_IMAGE_STEPS = 30;
+/** Steps for phase 1 of an image hunt (the official anchor); the rest go to the broad search. */
+export const OFFICIAL_STEPS = 10;
+export const MAX_VIDEOS = 8;
 export const MAX_PLAN_STEPS = 16;
 const MAX_LOOK = 8;
 const MAX_MESSAGES = 30;
 
-export function researchInstructions(context: unknown, resultTypes: string[], mode: WebMode, anyFocus: ImageFocus | PlanFocus | null = null, vision = false, imagesAttached = false, direct = false): string {
+export function researchInstructions(context: unknown, resultTypes: string[], mode: WebMode, anyFocus: ImageFocus | PlanFocus | null = null, vision = false, imagesAttached = false, direct = false, hunt0: HuntState | null = null): string {
   const focus = anyFocus?.kind === 'images' ? anyFocus : null;
   const plan = anyFocus?.kind === 'plan' ? anyFocus : null;
   const maxSteps = focus ? MAX_IMAGE_STEPS : plan ? MAX_PLAN_STEPS : MAX_TOOL_STEPS;
@@ -133,20 +170,7 @@ Du kan også SE på bilder:
 Bildene må være fra bildelisten på en side du har åpnet (høyst ${MAX_LOOK} per gang). Paintrest viser deg bildene${focus?.reference_image ? ', med et kjent bilde av miniatyren først som referanse' : ''}, og du får en vurdering tilbake.
 Bruk dette til å avgjøre om et dårlig merket bilde faktisk viser figuren.`
     : '';
-  const hunt = focus ? `
-
-OPPDRAG: BILDEJAKT for miniatyren «${focus.subject_name}» (${focus.subject_ref}) fra spillet «${focus.game}».
-Slike bilder er vanskelige å finne og ofte dårlig merket. Gjør grundig research, ikke bare ett søk. Arbeid slik:
-1. Identitet: finn utgiverens eller Kickstarter-sidens bilde og beskrivelse av figuren (positur, våpen, base, fraksjon, skulptør), og hva spillet og figuren heter på andre språk.
-2. Søk bredt og på flere språk. Malere legger ofte ut bilder på koreanske (Naver-blogg, Tistory), japanske, kinesiske, polske, spanske og tyske blogger og forum, og på Reddit og BoardGameGeek. Søk med spillets navn og figurens navn, også translitterert (for eksempel koreansk), sammen med ord som «painted», «도색», «塗装», «malowanie», «pintado».
-3. Åpne mange sider (gallerier, malerapporter, Kickstarter-oppdateringer, BGG-bilder). En side som viser hele fraksjonen kan ha figuren uten navn; bruk teksten rundt bildet${vision ? ' og «look»' : ''} for å avgjøre.
-4. Foreslå heller for mange enn for få: opptil 20 kandidater, sortert etter sikkerhet. Brukeren ser på bildene og avgjør. Ta med konseptillustrasjon, offisielle bilder og malte eksempler.
-5. Oversett: skriv på norsk hvorfor hvert bilde trolig viser figuren, og ta med den korte originalteksten (på kildens språk) som begrunnelsen bygger på.
-For hvert bilde i "images" i reference_selection, legg til:
-  "confidence": "high|medium|low", "reason": "norsk begrunnelse", "original_text": "kort utdrag på originalspråket eller null"
-og legg til i payload:
-  "sources_read": [{"url": "https://…", "language": "ko", "summary": "norsk sammendrag av hva siden viser og sier om figuren", "original_excerpt": "kort utdrag på originalspråket"}]
-Lag ETT reference_selection-forslag for ${focus.subject_ref}. Lag ikke andre forslagstyper i dette oppdraget.` : '';
+  const hunt = focus ? huntInstructions(focus, hunt0 ?? { phase: 'official', anchor: null }, mode, vision) : '';
   const planTask = plan ? `
 
 OPPDRAG: MALEPLAN for miniatyren «${plan.subject_name}» (${plan.subject_ref}) fra spillet «${plan.game}».
@@ -206,10 +230,61 @@ Kontekst (det du kan lese; endres bare av brukeren):
 ${JSON.stringify(context)}`;
 }
 
+/** Phase 1 finds and checks the best official picture; phase 2 searches broadly and compares with it. */
+function huntInstructions(focus: ImageFocus, hunt: HuntState, mode: WebMode, vision: boolean): string {
+  const head = `OPPDRAG: BILDEJAKT for miniatyren «${focus.subject_name}» (${focus.subject_ref}) fra spillet «${focus.game}».
+Slike bilder er vanskelige å finne og ofte dårlig merket. Jakten har to faser, og Paintrest styrer overgangen mellom dem.
+Åpne sider i known_sources direkte når de er relevante, i stedet for å søke dem fram på nytt.`;
+  if (hunt.phase === 'official') {
+    return `
+
+${head}
+
+FASE 1 AV 2: OFFISIELT ANKER (høyst ${OFFICIAL_STEPS} verktøysteg)
+Finn det beste offisielle bildet av akkurat denne figuren. Resten av jakten sammenlignes med det.
+Let i denne rekkefølgen:
+- utgiverens nettside og nettbutikk: produktsiden for spillet, utvidelsen eller figuren,
+- kampanjen på Kickstarter eller Gamefound: hovedsiden, oppdateringene («updates») og tilleggene («add-ons»), som ofte har malte figurer,
+- BoardGameGeek: spillets side og bildegalleriet, og regelbok eller komponentliste.
+Kampanjer får ofte en profesjonell maler til å male figurene («painted by …», «miniatures painted by …», «paintwork by …»). Noter navnet; det er et spor i fase 2.
+Avgjør hvilke bilder som faktisk viser figuren${vision && mode !== 'none' ? ' (bruk «look»)' : ' ut fra teksten rundt bildene'}. Foretrekk i denne rekkefølgen: offisielt malt figur, umalt render eller 3D-modell, konseptkunst.
+Avslutt fasen med ETT JSON-objekt:
+  {"action": "anchor", "image_url": "https://…", "page_url": "https://…", "kind": "official|concept_art", "painter": "navn eller null", "description": "kjennetegn: positur, våpen, kappe, base, detaljer", "why": "hvorfor dette er riktig figur"}
+Bildet må være fra bildelisten på en side du har åpnet.
+Finner du ikke noe offisielt bilde, svar {"action": "anchor", "image_url": null, "description": "det du vet om hvordan figuren ser ut", "why": "hva du prøvde"}.
+Ikke svar med final i fase 1.`;
+  }
+  const a = hunt.anchor;
+  const anchorText = a?.image_url
+    ? `Ankeret er satt: ${a.image_url} (fra ${a.page_url}). Type: ${a.kind ?? 'ukjent'}.${a.painter ? ` Malt av ${a.painter}.` : ''}
+Kjennetegn: ${a.description ?? 'ikke oppgitt'}.${vision && mode !== 'none' ? '\nNår du bruker «look», viser Paintrest ankeret først som referanse.' : ''}`
+    : `Ingen offisielle bilder ble funnet. Det som er kjent om figuren: ${a?.description ?? 'lite'}. Vær ekstra nøye med å avgjøre om et bilde viser riktig figur.`;
+  return `
+
+${head}
+
+FASE 2 AV 2: BREDT SØK (resten av verktøystegene)
+${anchorText}
+Finn ut om noen har malt figuren, og samle de beste bildene. Arbeid slik:
+1. ${a?.painter ? `Maleren fra kampanjen, ${a.painter}: portefølje, blogg, Putty&Paint, CoolMiniOrNot.` : 'Maleren fra kampanjen, hvis navnet dukker opp: portefølje, blogg, Putty&Paint, CoolMiniOrNot.'}
+2. Søk bredt og på flere språk. Malere legger ofte ut bilder på koreanske (Naver-blogg, Tistory), japanske, kinesiske, polske, spanske og tyske blogger og forum, og på Reddit (for eksempel r/minipainting) og BoardGameGeek. Søk med spillets navn og figurens navn, også translitterert, sammen med ord som «painted», «도색», «塗装», «malowanie» og «pintado».
+3. Åpne mange sider: gallerier, malerapporter, Reddit-tråder og BGG-bilder. En side som viser hele fraksjonen kan ha figuren uten navn. Sammenlign med ankeret${vision && mode !== 'none' ? ' med «look»' : ''}: form, positur, våpen og base, ikke farger.
+4. YouTube: søk etter malevideoer av figuren eller fraksjonen (for eksempel «${focus.subject_name} painting», «speed paint», «도색»). Du kan ikke se videoene. Ta dem med i "videos" med URL og en norsk setning om hva videoen trolig viser, ut fra tittel og søketreff. Paintrest henter tittel og kanal selv. Høyst ${MAX_VIDEOS}.
+5. Foreslå heller for mange enn for få: opptil 20 bilder, sortert etter sikkerhet. Ta med ankeret. Brukeren ser på bildene og avgjør.
+6. Oversett: skriv på norsk hvorfor hvert bilde trolig viser figuren, og ta med den korte originalteksten (på kildens språk) som begrunnelsen bygger på.
+For hvert bilde i "images" i reference_selection, legg til:
+  "confidence": "high|medium|low", "reason": "norsk begrunnelse", "original_text": "kort utdrag på originalspråket eller null"
+og legg til i payload:
+  "sources_read": [{"url": "https://…", "language": "ko", "summary": "norsk sammendrag av hva siden viser og sier om figuren", "original_excerpt": "kort utdrag på originalspråket"}],
+  "videos": [{"url": "https://www.youtube.com/watch?v=…", "why": "norsk: hva videoen trolig viser"}]
+Lag ETT reference_selection-forslag for ${focus.subject_ref}. Lag ikke andre forslagstyper i dette oppdraget.`;
+}
+
 type Action =
   | { action: 'search'; query: string; why: string | null }
   | { action: 'open'; url: string; why: string | null }
   | { action: 'look'; image_urls: string[]; question: string; why: string | null }
+  | { action: 'anchor'; image_url: string | null; page_url: string | null; kind: string | null; painter: string | null; description: string | null; why: string | null }
   | { action: 'final'; message: string; proposals: unknown[] };
 
 /** Finds the JSON action in a reply, also inside a code fence or surrounding prose. */
@@ -229,6 +304,10 @@ export function parseAction(text: string): Action | null {
     if (v.action === 'open' && typeof v.url === 'string') return { action: 'open', url: v.url, why };
     if (v.action === 'look' && Array.isArray(v.image_urls)) {
       return { action: 'look', image_urls: v.image_urls.filter((x): x is string => typeof x === 'string'), question: typeof v.question === 'string' ? v.question : '', why };
+    }
+    if (v.action === 'anchor') {
+      const s = (x: unknown) => (typeof x === 'string' && x.trim() ? x.trim() : null);
+      return { action: 'anchor', image_url: s(v.image_url), page_url: s(v.page_url), kind: s(v.kind), painter: s(v.painter), description: s(v.description), why };
     }
     if (v.action === 'final' || 'message' in v || 'proposals' in v) {
       return { action: 'final', message: typeof v.message === 'string' ? v.message : '', proposals: Array.isArray(v.proposals) ? v.proposals : [] };
@@ -250,7 +329,12 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   // The plan request carries the chosen pictures as input_image; dropped if the model refuses images.
   let imagesAttached = !!plan?.reference_images.length;
   const maxSteps = focus ? MAX_IMAGE_STEPS : plan ? MAX_PLAN_STEPS : MAX_TOOL_STEPS;
-  const build = () => researchInstructions(input.context, input.result_types, mode, input.focus ?? null, vision, imagesAttached, !!input.direct_apply && !input.focus);
+  // Image hunt: phase 1 finds the official anchor, phase 2 searches broadly and compares with it.
+  const hunt: HuntState | null = focus ? { phase: 'official', anchor: null } : null;
+  let anchorRef: string | null = null;
+  let phaseSteps = 0;
+  let huntNudges = 0;
+  const build = () => researchInstructions(input.context, input.result_types, mode, input.focus ?? null, vision, imagesAttached, !!input.direct_apply && !input.focus, hunt);
   const withImages = (): ResponsesMessage[] => {
     if (!imagesAttached || !plan) return history;
     const last = history.at(-1)!;
@@ -268,9 +352,10 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   let nudged = false;
   let model = input.model ?? '';
 
+  if (hunt) emit({ type: 'phase', phase: 'official', text: 'Fase 1 av 2: finner det beste offisielle bildet' });
   emit({ type: 'status', text: plan ? `Maleplan for ${plan.subject_name}${imagesAttached ? ` · ${plan.reference_images.length} bilder` : ''}` : focus ? `Bildejakt for ${focus.subject_name}` : mode === 'hosted' ? 'Agenten søker via UiB' : mode === 'search' ? 'Agenten planlegger søket' : 'Agenten svarer uten nettilgang' });
 
-  for (let round = 0; round < maxSteps + 4; round++) {
+  for (let round = 0; round < maxSteps + (hunt ? 10 : 4); round++) {
     if (deps.signal?.aborted) throw new UserError('Avbrutt');
     let out;
     try {
@@ -324,14 +409,61 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       emit(finalEvent(isRefusal(out.text) ? 'Agenten fikk ikke svar fra modellen denne gangen.' : out.text.trim(), [], model, [warning], trace, opened));
       return;
     }
+    const startBroad = (anchor: HuntAnchor, note: string) => {
+      hunt!.anchor = anchor;
+      hunt!.phase = 'broad';
+      instructions = build();
+      emit({ type: 'anchor', anchor });
+      emit({ type: 'phase', phase: 'broad', text: 'Fase 2 av 2: leter bredt etter malte versjoner og videoer' });
+      trace.push({ action: 'anchor', target: anchor.image_url ?? 'ingen offisielle bilder', result: (anchor.why ?? '').slice(0, 160) });
+      work.push({ role: 'user', content: `${note} Fase 2 starter nå; du har ${Math.max(0, maxSteps - steps)} verktøysteg igjen. Følg instruksene for fase 2.` });
+    };
+
+    if (action.action === 'anchor') {
+      if (!hunt || hunt.phase !== 'official') {
+        work.push({ role: 'user', content: hunt ? 'Ankeret er allerede satt. Fortsett fase 2 med verktøyene eller final.' : '"anchor" brukes bare i bildejakt. Svar med et verktøy eller final.' });
+        continue;
+      }
+      const anchor = anchorFrom(action, opened);
+      if (!anchor) {
+        if (++huntNudges <= 2) {
+          work.push({ role: 'user', content: 'Ankerbildet finnes ikke i bildelisten på en side du har åpnet. Bruk eksakt bilde-URL fra en bildeliste, eller sett "image_url" til null.' });
+          continue;
+        }
+        startBroad(emptyAnchor(action.description, 'Agenten fant ikke et offisielt bilde som kunne kontrolleres.'), 'Ankerbildet kunne ikke kontrolleres, så jakten fortsetter uten anker.');
+        continue;
+      }
+      if (anchor.image_url && deps.imageAsDataUrl && !focus!.reference_image) {
+        try { anchorRef = await deps.imageAsDataUrl(anchor.image_url); } catch (e) {
+          emit({ type: 'tool_error', action: 'look', target: 'ankerbildet', error: `${e instanceof Error ? e.message : String(e)}. «look» sammenligner uten referanse.` });
+        }
+      }
+      startBroad(anchor, anchor.image_url ? 'Ankeret er registrert.' : 'Ingen offisielle bilder; det er registrert.');
+      continue;
+    }
+
+    if (action.action === 'final' && hunt?.phase === 'official' && huntNudges < 2) {
+      huntNudges++;
+      work.push({ role: 'user', content: 'Du er fortsatt i fase 1. Svar først med {"action": "anchor", …} (image_url kan være null). Deretter starter fase 2.' });
+      continue;
+    }
     if (action.action === 'final') {
       const checked = verifyProposals(action.proposals, opened, searched);
+      if (focus && hunt) await finishHunt(checked, focus, hunt, opened, searched, deps.videoInfo);
       emit(finalEvent(action.message, checked.proposals, model, checked.warnings, trace, opened));
       return;
     }
     const allowed = action.action === 'look'
       ? vision && mode !== 'none'
       : mode === 'search' || (mode === 'hosted' && action.action === 'open');
+    if (allowed && hunt?.phase === 'official' && phaseSteps >= OFFICIAL_STEPS && steps < maxSteps) {
+      if (++huntNudges <= 2) {
+        work.push({ role: 'user', content: `Fase 1 har brukt sine ${OFFICIAL_STEPS} steg. Svar nå med {"action": "anchor", …}, med "image_url": null hvis du ikke fant noe.` });
+        continue;
+      }
+      startBroad(emptyAnchor(null, 'Agenten valgte ikke et anker i tide.'), 'Fase 1 er over uten anker.');
+      continue;
+    }
     if (!allowed || steps >= maxSteps) {
       work.push({ role: 'user', content: mode === 'none'
         ? 'Nettilgang er ikke tilgjengelig. Svar nå med {"action": "final", …}.'
@@ -343,6 +475,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       continue;
     }
     steps++;
+    if (hunt?.phase === 'official') phaseSteps++;
 
     if (action.action === 'look') {
       // Only images from pages opened in this turn: the model cannot make Paintrest fetch arbitrary files.
@@ -354,7 +487,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       }
       emit({ type: 'look', count: urls.length, why: action.why });
       try {
-        const verdict = await deps.lookAtImages!(urls, action.question || `Viser bildene ${focus?.subject_name ?? 'figuren'}?`, focus?.reference_image ?? plan?.reference_images[0] ?? null);
+        const verdict = await deps.lookAtImages!(urls, action.question || `Viser bildene ${focus?.subject_name ?? 'figuren'}?`, focus?.reference_image ?? anchorRef ?? plan?.reference_images[0] ?? null);
         emit({ type: 'look_done', summary: verdict.slice(0, 300) });
         trace.push({ action: 'look', target: `${urls.length} bilder`, result: verdict.slice(0, 160) });
         work.push({ role: 'user', content: `Vurdering av bildene:\n${verdict}` });
@@ -513,6 +646,87 @@ export function verifyProposals(proposals: unknown[], opened: Map<string, PageRe
     out.push(p);
   }
   return { proposals: out, warnings };
+}
+
+function emptyAnchor(description: string | null, why: string): HuntAnchor {
+  return { image_url: null, page_url: null, page_title: null, site: null, kind: null, painter: null, description, why };
+}
+
+/** The anchor from the agent's answer, checked against the pages it opened. Null if the image is not on one. */
+export function anchorFrom(a: Extract<Action, { action: 'anchor' }>, opened: Map<string, PageResult>): HuntAnchor | null {
+  const kind = (['official', 'concept_art', 'painted'] as const).find((k) => k === a.kind) ?? 'official';
+  const base = { painter: a.painter?.slice(0, 120) ?? null, description: a.description?.slice(0, 800) ?? null, why: a.why?.slice(0, 600) ?? null };
+  if (!a.image_url) return { ...emptyAnchor(base.description, base.why ?? 'Fant ikke et offisielt bilde.'), painter: base.painter };
+  const img = normUrl(a.image_url);
+  let page = a.page_url ? opened.get(normUrl(a.page_url)) : undefined;
+  if (!page || !page.images.some((x) => normUrl(x.url) === img)) page = [...opened.values()].find((pg) => pg.images.some((x) => normUrl(x.url) === img));
+  if (!page) return null;
+  const found = page.images.find((x) => normUrl(x.url) === img)!;
+  return { image_url: found.url, page_url: page.url, page_title: page.title, site: page.site, kind, ...base };
+}
+
+/**
+ * Completes the image hunt's proposal: the anchor goes first among the images,
+ * and videos are kept only when YouTube or the search confirms them.
+ */
+async function finishHunt(checked: { proposals: unknown[]; warnings: string[] }, focus: ImageFocus, hunt: HuntState,
+  opened: Map<string, PageResult>, searched: Map<string, SearchHit>, videoInfo?: (url: string) => Promise<VideoInfo>) {
+  type Sel = { type: string; evidence?: string; uncertainty?: unknown[]; payload: Record<string, unknown> };
+  const all = checked.proposals as Sel[];
+  const rawVideos = all.flatMap((p) => (p.type === 'reference_selection' && Array.isArray(p.payload.videos) ? p.payload.videos : []));
+  const videos = await verifyVideos(rawVideos, opened, searched, videoInfo, checked.warnings);
+  let sel = all.find((p) => p.type === 'reference_selection');
+  const a = hunt.anchor;
+  if (!sel && (a?.image_url || videos.length)) {
+    sel = { type: 'reference_selection', evidence: 'documented', uncertainty: [], payload: { subject: focus.subject_ref, note: null, images: [], sources_read: [] } };
+    all.push(sel);
+  }
+  if (!sel) return;
+  const images = (Array.isArray(sel.payload.images) ? sel.payload.images : []) as Record<string, unknown>[];
+  if (a?.image_url && !images.some((i) => normUrl(String(i.image_url)) === normUrl(a.image_url!))) {
+    const page = opened.get(normUrl(a.page_url!));
+    const img = page?.images.find((x) => normUrl(x.url) === normUrl(a.image_url!));
+    images.unshift({
+      image_url: a.image_url, page_url: a.page_url, page_title: a.page_title, site: a.site, creator: page?.author ?? null,
+      caption: img?.caption ?? img?.alt ?? `Offisielt bilde av ${focus.subject_name}`, kind: a.kind === 'painted' ? 'official' : a.kind,
+      confidence: 'high', reason: a.why, original_text: img?.context ?? null, page_language: page?.language ?? null,
+    });
+  }
+  sel.payload.images = images;
+  sel.payload.anchor = a;
+  sel.payload.videos = videos;
+}
+
+/** Keeps YouTube videos that YouTube (oEmbed) or this turn's search confirms; at most MAX_VIDEOS. */
+export async function verifyVideos(raw: unknown[], opened: Map<string, PageResult>, searched: Map<string, SearchHit>,
+  videoInfo: ((url: string) => Promise<VideoInfo>) | undefined, warnings: string[]): Promise<VideoFound[]> {
+  const out: VideoFound[] = [];
+  const seen = new Set<string>();
+  let dropped = 0;
+  for (const r of raw) {
+    if (out.length >= MAX_VIDEOS) break;
+    const o = (r && typeof r === 'object' ? r : {}) as Record<string, unknown>;
+    const url = typeof r === 'string' ? r : typeof o.url === 'string' ? o.url : '';
+    const id = youtubeId(url);
+    if (!id) { dropped++; continue; }
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const why = typeof o.why === 'string' && o.why.trim() ? o.why.trim().slice(0, 400) : null;
+    const page = [...opened.values()].find((p) => p.video?.video_id === id);
+    if (page?.video) { out.push({ url: page.video.url, video_id: id, title: page.video.title, channel: page.video.channel, thumbnail_url: page.video.thumbnail_url, why }); continue; }
+    if (videoInfo) {
+      try {
+        const v = await videoInfo(url);
+        out.push({ url: v.url, video_id: id, title: v.title, channel: v.channel, thumbnail_url: v.thumbnail_url, why });
+        continue;
+      } catch { /* fall back to the search hit */ }
+    }
+    const hit = [...searched.values()].find((h) => youtubeId(h.url) === id);
+    if (hit) { out.push({ url: `https://www.youtube.com/watch?v=${id}`, video_id: id, title: hit.title, channel: null, thumbnail_url: null, why }); continue; }
+    dropped++;
+  }
+  if (dropped) warnings.push(`Fjernet ${dropped} video(er) som verken YouTube eller søket kunne bekrefte.`);
+  return out;
 }
 
 function finalEvent(message: string, proposals: unknown[], model: string, warnings: string[], trace: TraceStep[], opened: Map<string, PageResult>): ResearchEvent {

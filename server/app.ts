@@ -5,7 +5,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { CredentialStore } from './credential-store.ts';
 import { UserError } from './credential-store.ts';
-import type { PageResult } from './fetch-page.ts';
+import type { PageResult, VideoInfo } from './fetch-page.ts';
 import type { DataStore } from './data-store.ts';
 import { hostedSearchOf } from './provider.ts';
 import type { ResponsesProvider } from './provider.ts';
@@ -29,6 +29,8 @@ export interface AppDeps {
   search: WebSearch;
   openPage: (url: string) => Promise<PageResult>;
   getImage: (url: string) => Promise<{ type: string; body: Buffer }>;
+  /** YouTube oEmbed lookup; without it, videos are confirmed only by the search. */
+  videoInfo?: (url: string) => Promise<VideoInfo>;
   data: DataStore;
 }
 
@@ -214,6 +216,12 @@ async function streamResearch(req: IncomingMessage, res: ServerResponse, d: AppD
     await runResearch({
       provider: d.provider, search: d.search, hostedSearch, openPage: d.openPage, signal: ac.signal,
       lookAtImages: (urls, question, reference) => lookAtImages(d.provider, d.getImage, urls, question, reference, input.model),
+      imageAsDataUrl: async (url) => {
+        const img = await d.getImage(url);
+        if (img.body.length > 4 * 1024 * 1024) throw new UserError('Ankerbildet er for stort til å vises modellen');
+        return `data:${img.type};base64,${img.body.toString('base64')}`;
+      },
+      videoInfo: d.videoInfo,
     }, input, emit);
   } catch (err) {
     const msg = err instanceof UserError ? err.message : 'Noe gikk galt under researchen';

@@ -68,7 +68,7 @@ export interface PageSeen {
 }
 
 export interface TraceStep {
-  action: 'search' | 'open' | 'look';
+  action: 'search' | 'open' | 'look' | 'anchor';
   target: string;
   result: string;
 }
@@ -83,9 +83,13 @@ export type ResearchEvent =
       images?: { url: string; alt: string; caption: string | null; context: string | null }[] }
   | { type: 'look'; count: number; why: string | null }
   | { type: 'look_done'; summary: string }
+  | { type: 'phase'; phase: 'official' | 'broad'; text: string }
+  | { type: 'anchor'; anchor: HuntAnchor }
   | { type: 'tool_error'; action: string; target: string; error: string }
   | { type: 'final'; message: string; proposals: unknown[]; model: string; warnings: string[]; trace: TraceStep[]; pages?: PageSeen[] }
   | { type: 'error'; error: string };
+
+import type { HuntAnchor } from './agent';
 
 export type FinalEvent = Extract<ResearchEvent, { type: 'final' }>;
 

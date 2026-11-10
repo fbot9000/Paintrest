@@ -29,8 +29,9 @@ export function startImageHunt(app: App, s: MiniatureSubject, game: string, refe
     const task = await ensureTask(app, s.project_id);
     const ref = refOf(app, task, s.id, s.name);
     const reference = await imageDataUrl(app.store.getTables(), app.cmd, referenceFileId);
-    const prompt = `Finn konseptillustrasjon og bilder av miniatyren «${s.name}» fra spillet «${game}». `
-      + 'Gjør grundig research på flere språk og foreslå kandidater med begrunnelse; jeg vurderer bildene selv.';
+    const prompt = `Finn bilder av miniatyren «${s.name}» fra spillet «${game}». Finn først det beste offisielle bildet `
+      + '(utgiverens side, Kickstarter eller Gamefound, BoardGameGeek), og let så bredt etter malte versjoner og malevideoer, på flere språk. '
+      + 'Foreslå kandidater med begrunnelse; jeg vurderer bildene selv.';
     await runAgentTurn({ store: app.store, research: app.research, agent: app.agent, ai: app.ai }, task, prompt, onEvent, signal,
       { kind: 'images', subject_ref: ref, subject_name: s.name, game, reference_image: reference });
   });

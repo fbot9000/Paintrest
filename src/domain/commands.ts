@@ -75,6 +75,8 @@ export interface Commands {
   setSubjectCover(subject_id: Id, asset_id: Id | null): Promise<void>;
   /** Removes an image from the miniature. The source and the file stay, as history. */
   detachSubjectImage(subject_id: Id, asset_id: Id): Promise<void>;
+  /** Keeps a video (from an image hunt) as a source for the miniature: a link, nothing is downloaded. */
+  saveVideoSource(subject_id: Id, video: { url: string; title: string; channel: string | null }): Promise<void>;
 
   // Palett (datamodell v3 §8)
   /** Adds a paint to one miniature's palette. */

@@ -586,8 +586,8 @@ function Message({ m }: { m: ResearchMessage }) {
             <ol>
               {m.trace.map((s, i) => (
                 <li key={i}>
-                  <span className="mono">{s.action === 'search' ? 'Søk' : s.action === 'look' ? 'Se' : 'Les'}</span>{' '}
-                  {s.action === 'open' ? <a href={s.target} target="_blank" rel="noreferrer">{shortUrl(s.target)}</a> : s.action === 'look' ? <em>{s.target}</em> : <em>«{s.target}»</em>}
+                  <span className="mono">{s.action === 'search' ? 'Søk' : s.action === 'look' ? 'Se' : s.action === 'anchor' ? 'Anker' : 'Les'}</span>{' '}
+                  {s.action === 'open' ? <a href={s.target} target="_blank" rel="noreferrer">{shortUrl(s.target)}</a> : s.action === 'look' || s.action === 'anchor' ? <em>{shortUrl(s.target)}</em> : <em>«{s.target}»</em>}
                   <span className="trace-res"> — {s.result}</span>
                 </li>
               ))}
@@ -609,6 +609,10 @@ export function LiveSteps({ events, onStop }: { events: ResearchEvent[]; onStop:
       case 'open_done': return [{ key: 'od' + e.url, text: <>{e.title} · {e.image_count} bilder</>, state: 'ok' }];
       case 'look': return [{ key: 'l' + e.count + (e.why ?? ''), text: <>Ser på {e.count} bilder{e.why ? ` – ${e.why}` : ''}</>, state: 'run' }];
       case 'look_done': return [{ key: 'ld' + e.summary.slice(0, 20), text: <>Vurdering: {e.summary.split('\n').slice(-1)[0]}</>, state: 'ok' }];
+      case 'phase': return [{ key: 'p' + e.phase, text: <strong>{e.text}</strong>, state: 'ok' }];
+      case 'anchor': return [{ key: 'a' + (e.anchor.image_url ?? ''), text: e.anchor.image_url
+        ? <>Offisielt anker valgt{e.anchor.site ? ` fra ${e.anchor.site}` : ''}{e.anchor.painter ? `, malt av ${e.anchor.painter}` : ''}</>
+        : <>Fant ikke noe offisielt bilde; leter videre uten anker</>, state: 'ok' }];
       case 'tool_error': return [{ key: 'e' + e.target, text: <>{e.action === 'search' ? 'Søk' : 'Lesing'} feilet: {e.error}</>, state: 'err' }];
       default: return [];
     }

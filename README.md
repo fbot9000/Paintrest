@@ -82,6 +82,18 @@ Agenten bruker først **nettsøket som er bygget inn i UiB sitt API** (OpenAIs `
 
 Panelet viser hvert søk og hver side mens agenten jobber, og du kan stoppe den. Under svaret kan du se hvordan agenten fant det. Serveren fjerner bilder og kilder agenten ikke faktisk har åpnet, og sier fra i panelet.
 
+## Bildejakt i to faser
+
+«Let etter bilder med AI» i verkstedet går i to faser. Paintrest styrer overgangen, og fasen vises mens agenten jobber.
+
+1. **Offisielt anker (høyst 10 steg).** Agenten leter hos utgiveren (nettside og nettbutikk), på Kickstarter- eller Gamefound-kampanjen (også oppdateringer og tillegg) og på BoardGameGeek. Den velger det beste offisielle bildet av figuren: helst offisielt malt, ellers render, ellers konseptkunst. Den noterer også maleren kampanjen oppgir. Serveren sjekker at bildet finnes på en side agenten har åpnet. Finner agenten ikke noe, går jakten videre uten anker og sier det.
+2. **Bredt søk (resten av de 30 stegene).** Agenten leter etter malte versjoner: maleren fra kampanjen, blogger og forum på flere språk, Reddit og BGG. Når den bruker «look», viser Paintrest ankeret først som referanse, slik at kandidatene sammenlignes med det (form og positur, ikke farger). Har miniatyren allerede en illustrasjon, brukes den som referanse i stedet.
+3. **Malevideoer.** Agenten foreslår YouTube-videoer, men kan ikke se dem. Paintrest henter tittel, kanal og miniatyrbilde fra YouTube (oEmbed). Videoer som verken YouTube eller søket bekrefter, fjernes. «Lagre som kilde» lagrer en lenke på miniatyren, uten å laste ned noe.
+
+Bilder-fanen viser ankeret øverst, deretter forslagene delt i «Offisielle bilder og konseptkunst» og «Malt av andre», og så videoene.
+
+Sider som bygges med skript (typisk kampanjesider), har ofte bildene i sidedata i stedet for i HTML. Har en side færre enn fire synlige bilder, leser Paintrest også bildeadresser fra kildekoden.
+
 ## Miniatyrverkstedet
 
 Trykk på bildet eller navnet på et miniatyrkort. Da åpnes verkstedet for miniatyren, som bruker hele skjermen:

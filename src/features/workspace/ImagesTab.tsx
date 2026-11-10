@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useApp, useCommand, useView } from '../../app/context';
 import type { Run } from '../../app/runs';
-import type { ImageKind, ReferenceImage, ReferenceSelectionPayload } from '../../domain/agent';
+import type { HuntAnchor, ImageKind, ReferenceImage, ReferenceSelectionPayload, VideoRef } from '../../domain/agent';
 import type { Id, MiniatureSubject, Tables } from '../../domain/types';
 import { subjectReferences } from '../../domain/views';
 import { IMAGE_KIND_LABEL } from '../../data/images-tx';
@@ -29,7 +29,12 @@ function view(t: Tables, s: MiniatureSubject) {
   const suggested: Candidate[] = proposals.flatMap((p) => (p.payload as ReferenceSelectionPayload).images.map((i) => ({ ...i, proposal_id: p.id })));
   const saved = new Set(subjectReferences(t, s).map((r) => r.asset.locator).filter(Boolean) as string[]);
   const read = proposals.flatMap((p) => (p.payload as ReferenceSelectionPayload).sources_read ?? []);
-  return { proposals, suggested, saved, read };
+  const withAnchor = proposals.find((p) => (p.payload as ReferenceSelectionPayload).anchor);
+  const anchor = withAnchor ? { anchor: (withAnchor.payload as ReferenceSelectionPayload).anchor!, proposal_id: withAnchor.id } : null;
+  const videos = proposals.flatMap((p) => (p.payload as ReferenceSelectionPayload).videos ?? []);
+  const linked = new Set(Object.values(t.source_link).filter((l) => !l.deleted_at && l.target_type === 'subject' && l.target_id === s.id).map((l) => l.source_id));
+  const savedVideos = new Set(Object.values(t.source).filter((x) => !x.deleted_at && x.kind === 'video' && linked.has(x.id) && x.url).map((x) => x.url!));
+  return { proposals, suggested, saved, read, anchor, videos, savedVideos };
 }
 
 export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, referenceFileId }: {
@@ -101,6 +106,20 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
   };
 
   const running = run?.status === 'running';
+  // While the hunt runs, the anchor and phase arrive as events; afterwards they are in the proposal.
+  const liveAnchor = running ? run!.events.flatMap((e) => (e.type === 'anchor' ? [e.anchor] : [])).at(-1) ?? null : null;
+  const phase = running ? run!.events.flatMap((e) => (e.type === 'phase' ? [e.text] : [])).at(-1) ?? null : null;
+  const anchor: { anchor: HuntAnchor; proposal_id: Id | null } | null = liveAnchor ? { anchor: liveAnchor, proposal_id: null } : data.anchor;
+  const anchorCandidate: Candidate | null = anchor?.anchor.image_url ? {
+    image_url: anchor.anchor.image_url, page_url: anchor.anchor.page_url ?? anchor.anchor.image_url,
+    page_title: anchor.anchor.page_title ?? '', site: anchor.anchor.site ?? '', creator: anchor.anchor.painter,
+    caption: anchor.anchor.painter ? `Offisielt bilde, malt av ${anchor.anchor.painter}` : 'Offisielt bilde',
+    kind: anchor.anchor.kind === 'painted' ? 'official' : anchor.anchor.kind, proposal_id: anchor.proposal_id,
+  } : null;
+  const rest = dedupe(data.suggested).filter((c) => c.image_url !== anchorCandidate?.image_url);
+  const official = rest.filter((c) => c.kind === 'official' || c.kind === 'concept_art');
+  const painted = rest.filter((c) => c.kind !== 'official' && c.kind !== 'concept_art');
+  const videos = dedupeVideos(data.videos);
   const grid = (list: Candidate[], withReasons: boolean) => (
     <div className="wsi-grid">
       {dedupe(list).map((c) => (
@@ -117,7 +136,8 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
       <div className="ws-toolbar">
         <div>
           <h2>Bilder</h2>
-          <p className="small muted">Agenten leter etter konseptillustrasjon, offisielle bilder og malte eksempler av {s.name}, på flere språk, og ser først i kildene for spillet.</p>
+          <p className="small muted">Agenten finner først det beste offisielle bildet av {s.name} (utgiver, Kickstarter eller Gamefound, BoardGameGeek), og leter så bredt etter malte versjoner og malevideoer, på flere språk.</p>
+          {phase && <p className="small wsi-phase">{phase}</p>}
         </div>
         <div className="ws-toolbar-actions">
           <ImagePicker onPick={(f) => cmdRun((c) => c.setSubjectImage(s.id, f, f.name))}>Last opp bilde</ImagePicker>
@@ -128,13 +148,58 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
       </div>
       <ErrorNote error={localError ?? error} onClose={() => { setLocalError(null); clearError(); }} />
 
-      {data.suggested.length > 0 && (
+      {anchor && (
         <section className="wsi-section">
           <div className="wsi-section-head">
-            <h3>Agentens forslag ({dedupe(data.suggested).length})</h3>
+            <h3>Offisielt anker</h3>
+            <span className="small muted">Det beste offisielle bildet agenten fant og kontrollerte. Resten av jakten er sammenlignet med det.</span>
+          </div>
+          {anchorCandidate ? (
+            <div className="wsi-anchor">
+              <CandidateCard c={anchorCandidate} reasons={false} saved={data.saved.has(anchorCandidate.image_url)}
+                on={selected.has(anchorCandidate.image_url)} cover={cover === anchorCandidate.image_url}
+                onToggle={(on) => toggle(anchorCandidate, on)} onCover={() => { setCover(anchorCandidate.image_url); toggle(anchorCandidate, true); }}
+                proxy={app.ai.imageProxyUrl(anchorCandidate.image_url)} />
+              <div className="wsi-anchor-text">
+                <span className="wsi-badges">
+                  <Badge tone="moss">Offisielt anker</Badge>
+                  {anchor.anchor.kind && <Badge tone={anchor.anchor.kind === 'concept_art' ? 'dark' : 'neutral'}>{IMAGE_KIND_LABEL[anchor.anchor.kind === 'painted' ? 'official' : anchor.anchor.kind]}</Badge>}
+                </span>
+                {anchor.anchor.painter && <p><strong>Malt av {anchor.anchor.painter}</strong> <span className="small muted">(oppgitt av kilden)</span></p>}
+                {anchor.anchor.description && <p className="small"><span className="eyebrow">Kjennetegn</span><br />{anchor.anchor.description}</p>}
+                {anchor.anchor.why && <p className="small wsi-reason">{anchor.anchor.why}</p>}
+                {anchor.anchor.page_url && <a className="small" href={anchor.anchor.page_url} target="_blank" rel="noreferrer">{anchor.anchor.page_title || anchor.anchor.site} ↗</a>}
+              </div>
+            </div>
+          ) : (
+            <p className="small ws-note">Agenten fant ikke et offisielt bilde av {s.name}{anchor.anchor.why ? `: ${anchor.anchor.why}` : '.'} Resten av jakten bygger på beskrivelser{anchor.anchor.description ? ` (${anchor.anchor.description})` : ''}.</p>
+          )}
+        </section>
+      )}
+
+      {rest.length > 0 && (
+        <section className="wsi-section">
+          <div className="wsi-section-head">
+            <h3>Agentens forslag ({rest.length})</h3>
             <button type="button" className="link small" onClick={() => data.proposals.forEach((p) => cmdRun(() => app.research.rejectProposal(p.id)))}>Forkast forslagene</button>
           </div>
-          {grid(data.suggested, true)}
+          {official.length > 0 && <><h4 className="wsi-sub">Offisielle bilder og konseptkunst ({official.length})</h4>{grid(official, true)}</>}
+          {painted.length > 0 && <><h4 className="wsi-sub">Malt av andre ({painted.length})</h4>{grid(painted, true)}</>}
+        </section>
+      )}
+
+      {videos.length > 0 && (
+        <section className="wsi-section">
+          <div className="wsi-section-head">
+            <h3>Malevideoer ({videos.length})</h3>
+            <span className="small muted">Agenten kan ikke se videoene. Tittel og kanal er hentet fra YouTube; begrunnelsen bygger på tittel og søketreff.</span>
+          </div>
+          <ul className="wsi-videos">
+            {videos.map((v) => (
+              <VideoCard key={v.video_id} v={v} saved={data.savedVideos.has(v.url)} proxy={v.thumbnail_url ? app.ai.imageProxyUrl(v.thumbnail_url) : null}
+                onSave={() => cmdRun((c) => c.saveVideoSource(s.id, v))} />
+            ))}
+          </ul>
         </section>
       )}
 
@@ -168,7 +233,7 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
         </section>
       )}
 
-      {!data.suggested.length && !livePages.length && !browseUrl && (
+      {!data.suggested.length && !videos.length && !anchor && !livePages.length && !browseUrl && (
         <div className="ws-empty">
           <p>Ingen kandidater ennå.</p>
           <p className="small muted">Trykk «Let etter bilder med AI», velg en kilde i kolonnen til høyre, eller last opp et bilde.</p>
@@ -185,6 +250,31 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
         </div>
       )}
     </div>
+  );
+}
+
+function dedupeVideos(list: VideoRef[]): VideoRef[] {
+  const seen = new Set<string>();
+  return list.filter((v) => !seen.has(v.video_id) && !!seen.add(v.video_id));
+}
+
+function VideoCard({ v, saved, proxy, onSave }: { v: VideoRef; saved: boolean; proxy: string | null; onSave: () => void }) {
+  return (
+    <li className="wsi-video">
+      <a href={v.url} target="_blank" rel="noreferrer" className="wsi-video-thumb" aria-label={`Se «${v.title}» på YouTube`}>
+        {proxy ? <img src={proxy} alt="" loading="lazy" /> : <span className="small muted">YouTube</span>}
+        <span className="wsi-play" aria-hidden>▶</span>
+      </a>
+      <div className="wsi-meta">
+        <strong className="small">{v.title}</strong>
+        {v.channel && <span className="small muted">{v.channel}</span>}
+        {v.why && <span className="small wsi-reason">{v.why}</span>}
+        <span className="wsi-video-actions">
+          <a className="small" href={v.url} target="_blank" rel="noreferrer">Se på YouTube ↗</a>
+          {saved ? <Badge tone="moss">Lagret som kilde</Badge> : <button type="button" className="link small" onClick={onSave}>Lagre som kilde</button>}
+        </span>
+      </div>
+    </li>
   );
 }
 

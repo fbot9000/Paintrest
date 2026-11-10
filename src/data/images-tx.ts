@@ -49,7 +49,7 @@ export async function downloadImages(store: Store, fetchImage: ((url: string) =>
 }
 
 /** Reuses a source with the same URL (and keeps it), otherwise creates one with retention kept. */
-export function sourceFor(t: Tables, ws: Id, ref: { url: string; title: string; creator: string | null; kind: 'gallery' | 'article' }, task_id: Id | null, log: Log): Id {
+export function sourceFor(t: Tables, ws: Id, ref: { url: string; title: string; creator: string | null; kind: 'gallery' | 'article' | 'video' }, task_id: Id | null, log: Log): Id {
   const existing = Object.values(t.source).find((x) => !x.deleted_at && x.url === ref.url);
   if (existing) {
     existing.retention = 'kept';
