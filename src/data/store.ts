@@ -49,6 +49,7 @@ export function emptyTables(): Tables {
     paint_completion: {},
     source: {},
     source_asset: {},
+    source_layer: {},
     source_link: {},
     source_link_asset: [],
     change_record: {},
@@ -72,6 +73,10 @@ export function migrate(s: DbState | undefined): DbState | undefined {
   if (state.schema_version === 1) {
     // v2: research tables (agent). New tables start empty.
     state = { ...state, schema_version: 2, tables: { ...emptyTables(), ...state.tables } };
+  }
+  if (state.schema_version === 2) {
+    // v3: source_layer (original text and translation of a source).
+    state = { ...state, schema_version: 3, tables: { ...emptyTables(), ...state.tables } };
   }
   return state.schema_version === SCHEMA_VERSION ? state : undefined;
 }

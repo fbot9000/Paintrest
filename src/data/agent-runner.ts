@@ -4,7 +4,7 @@
  * drafts are written through the agent's own command set (skjema §7).
  */
 import { buildAgentContext, normaliseProposal } from '../domain/agent';
-import type { AiGateway, ResearchEvent } from '../domain/ai';
+import type { AgentTurnInput, AiGateway, ResearchEvent } from '../domain/ai';
 import type { AgentCommands, ResearchCommands } from '../domain/research';
 import type { Id } from '../domain/types';
 import type { Store } from './store';
@@ -20,7 +20,7 @@ export async function runAgentTurn(deps: {
   research: ResearchCommands;
   agent: AgentCommands;
   ai: AiGateway;
-}, task_id: Id, text: string, onEvent: (e: ResearchEvent) => void = () => {}, signal?: AbortSignal): Promise<TurnSummary> {
+}, task_id: Id, text: string, onEvent: (e: ResearchEvent) => void = () => {}, signal?: AbortSignal, focus: AgentTurnInput['focus'] = null): Promise<TurnSummary> {
   const { store, research, agent, ai } = deps;
   await research.syncResultTypes(task_id);
   await research.addUserMessage(task_id, text);
@@ -44,7 +44,7 @@ export async function runAgentTurn(deps: {
 
   let r;
   try {
-    r = await ai.runAgent({ context: ctx.data, messages, result_types: ctx.allowedTypes }, onEvent, signal);
+    r = await ai.runAgent({ context: ctx.data, messages, result_types: ctx.allowedTypes, focus }, onEvent, signal);
   } catch (e) {
     const aborted = e instanceof Error && e.name === 'AbortError';
     agent.addSystemMessage(task_id, aborted ? 'Du stoppet agenten.' : `Agenten svarte ikke: ${e instanceof Error ? e.message : String(e)}`);

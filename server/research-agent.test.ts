@@ -11,7 +11,7 @@ import type { WebSearch } from './search.ts';
 
 const PAGE: PageResult = {
   url: 'https://example.com/gallery', title: 'Druid gallery', site: 'example.com', author: 'Painter Pete', text: 'Merlin painted.',
-  images: [{ url: 'https://example.com/img/merlin-front.jpg', alt: 'Merlin front', caption: null }],
+  images: [{ url: 'https://example.com/img/merlin-front.jpg', alt: 'Merlin front', caption: null, context: null }], language: 'en',
 };
 
 function fakeProvider(replies: string[]): ResponsesProvider {
@@ -185,5 +185,76 @@ describe('avslag fra modellen', () => {
     expect(isRefusal("I'm sorry, but I cannot assist with that request.")).toBe(true);
     expect(isRefusal('Beklager, men jeg kan ikke hjelpe med det.')).toBe(true);
     expect(isRefusal('Her er miniatyrene i esken.')).toBe(false);
+  });
+});
+
+describe('bildejakt', () => {
+  const focus = { kind: 'images' as const, subject_ref: 'M1', subject_name: 'Balor', game: 'Avalon', reference_image: 'data:image/jpeg;base64,AAAA' };
+
+  function provider(replies: string[]): ResponsesProvider {
+    let i = 0;
+    return { respond: async () => ({ text: replies[i++] ?? '{"action":"final","message":"slutt","proposals":[]}', model: 'm', usage: null, searches: [], citations: [] }) } as unknown as ResponsesProvider;
+  }
+
+  it('ser på bilder fra åpnede sider, med referanse, og beholder begrunnelse og oversettelse', async () => {
+    const looks: { urls: string[]; ref: string | null }[] = [];
+    const events: ResearchEvent[] = [];
+    await runResearch({
+      provider: provider([
+        '{"action":"open","url":"https://example.com/gallery"}',
+        '{"action":"look","image_urls":["https://example.com/img/merlin-front.jpg","https://elsewhere.example/x.jpg"],"question":"Er dette Balor?"}',
+        JSON.stringify({ action: 'final', message: 'Fant ett bilde', proposals: [{ type: 'reference_selection', payload: { subject: 'M1',
+          images: [{ image_url: 'https://example.com/img/merlin-front.jpg', page_url: 'https://example.com/gallery', confidence: 'medium', reason: 'Teksten sier «Balor ferdig malt».', original_text: '발로르 도색 완료' }],
+          sources_read: [{ url: 'https://example.com/gallery', language: 'ko', summary: 'Koreansk maleblogg om Avalon.', original_excerpt: '아발론' }, { url: 'https://never-opened.example' }] } }] }),
+      ]),
+      search: fakeSearch, openPage: async () => PAGE,
+      lookAtImages: async (urls, _q, ref) => { looks.push({ urls, ref }); return '1 – ja – malt – samme positur'; },
+    }, { context: {}, messages: [{ role: 'user', content: 'Finn Balor' }], result_types: ['reference_selection'], focus }, (e) => events.push(e));
+
+    expect(looks).toEqual([{ urls: ['https://example.com/img/merlin-front.jpg'], ref: 'data:image/jpeg;base64,AAAA' }]);
+    expect(events.some((e) => e.type === 'look_done')).toBe(true);
+    const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    const payload = (final.proposals[0] as { payload: { images: Record<string, unknown>[]; sources_read: Record<string, unknown>[] } }).payload;
+    expect(payload.images[0]).toMatchObject({ confidence: 'medium', reason: 'Teksten sier «Balor ferdig malt».', original_text: '발로르 도색 완료', page_language: 'en' });
+    expect(payload.sources_read).toEqual([{ url: 'https://example.com/gallery', title: 'Druid gallery', site: 'example.com', language: 'ko', summary: 'Koreansk maleblogg om Avalon.', original_excerpt: '아발론' }]);
+  });
+
+  it('slår av bildevisning når modellen ikke godtar bilder', async () => {
+    const { VisionUnsupportedError } = await import('./provider.ts');
+    let calls = 0;
+    const events: ResearchEvent[] = [];
+    await runResearch({
+      provider: provider([
+        '{"action":"open","url":"https://example.com/gallery"}',
+        '{"action":"look","image_urls":["https://example.com/img/merlin-front.jpg"]}',
+        '{"action":"look","image_urls":["https://example.com/img/merlin-front.jpg"]}',
+      ]),
+      search: fakeSearch, openPage: async () => PAGE,
+      lookAtImages: async () => { calls++; throw new VisionUnsupportedError('nei', 502); },
+    }, { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: [], focus }, (e) => events.push(e));
+    expect(calls).toBe(1);
+    expect(events.filter((e) => e.type === 'tool_error' && e.action === 'look')).toHaveLength(1);
+  });
+
+  it('gir bildejakt flere steg enn vanlig research', async () => {
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider: provider(Array(30).fill('{"action":"search","query":"q"}')), search: fakeSearch, openPage: async () => PAGE },
+      { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: [], focus }, (e) => events.push(e));
+    expect(events.filter((e) => e.type === 'search')).toHaveLength(24);
+  });
+});
+
+describe('sidelesing for bildejakt', () => {
+  it('tar med tekst rundt bildet og gjetter språk', async () => {
+    const { extract, rewriteForReading } = await import('./fetch-page.ts');
+    const html = `<html><body><div class="se-main"><div class="se-component se-text"><p>이번에는 발로르를 도색했습니다.</p></div>
+      <div class="se-component se-image"><img data-lazy-src="https://postfiles.example/balor.jpg" alt=""></div>
+      <div class="se-component se-text"><p>베이스는 이끼로 꾸몄어요. 아발론 리븐 베일 미니어처 도색 완료 후기입니다. 정말 재미있었습니다 다음에는 다른 미니어처도 칠할 예정입니다.</p></div></div></body></html>`;
+    const r = extract('https://m.blog.naver.com/painter/223', html);
+    expect(r.language).toBe('ko');
+    expect(r.images[0]!.context).toContain('발로르를 도색했습니다');
+    expect(r.images[0]!.context).toContain('베이스는 이끼로');
+    expect(rewriteForReading('https://blog.naver.com/painter/223456')).toBe('https://m.blog.naver.com/painter/223456');
+    expect(rewriteForReading('https://blog.naver.com/PostView.naver?blogId=p&logNo=9')).toBe('https://m.blog.naver.com/p/9');
   });
 });

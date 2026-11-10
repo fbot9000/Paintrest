@@ -8,7 +8,7 @@
  */
 import { CommandError } from '../domain/commands';
 import { newId, now } from '../domain/ids';
-import type { ImageKind, ReferenceImage } from '../domain/agent';
+import type { ImageKind, ReferenceImage, SourceRead } from '../domain/agent';
 import type { Id, Tables } from '../domain/types';
 import type { Store } from './store';
 
@@ -144,4 +144,24 @@ export function setCover(t: Tables, subject_id: Id, asset_id: Id | null, log: Lo
     }
   }
   s.official_asset_id = asset_id;
+}
+
+/**
+ * Stores what the agent read on a kept page: the original excerpt and the
+ * Norwegian summary as source layers (datamodell v3 §11 SourceLayer).
+ * Only for sources that exist; a layer with the same text is not added twice.
+ */
+export function addSourceLayers(t: Tables, read: SourceRead[]): void {
+  for (const r of read) {
+    const source = Object.values(t.source).find((x) => !x.deleted_at && x.url === r.url);
+    if (!source) continue;
+    const add = (layer: 'original' | 'translation', language: string | null, body: string | null) => {
+      if (!body?.trim()) return;
+      if (Object.values(t.source_layer).some((l) => l.source_id === source.id && l.layer === layer && l.body === body)) return;
+      const id = newId();
+      t.source_layer[id] = { id, source_id: source.id, layer, language, body, deleted_at: null };
+    };
+    add('original', r.language, r.original_excerpt);
+    add('translation', 'nb', r.summary);
+  }
 }

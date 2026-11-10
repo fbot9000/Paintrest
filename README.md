@@ -64,7 +64,7 @@ Panelet viser hvert søk og hver side mens agenten jobber, og du kan stoppe den.
 Trykk på bildet på et miniatyrkort. Da åpnes «Bilder for …»:
 
 - **Lagret på miniatyren:** her velger du hvilket bilde som er illustrasjonen, fjerner bilder eller åpner kilden.
-- **Let med AI:** agenten leter etter konseptillustrasjon, offisielle bilder og malte eksempler, og ser først i kildene du har lagret for spillet. Du ser hvert steg mens den jobber.
+- **Let med AI (bildejakt):** agenten finner først ut hvordan figuren ser ut og hva den heter på andre språk. Så søker den bredt, også på koreanske, japanske og kinesiske malerblogger, og bruker opptil 24 steg. Den kan se på bildene og sammenligne dem med miniatyrens nåværende illustrasjon. Hver kandidat får sikkerhet («Trolig riktig», «Mulig», «Usikker»), en norsk begrunnelse og originalteksten. «Kilder agenten leste» viser et norsk sammendrag av hver side. Du ser hvert steg mens agenten jobber.
 - **Fra lagrede kilder:** du åpner en side som er lagret for spillet, og velger bilder direkte, uten AI. Samme kilde kan gi bilder til mange miniatyrer.
 - **Last opp:** ditt eget bilde.
 

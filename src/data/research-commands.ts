@@ -6,7 +6,7 @@ import type { AgentCommands, ApproveOptions, ProposalWrite, ResearchCommands } f
 import type { ChangeAction, Id, ResearchProposal, ResultType, Tables } from '../domain/types';
 import { attachedExpansions } from '../domain/views';
 import type { Store } from './store';
-import { attachImages, downloadImages, setCover, sourceFor } from './images-tx';
+import { addSourceLayers, attachImages, downloadImages, setCover, sourceFor } from './images-tx';
 import type { Downloaded } from './images-tx';
 
 /** Result types implemented in this version. See docs/AVVIK.md. */
@@ -312,6 +312,8 @@ function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions, files
     const s = t.miniature_subject[r.subject_id]!;
     const chosen = r.images.filter((i) => !opts.image_urls || opts.image_urls.includes(i.image_url));
     const assets = attachImages(t, ws, s.id, chosen, files, p.task_id, (tt, id, a) => record(t, ws, tt, id, a, who));
+    const keptPages = new Set(chosen.map((i) => i.page_url));
+    addSourceLayers(t, (r.sources_read ?? []).filter((x) => keptPages.has(x.url)));
     const firstAsset = chosen[0] ? assets[chosen[0].image_url] : undefined;
     if (opts.cover_image_url && assets[opts.cover_image_url]) {
       setCover(t, s.id, assets[opts.cover_image_url]!, (tt, id, a) => record(t, ws, tt, id, a, who));

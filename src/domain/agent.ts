@@ -35,12 +35,28 @@ export interface ReferenceImage {
   creator: string | null;
   caption: string | null;
   kind?: ImageKind | null;
+  /** Image hunt: how sure the agent is, why (in Norwegian), and the original text it relied on. */
+  confidence?: 'high' | 'medium' | 'low' | null;
+  reason?: string | null;
+  original_text?: string | null;
+  page_language?: string | null;
+}
+
+/** A page the agent read during an image hunt, with a Norwegian summary. */
+export interface SourceRead {
+  url: string;
+  title: string;
+  site: string;
+  language: string | null;
+  summary: string | null;
+  original_excerpt: string | null;
 }
 
 export interface ReferenceSelectionPayload {
   subject_id: Id;
   note: string | null;
   images: ReferenceImage[];
+  sources_read?: SourceRead[];
 }
 
 export interface CatalogSubjectPayload {
@@ -195,10 +211,21 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
         creator: str(io.creator).trim() || null,
         caption: str(io.caption).trim() || null,
         kind: (['concept_art', 'official', 'painted', 'other'] as const).find((k) => k === io.kind) ?? null,
+        confidence: (['high', 'medium', 'low'] as const).find((k) => k === io.confidence) ?? null,
+        reason: str(io.reason).trim() || null,
+        original_text: str(io.original_text).trim() || null,
+        page_language: str(io.page_language).trim() || null,
       }];
     });
     if (!images.length) return { ok: false, reason: 'Bildeutvalget har ingen gyldige bilder' };
-    return { ok: true, value: { ...common, result_type: 'reference_selection', payload: { subject_id, images, note: str(o.note).trim() || null } } };
+    const sources_read: SourceRead[] = arr(o.sources_read).flatMap((x) => {
+      const so = obj(x);
+      const url = str(so.url).trim();
+      if (!/^https?:\/\//.test(url)) return [];
+      return [{ url, title: str(so.title).trim() || url, site: str(so.site).trim() || hostOf(url), language: str(so.language).trim() || null,
+        summary: str(so.summary).trim() || null, original_excerpt: str(so.original_excerpt).trim() || null }];
+    });
+    return { ok: true, value: { ...common, result_type: 'reference_selection', payload: { subject_id, images, note: str(o.note).trim() || null, sources_read } } };
   }
 
   return { ok: false, reason: `Ukjent forslagstype (${String(raw.type)})` };

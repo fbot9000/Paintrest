@@ -297,6 +297,15 @@ export interface SourceAsset {
   image_kind?: 'concept_art' | 'official' | 'painted' | 'other' | null;
 }
 
+export interface SourceLayer {
+  id: Id;
+  source_id: Id;
+  layer: 'original' | 'translation' | 'extract';
+  language: string | null;
+  body: string;
+  deleted_at: Timestamp | null;
+}
+
 export type LinkTargetType = 'project' | 'subject' | 'technique' | 'recipe' | 'plan_step';
 export type LinkUse = 'evidence' | 'visual_reference' | 'method';
 
@@ -361,6 +370,7 @@ export interface Tables {
   paint_completion: Record<Id, PaintCompletion>;
   source: Record<Id, Source>;
   source_asset: Record<Id, SourceAsset>;
+  source_layer: Record<Id, SourceLayer>;
   source_link: Record<Id, SourceLink>;
   source_link_asset: SourceLinkAsset[];
   change_record: Record<Id, ChangeRecord>;
@@ -420,7 +430,7 @@ export interface ResearchMessage {
   /** PROTOTYPE: which model answered (skjema stores provider/model on proposals only). */
   model_id?: string | null;
   /** PROTOTYPE: the searches and pages behind an answer, shown as «Slik fant agenten dette». */
-  trace?: { action: 'search' | 'open'; target: string; result: string }[];
+  trace?: { action: 'search' | 'open' | 'look'; target: string; result: string }[];
 }
 
 export type Evidence = 'documented' | 'synthesized' | 'unresolved';
@@ -459,4 +469,4 @@ export interface ContextRef {
   captured_at: Timestamp;
 }
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;

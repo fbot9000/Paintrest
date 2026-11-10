@@ -12,7 +12,7 @@
  */
 import { UserError } from './credential-store.ts';
 import type { PageResult } from './fetch-page.ts';
-import { HostedToolError } from './provider.ts';
+import { HostedToolError, VisionUnsupportedError } from './provider.ts';
 import type { HostedSearch, ResponsesProvider } from './provider.ts';
 import type { SearchHit, WebSearch } from './search.ts';
 
@@ -22,12 +22,14 @@ export type ResearchEvent =
   | { type: 'search_done'; query: string; hits: { title: string; url: string }[] }
   | { type: 'open'; url: string; why: string | null }
   | { type: 'open_done'; url: string; title: string; image_count: number }
+  | { type: 'look'; count: number; why: string | null }
+  | { type: 'look_done'; summary: string }
   | { type: 'tool_error'; action: string; target: string; error: string }
   | { type: 'final'; message: string; proposals: unknown[]; model: string; warnings: string[]; trace: TraceStep[] }
   | { type: 'error'; error: string };
 
 export interface TraceStep {
-  action: 'search' | 'open';
+  action: 'search' | 'open' | 'look';
   target: string;
   result: string;
 }
@@ -37,6 +39,17 @@ export interface ResearchInput {
   messages: { role: 'user' | 'assistant'; content: string }[];
   result_types: string[];
   model?: string;
+  /** Image hunt for one miniature: a research strategy of its own, more steps and the look tool. */
+  focus?: ImageFocus | null;
+}
+
+export interface ImageFocus {
+  kind: 'images';
+  subject_ref: string;
+  subject_name: string;
+  game: string;
+  /** A known picture of the miniature (data URL), sent along when the agent looks at candidates. */
+  reference_image?: string | null;
 }
 
 export interface ResearchDeps {
@@ -45,6 +58,8 @@ export interface ResearchDeps {
   /** UiB's built-in search tool in the Responses API, or null when switched off. */
   hostedSearch?: HostedSearch | null;
   openPage: (url: string) => Promise<PageResult>;
+  /** Shows images to the model and returns its written assessment. */
+  lookAtImages?: (imageUrls: string[], question: string, reference: string | null) => Promise<string>;
   signal?: AbortSignal;
 }
 
@@ -52,9 +67,12 @@ export interface ResearchDeps {
 export type WebMode = 'hosted' | 'search' | 'none';
 
 export const MAX_TOOL_STEPS = 12;
+export const MAX_IMAGE_STEPS = 24;
+const MAX_LOOK = 8;
 const MAX_MESSAGES = 30;
 
-export function researchInstructions(context: unknown, resultTypes: string[], mode: WebMode): string {
+export function researchInstructions(context: unknown, resultTypes: string[], mode: WebMode, focus: ImageFocus | null = null, vision = false): string {
+  const maxSteps = focus ? MAX_IMAGE_STEPS : MAX_TOOL_STEPS;
   const sourceRules = `Kildekrav (viktig):
 - Påstander om hvilke miniatyrer og hvor mange som finnes, skal bygge på kilder. Oppgi dem i "sources" med eksakt URL.
 - Bilder du foreslår, må være fra bildelisten på en side du har åpnet med "open". Bruk eksakt bilde-URL og sidens URL. Ikke gjett eller lag bilde-URL-er.
@@ -65,7 +83,7 @@ I tillegg kan Paintrest åpne sider for deg, slik at du får sidens tekst og en 
   {"action": "open", "url": "https://…", "why": "kort grunn"} – Paintrest leser siden og gir deg tekst og bildeliste
   {"action": "final", "message": "…", "proposals": [ … ]}     – ferdig svar til brukeren
 Søk med web_search, og åpne deretter de 2–5 mest lovende sidene (utgiverens produktside, regelbok eller komponentliste, BoardGameGeek, malegallerier og maleblogger) med "open".
-Du har høyst ${MAX_TOOL_STEPS} åpne-steg per svar.
+Du har høyst ${maxSteps} verktøysteg per svar.
 
 ${sourceRules}`
     : mode === 'search'
@@ -73,17 +91,38 @@ ${sourceRules}`
   {"action": "search", "query": "…", "why": "kort grunn"}   – nettsøk (bruk gjerne engelske søkeord)
   {"action": "open", "url": "https://…", "why": "kort grunn"} – les én side og få tekst og bildeliste
   {"action": "final", "message": "…", "proposals": [ … ]}     – ferdig svar til brukeren
-Du får resultatet av hvert verktøy som neste melding. Du har høyst ${MAX_TOOL_STEPS} verktøysteg per svar. Bruk dem målrettet:
+Du får resultatet av hvert verktøy som neste melding. Du har høyst ${maxSteps} verktøysteg per svar. Bruk dem målrettet:
 søk først, åpne de 2–5 mest lovende sidene (utgiverens produktside, regelbok eller komponentliste, BoardGameGeek, malegallerier og maleblogger), og avslutt med final.
 
 ${sourceRules}`
       : `Du har ikke nettilgang i dette oppsettet. Svar direkte med ett JSON-objekt {"action": "final", "message": "…", "proposals": [ … ]}.
 Det du vet fra opplæringen, merkes "synthesized". Ikke foreslå bilder.`;
+  const look = vision && mode !== 'none'
+    ? `
+Du kan også SE på bilder:
+  {"action": "look", "image_urls": ["https://…", …], "question": "hva du vil vite", "why": "kort grunn"}
+Bildene må være fra bildelisten på en side du har åpnet (høyst ${MAX_LOOK} per gang). Paintrest viser deg bildene${focus?.reference_image ? ', med et kjent bilde av miniatyren først som referanse' : ''}, og du får en vurdering tilbake.
+Bruk dette til å avgjøre om et dårlig merket bilde faktisk viser figuren.`
+    : '';
+  const hunt = focus ? `
+
+OPPDRAG: BILDEJAKT for miniatyren «${focus.subject_name}» (${focus.subject_ref}) fra spillet «${focus.game}».
+Slike bilder er vanskelige å finne og ofte dårlig merket. Gjør grundig research, ikke bare ett søk. Arbeid slik:
+1. Identitet: finn utgiverens eller Kickstarter-sidens bilde og beskrivelse av figuren (positur, våpen, base, fraksjon, skulptør), og hva spillet og figuren heter på andre språk.
+2. Søk bredt og på flere språk. Malere legger ofte ut bilder på koreanske (Naver-blogg, Tistory), japanske, kinesiske, polske, spanske og tyske blogger og forum, og på Reddit og BoardGameGeek. Søk med spillets navn og figurens navn, også translitterert (for eksempel koreansk), sammen med ord som «painted», «도색», «塗装», «malowanie», «pintado».
+3. Åpne mange sider (gallerier, malerapporter, Kickstarter-oppdateringer, BGG-bilder). En side som viser hele fraksjonen kan ha figuren uten navn; bruk teksten rundt bildet${vision ? ' og «look»' : ''} for å avgjøre.
+4. Foreslå heller for mange enn for få: opptil 20 kandidater, sortert etter sikkerhet. Brukeren ser på bildene og avgjør. Ta med konseptillustrasjon, offisielle bilder og malte eksempler.
+5. Oversett: skriv på norsk hvorfor hvert bilde trolig viser figuren, og ta med den korte originalteksten (på kildens språk) som begrunnelsen bygger på.
+For hvert bilde i "images" i reference_selection, legg til:
+  "confidence": "high|medium|low", "reason": "norsk begrunnelse", "original_text": "kort utdrag på originalspråket eller null"
+og legg til i payload:
+  "sources_read": [{"url": "https://…", "language": "ko", "summary": "norsk sammendrag av hva siden viser og sier om figuren", "original_excerpt": "kort utdrag på originalspråket"}]
+Lag ETT reference_selection-forslag for ${focus.subject_ref}. Lag ikke andre forslagstyper i dette oppdraget.` : '';
   return `Du er researchagenten i Paintrest, et personlig arbeidsverktøy for miniatyrmaling.
 Du hjelper brukeren å kartlegge miniatyrer i brettspillprosjekter, finne referansebilder og lage maleplaner med eksakte malingsprodukter.
 Svar alltid på norsk bokmål.
 
-${web}
+${web}${look}${hunt}
 
 Regler for forslag:
 - Du foreslår. Brukeren godkjenner. Du kan ikke endre godkjente data.
@@ -117,6 +156,7 @@ ${JSON.stringify(context)}`;
 type Action =
   | { action: 'search'; query: string; why: string | null }
   | { action: 'open'; url: string; why: string | null }
+  | { action: 'look'; image_urls: string[]; question: string; why: string | null }
   | { action: 'final'; message: string; proposals: unknown[] };
 
 /** Finds the JSON action in a reply, also inside a code fence or surrounding prose. */
@@ -134,6 +174,9 @@ export function parseAction(text: string): Action | null {
     const why = typeof v.why === 'string' ? v.why : null;
     if (v.action === 'search' && typeof v.query === 'string') return { action: 'search', query: v.query, why };
     if (v.action === 'open' && typeof v.url === 'string') return { action: 'open', url: v.url, why };
+    if (v.action === 'look' && Array.isArray(v.image_urls)) {
+      return { action: 'look', image_urls: v.image_urls.filter((x): x is string => typeof x === 'string'), question: typeof v.question === 'string' ? v.question : '', why };
+    }
     if (v.action === 'final' || 'message' in v || 'proposals' in v) {
       return { action: 'final', message: typeof v.message === 'string' ? v.message : '', proposals: Array.isArray(v.proposals) ? v.proposals : [] };
     }
@@ -148,7 +191,11 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   if (!history.length || history.at(-1)!.role !== 'user') throw new UserError('Siste melding må være fra brukeren');
 
   let mode: WebMode = deps.hostedSearch ? 'hosted' : deps.search?.configured() ? 'search' : 'none';
-  let instructions = researchInstructions(input.context, input.result_types, mode);
+  const focus = input.focus?.kind === 'images' ? input.focus : null;
+  let vision = !!deps.lookAtImages;
+  const maxSteps = focus ? MAX_IMAGE_STEPS : MAX_TOOL_STEPS;
+  const build = () => researchInstructions(input.context, input.result_types, mode, focus, vision);
+  let instructions = build();
   const work: { role: 'user' | 'assistant'; content: string }[] = [];
   const opened = new Map<string, PageResult>();
   const searched = new Map<string, SearchHit>();
@@ -157,9 +204,9 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   let nudged = false;
   let model = input.model ?? '';
 
-  emit({ type: 'status', text: mode === 'hosted' ? 'Agenten søker via UiB' : mode === 'search' ? 'Agenten planlegger søket' : 'Agenten svarer uten nettilgang' });
+  emit({ type: 'status', text: focus ? `Bildejakt for ${focus.subject_name}` : mode === 'hosted' ? 'Agenten søker via UiB' : mode === 'search' ? 'Agenten planlegger søket' : 'Agenten svarer uten nettilgang' });
 
-  for (let round = 0; round < MAX_TOOL_STEPS + 3; round++) {
+  for (let round = 0; round < maxSteps + 4; round++) {
     if (deps.signal?.aborted) throw new UserError('Avbrutt');
     let out;
     try {
@@ -170,7 +217,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       if (!(e instanceof HostedToolError) || mode !== 'hosted') throw e;
       // UiB rejected the built-in search: fall back to Paintrest's search, or none.
       mode = deps.search?.configured() ? 'search' : 'none';
-      instructions = researchInstructions(input.context, input.result_types, mode);
+      instructions = build();
       emit({ type: 'tool_error', action: 'search', target: 'UiB nettsøk', error: `${e.message} Fortsetter ${mode === 'search' ? 'med Tavily/Brave' : 'uten nettsøk'}.` });
       trace.push({ action: 'search', target: 'UiB nettsøk', result: 'Ikke støttet, byttet modus' });
       round--;
@@ -209,16 +256,47 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       emit(finalEvent(action.message, checked.proposals, model, checked.warnings, trace));
       return;
     }
-    const allowed = mode === 'search' || (mode === 'hosted' && action.action === 'open');
-    if (!allowed || steps >= MAX_TOOL_STEPS) {
+    const allowed = action.action === 'look'
+      ? vision && mode !== 'none'
+      : mode === 'search' || (mode === 'hosted' && action.action === 'open');
+    if (!allowed || steps >= maxSteps) {
       work.push({ role: 'user', content: mode === 'none'
         ? 'Nettilgang er ikke tilgjengelig. Svar nå med {"action": "final", …}.'
-        : steps >= MAX_TOOL_STEPS
-          ? `Du har brukt alle ${MAX_TOOL_STEPS} verktøystegene. Svar nå med {"action": "final", …} basert på det du har funnet.`
-          : 'Bruk det innebygde web_search-verktøyet til å søke. Svar med {"action": "open", …} eller {"action": "final", …}.' });
+        : steps >= maxSteps
+          ? `Du har brukt alle ${maxSteps} verktøystegene. Svar nå med {"action": "final", …} basert på det du har funnet.`
+          : action.action === 'look'
+            ? 'Bildevisning er ikke tilgjengelig. Vurder bildene ut fra teksten rundt dem, og fortsett med open eller final.'
+            : 'Bruk det innebygde web_search-verktøyet til å søke. Svar med {"action": "open", …} eller {"action": "final", …}.' });
       continue;
     }
     steps++;
+
+    if (action.action === 'look') {
+      // Only images from pages opened in this turn: the model cannot make Paintrest fetch arbitrary files.
+      const known = new Set([...opened.values()].flatMap((pg) => pg.images.map((i) => normUrl(i.url))));
+      const urls = [...new Set(action.image_urls.map(normUrl))].filter((u) => known.has(u)).slice(0, MAX_LOOK);
+      if (!urls.length) {
+        work.push({ role: 'user', content: 'Ingen av bilde-URL-ene finnes på sidene du har åpnet. Bruk eksakte URL-er fra bildelistene.' });
+        continue;
+      }
+      emit({ type: 'look', count: urls.length, why: action.why });
+      try {
+        const verdict = await deps.lookAtImages!(urls, action.question || `Viser bildene ${focus?.subject_name ?? 'figuren'}?`, focus?.reference_image ?? null);
+        emit({ type: 'look_done', summary: verdict.slice(0, 300) });
+        trace.push({ action: 'look', target: `${urls.length} bilder`, result: verdict.slice(0, 160) });
+        work.push({ role: 'user', content: `Vurdering av bildene:\n${verdict}` });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (e instanceof VisionUnsupportedError) {
+          vision = false;
+          instructions = build();
+        }
+        emit({ type: 'tool_error', action: 'look', target: `${urls.length} bilder`, error: msg });
+        trace.push({ action: 'look', target: `${urls.length} bilder`, result: `Feil: ${msg}` });
+        work.push({ role: 'user', content: `Kunne ikke vise bildene: ${msg}${vision ? '' : ' Bildevisning er slått av for resten av oppdraget; bruk teksten rundt bildene.'}` });
+      }
+      continue;
+    }
 
     if (action.action === 'search') {
       emit({ type: 'search', query: action.query, why: action.why });
@@ -257,11 +335,11 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
 function formatPage(p: PageResult): string {
   return `Side: ${p.title} (${p.site})
 URL: ${p.url}
-${p.author ? `Forfatter/nettsted: ${p.author}\n` : ''}Tekst:
+${p.language ? `Språk: ${p.language}\n` : ''}${p.author ? `Forfatter/nettsted: ${p.author}\n` : ''}Tekst:
 ${p.text || '(ingen lesbar tekst)'}
 
-Bilder på siden (bruk eksakt URL hvis du foreslår et bilde):
-${p.images.map((i) => `- ${i.url}${i.alt ? ` — alt: ${i.alt}` : ''}${i.caption ? ` — bildetekst: ${i.caption}` : ''}`).join('\n') || '(ingen bilder funnet)'}`;
+Bilder på siden (bruk eksakt URL hvis du foreslår eller vil se på et bilde):
+${p.images.map((i) => `- ${i.url}${i.alt ? ` — alt: ${i.alt}` : ''}${i.caption ? ` — bildetekst: ${i.caption}` : ''}${i.context ? ` — tekst rundt: ${i.context}` : ''}`).join('\n') || '(ingen bilder funnet)'}`;
 }
 
 /** Typical refusal phrasings (English and Norwegian). */
@@ -325,11 +403,27 @@ export function verifyProposals(proposals: unknown[], opened: Map<string, PageRe
           image_url: img.url, page_url: page.url, page_title: page.title, site: page.site,
           creator: page.author, caption: typeof i.caption === 'string' && i.caption.trim() ? i.caption.trim() : img.caption ?? img.alt ?? null,
           kind: ['concept_art', 'official', 'painted', 'other'].includes(i.kind as string) ? i.kind : null,
+          confidence: ['high', 'medium', 'low'].includes(i.confidence as string) ? i.confidence : null,
+          reason: typeof i.reason === 'string' ? i.reason.slice(0, 600) : null,
+          original_text: typeof i.original_text === 'string' ? i.original_text.slice(0, 400) : (img.context ?? null),
+          page_language: page.language,
         }];
       });
       if (kept.length < imgs.length) warnings.push(`Fjernet ${imgs.length - kept.length} bilde(r) som ikke fantes på en side agenten åpnet.`);
       if (!kept.length) continue;
+      const order = { high: 0, medium: 1, low: 2 } as Record<string, number>;
+      kept.sort((a, b) => (order[a.confidence as string] ?? 3) - (order[b.confidence as string] ?? 3));
       payload.images = kept;
+      payload.sources_read = (Array.isArray(payload.sources_read) ? payload.sources_read : []).flatMap((x: Record<string, unknown>) => {
+        const page = typeof x?.url === 'string' ? opened.get(normUrl(x.url)) : undefined;
+        if (!page) return [];
+        return [{
+          url: page.url, title: page.title, site: page.site,
+          language: typeof x.language === 'string' ? x.language.slice(0, 12) : page.language,
+          summary: typeof x.summary === 'string' ? x.summary.slice(0, 800) : null,
+          original_excerpt: typeof x.original_excerpt === 'string' ? x.original_excerpt.slice(0, 600) : null,
+        }];
+      });
       p.evidence = 'documented';
     }
     p.payload = payload;

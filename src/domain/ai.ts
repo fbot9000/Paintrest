@@ -49,10 +49,12 @@ export interface AgentTurnInput {
   messages: { role: 'user' | 'assistant'; content: string }[];
   result_types: string[];
   model?: string;
+  /** Image hunt for one miniature (own strategy, more steps, may look at images). */
+  focus?: { kind: 'images'; subject_ref: string; subject_name: string; game: string; reference_image?: string | null } | null;
 }
 
 export interface TraceStep {
-  action: 'search' | 'open';
+  action: 'search' | 'open' | 'look';
   target: string;
   result: string;
 }
@@ -64,6 +66,8 @@ export type ResearchEvent =
   | { type: 'search_done'; query: string; hits: { title: string; url: string }[] }
   | { type: 'open'; url: string; why: string | null }
   | { type: 'open_done'; url: string; title: string; image_count: number }
+  | { type: 'look'; count: number; why: string | null }
+  | { type: 'look_done'; summary: string }
   | { type: 'tool_error'; action: string; target: string; error: string }
   | { type: 'final'; message: string; proposals: unknown[]; model: string; warnings: string[]; trace: TraceStep[] }
   | { type: 'error'; error: string };

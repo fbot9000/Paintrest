@@ -35,3 +35,11 @@
 .img-cand-meta a { overflow-wrap: anywhere; }
 .img-cover-pick { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; cursor: pointer; min-height: 32px; }
 .img-cover-pick input { width: 18px; height: 18px; accent-color: var(--pine); }
+.img-badges { display: flex; gap: 4px; flex-wrap: wrap; }
+.img-reason { color: var(--ink); border-left: 3px solid var(--soft-dark); padding-left: 8px; }
+.img-orig-toggle summary { cursor: pointer; color: var(--fore); }
+.img-orig { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; }
+.img-read { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 8px 12px; background: var(--card); }
+.img-read summary { cursor: pointer; font-weight: 500; }
+.img-read ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; max-height: 30vh; overflow: auto; }
+.img-read a { color: var(--fore); font-weight: 500; }

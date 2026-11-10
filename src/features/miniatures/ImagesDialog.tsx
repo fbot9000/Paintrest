@@ -25,6 +25,29 @@ interface Candidate extends ReferenceImage {
   proposal_id: Id | null;
 }
 
+/**
+ * The miniature's current illustration, scaled to at most 512 px, as a JPEG data URL.
+ * The agent compares candidates against it. Vector placeholders are skipped.
+ */
+async function referenceImage(app: ReturnType<typeof useApp>, file_id: Id | null): Promise<string | null> {
+  if (!file_id) return null;
+  const f = app.store.getTables().stored_file[file_id];
+  if (!f || !/^image\/(jpeg|png|webp|gif)/.test(f.media_type)) return null;
+  try {
+    const url = await app.cmd.getFileUrl(file_id);
+    if (!url) return null;
+    const bmp = await createImageBitmap(await (await fetch(url)).blob());
+    const scale = Math.min(1, 512 / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bmp.width * scale);
+    canvas.height = Math.round(bmp.height * scale);
+    canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.85);
+  } catch {
+    return null;
+  }
+}
+
 function view(t: Tables, subject_id: Id, project_id: Id) {
   const s = t.miniature_subject[subject_id];
   if (!s) return null;
@@ -37,7 +60,8 @@ function view(t: Tables, subject_id: Id, project_id: Id) {
       && (p.payload as ReferenceSelectionPayload).subject_id === subject_id)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   const fromAgent: Candidate[] = proposals.flatMap((p) => (p.payload as ReferenceSelectionPayload).images.map((i) => ({ ...i, proposal_id: p.id })));
-  return { s, game, saved, savedUrls, proposals, fromAgent, sources: knownSources(t, project_id) };
+  const read = proposals.flatMap((p) => (p.payload as ReferenceSelectionPayload).sources_read ?? []);
+  return { s, game, saved, savedUrls, proposals, fromAgent, read, sources: knownSources(t, project_id) };
 }
 
 export function ImagesDialog({ subjectId, projectId, onClose }: { subjectId: Id; projectId: Id; onClose: () => void }) {
@@ -84,10 +108,12 @@ export function ImagesDialog({ subjectId, projectId, onClose }: { subjectId: Id;
       const task = await actions.ensureTask();
       const refs = buildAgentContext(app.store.getTables(), task).subjectRefs;
       const ref = Object.entries(refs).find(([, id]) => id === s.id)?.[0] ?? s.name;
-      const prompt = `Finn konseptillustrasjon og bilder av miniatyren «${s.name}» (${ref}) fra spillet «${data.game}». `
-        + `Se først i known_sources. Lag ett reference_selection-forslag for ${ref} med opptil 12 bilder av akkurat denne figuren, og merk hvert bilde med kind.`;
+      const prompt = `Finn konseptillustrasjon og bilder av miniatyren «${s.name}» fra spillet «${data.game}». `
+        + 'Gjør grundig research på flere språk og foreslå kandidater med begrunnelse; jeg vurderer bildene selv.';
+      const reference = await referenceImage(app, data.saved.find((r) => r.cover)?.file_id ?? data.saved[0]?.file_id ?? null);
       await runAgentTurn({ store: app.store, research: app.research, agent: app.agent, ai: app.ai }, task, prompt,
-        (e) => setLive((cur) => [...cur, e]), ac.signal);
+        (e) => setLive((cur) => [...cur, e]), ac.signal,
+        { kind: 'images', subject_ref: ref, subject_name: s.name, game: data.game, reference_image: reference });
       const last = Object.values(app.store.getTables().research_message)
         .filter((m) => m.task_id === task && m.role !== 'user')
         .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
@@ -200,6 +226,21 @@ export function ImagesDialog({ subjectId, projectId, onClose }: { subjectId: Id;
           </div>
           {busy === 'ai' && <div className="img-live"><LiveSteps events={live} onStop={() => abortRef.current?.abort()} /></div>}
           {agentNote && busy !== 'ai' && <p className="img-note">{agentNote}</p>}
+          {data.read.length > 0 && busy !== 'ai' && (
+            <details className="img-read">
+              <summary>Kilder agenten leste ({data.read.length})</summary>
+              <ul>
+                {data.read.map((r) => (
+                  <li key={r.url}>
+                    <a href={r.url} target="_blank" rel="noreferrer">{r.title}</a>
+                    <span className="small muted"> · {r.site}{r.language ? ` · ${languageName(r.language)}` : ''}</span>
+                    {r.summary && <p className="small">{r.summary}</p>}
+                    {r.original_excerpt && <p className="small muted img-orig" lang={r.language ?? undefined}>{r.original_excerpt}</p>}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
         </div>
       )}
 
@@ -249,8 +290,18 @@ export function ImagesDialog({ subjectId, projectId, onClose }: { subjectId: Id;
                     {on && <span className="img-check" aria-hidden>✓</span>}
                   </button>
                   <div className="img-cand-meta">
-                    {c.kind && <Badge tone={c.kind === 'concept_art' ? 'dark' : 'neutral'}>{IMAGE_KIND_LABEL[c.kind as ImageKind]}</Badge>}
+                    <span className="img-badges">
+                      {c.confidence && <Badge tone={c.confidence === 'high' ? 'moss' : c.confidence === 'low' ? 'warn' : 'neutral'}>{CONFIDENCE[c.confidence]}</Badge>}
+                      {c.kind && <Badge tone={c.kind === 'concept_art' ? 'dark' : 'neutral'}>{IMAGE_KIND_LABEL[c.kind as ImageKind]}</Badge>}
+                    </span>
                     <span className="small">{c.caption ?? 'Uten bildetekst'}</span>
+                    {c.reason && <span className="small img-reason">{c.reason}</span>}
+                    {c.original_text && (
+                      <details className="img-orig-toggle">
+                        <summary className="small">Originaltekst{c.page_language ? ` (${languageName(c.page_language)})` : ''}</summary>
+                        <p className="small muted img-orig" lang={c.page_language ?? undefined}>{c.original_text}</p>
+                      </details>
+                    )}
                     <a className="small muted" href={c.page_url} target="_blank" rel="noreferrer">{c.creator ?? c.site} ↗</a>
                     {!saved && (
                       <label className="img-cover-pick">
@@ -269,4 +320,14 @@ export function ImagesDialog({ subjectId, projectId, onClose }: { subjectId: Id;
       <ErrorNote error={localError ?? error} onClose={() => { setLocalError(null); clearError(); }} />
     </Dialog>
   );
+}
+
+const CONFIDENCE = { high: 'Trolig riktig', medium: 'Mulig', low: 'Usikker' } as const;
+
+function languageName(code: string): string {
+  try {
+    return new Intl.DisplayNames(['nb'], { type: 'language' }).of(code.split('-')[0]!) ?? code;
+  } catch {
+    return code;
+  }
 }

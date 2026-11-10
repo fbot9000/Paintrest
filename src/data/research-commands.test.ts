@@ -156,6 +156,32 @@ describe('bildeutvalg fra nettet', () => {
   });
 });
 
+describe('bildejakt: kildetekst og oversettelse', () => {
+  it('lagrer originaltekst og norsk sammendrag som kildelag for sider med valgte bilder', async () => {
+    const { store, agent, research, task, subject } = await setup();
+    const w = agent.writeProposal(task, {
+      result_type: 'reference_selection', update_of: null, evidence: 'documented', uncertainty: [],
+      payload: {
+        subject_id: subject('Merlin').id, note: null,
+        images: [{ image_url: 'https://blog.example/balor.jpg', page_url: 'https://blog.example/post', page_title: '발로르 도색', site: 'blog.example', creator: null, caption: 'Balor', confidence: 'high', reason: 'Teksten nevner Balor', original_text: '발로르', page_language: 'ko' }],
+        sources_read: [
+          { url: 'https://blog.example/post', title: '발로르 도색', site: 'blog.example', language: 'ko', summary: 'Maleren viser ferdig malt Balor.', original_excerpt: '발로르 도색 완료' },
+          { url: 'https://other.example/x', title: 'Annet', site: 'other.example', language: 'en', summary: 'Ikke brukt.', original_excerpt: null },
+        ],
+      },
+    }, 'uib', 'm');
+    if (!w.ok) throw new Error(w.reason);
+    await research.approveProposal(w.id);
+    const t = store.getTables();
+    const src = Object.values(t.source).find((x) => x.url === 'https://blog.example/post')!;
+    const layers = Object.values(t.source_layer).filter((l) => l.source_id === src.id);
+    expect(layers.map((l) => [l.layer, l.language, l.body]).sort()).toEqual([
+      ['original', 'ko', '발로르 도색 완료'], ['translation', 'nb', 'Maleren viser ferdig malt Balor.'],
+    ]);
+    expect(Object.values(t.source).some((x) => x.url === 'https://other.example/x')).toBe(false);
+  });
+});
+
 describe('eldre oppgaver', () => {
   it('får nye resultattyper når brukeren starter en runde', async () => {
     const { store, research, agent, task, subject } = await setup();
@@ -183,7 +209,8 @@ describe('kontekst og migrering', () => {
     const v1 = { ...s, schema_version: 1, tables: { ...s.tables } } as typeof s;
     delete (v1.tables as Partial<typeof s.tables>).research_task;
     const m = migrate(v1)!;
-    expect(m.schema_version).toBe(2);
+    expect(m.schema_version).toBe(3);
+    expect(m.tables.source_layer).toEqual({});
     expect(Object.keys(m.tables.project).length).toBe(Object.keys(s.tables.project).length);
     expect(m.tables.research_task).toEqual({});
   });

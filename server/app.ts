@@ -9,12 +9,13 @@ import type { PageResult } from './fetch-page.ts';
 import { hostedSearchOf } from './provider.ts';
 import type { ResponsesProvider } from './provider.ts';
 import { runResearch } from './research-agent.ts';
-import type { ResearchEvent, ResearchInput } from './research-agent.ts';
+import { lookAtImages } from './vision.ts';
+import type { ImageFocus, ResearchEvent, ResearchInput } from './research-agent.ts';
 import { SEARCH_PROVIDERS } from './search.ts';
 import type { SearchProviderId, WebSearch } from './search.ts';
 
 const MAX_BODY = 64 * 1024;
-const MAX_AGENT_BODY = 1024 * 1024;
+const MAX_AGENT_BODY = 3 * 1024 * 1024;
 
 export const UIB_PROVIDER = 'uib';
 
@@ -133,6 +134,7 @@ export function createHandler(d: AppDeps) {
             messages: Array.isArray(body.messages) ? body.messages as ResearchInput['messages'] : [],
             result_types: Array.isArray(body.result_types) ? body.result_types.filter((x): x is string => typeof x === 'string') : [],
             model: str(body.model) || undefined,
+            focus: parseFocus(body.focus),
           };
           return streamResearch(req, res, d, input);
         }
@@ -158,7 +160,10 @@ async function streamResearch(req: IncomingMessage, res: ServerResponse, d: AppD
   const emit = (e: ResearchEvent) => { if (!res.writableEnded) res.write(`${JSON.stringify(e)}\n`); };
   try {
     const hostedSearch = hostedSearchOf(d.aiStore.get()?.hosted_search);
-    await runResearch({ provider: d.provider, search: d.search, hostedSearch, openPage: d.openPage, signal: ac.signal }, input, emit);
+    await runResearch({
+      provider: d.provider, search: d.search, hostedSearch, openPage: d.openPage, signal: ac.signal,
+      lookAtImages: (urls, question, reference) => lookAtImages(d.provider, d.getImage, urls, question, reference, input.model),
+    }, input, emit);
   } catch (err) {
     const msg = err instanceof UserError ? err.message : 'Noe gikk galt under researchen';
     if (!(err instanceof UserError)) console.error('[api] agent/run feilet:', err instanceof Error ? err.message : err);
@@ -166,6 +171,21 @@ async function streamResearch(req: IncomingMessage, res: ServerResponse, d: AppD
   }
   void req;
   res.end();
+}
+
+function parseFocus(v: unknown): ImageFocus | null {
+  if (!v || typeof v !== 'object') return null;
+  const f = v as Record<string, unknown>;
+  if (f.kind !== 'images') return null;
+  const ref = typeof f.reference_image === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(f.reference_image) && f.reference_image.length < 1_500_000
+    ? f.reference_image : null;
+  return {
+    kind: 'images',
+    subject_ref: str(f.subject_ref).slice(0, 12),
+    subject_name: str(f.subject_name).slice(0, 120),
+    game: str(f.game).slice(0, 160),
+    reference_image: ref,
+  };
 }
 
 /** The public view always states the search mode, also for keys saved before the setting existed. */

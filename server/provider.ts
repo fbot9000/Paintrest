@@ -22,6 +22,14 @@ export interface RespondResult {
   searches: string[];
 }
 
+/** Message for the Responses API: plain text, or content parts with images (input_image takes a data URL). */
+export type ResponsesMessage =
+  | { role: 'user' | 'assistant'; content: string }
+  | { role: 'user'; content: ({ type: 'input_text'; text: string } | { type: 'input_image'; image_url: string })[] };
+
+/** Thrown when the endpoint rejects image input, so the agent can continue without looking. */
+export class VisionUnsupportedError extends UserError {}
+
 /** Hosted tool types in the OpenAI Responses API (web_search is current, web_search_preview the earlier one). */
 export type HostedSearch = 'web_search' | 'web_search_preview';
 
@@ -46,7 +54,7 @@ export class ResponsesProvider {
   }
 
   async respond(
-    input: string | { role: 'user' | 'assistant'; content: string }[],
+    input: string | ResponsesMessage[],
     opts: { model?: string; instructions?: string; timeoutMs?: number; hostedSearch?: HostedSearch | null } = {},
   ): Promise<RespondResult> {
     return this.store.useSecret(async (secret, cred) => {
