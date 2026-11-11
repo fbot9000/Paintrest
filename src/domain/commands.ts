@@ -71,6 +71,8 @@ export interface Commands {
   setSubjectImage(subject_id: Id, file: Blob | null, filename?: string): Promise<void>;
   /** The user picks images from a web page directly (no agent). Downloads, stores and links them. */
   attachWebImages(subject_id: Id, images: ReferenceImage[], cover_image_url?: string): Promise<void>;
+  /** Pictures the user pasted or dropped (not links): stored as kept sources and linked as references. The first becomes the illustration if there is none. */
+  addSubjectImages(subject_id: Id, files: { blob: Blob; title?: string | null; page_url?: string | null }[]): Promise<void>;
   /** Chooses which stored image is the miniature's illustration (null clears it). */
   setSubjectCover(subject_id: Id, asset_id: Id | null): Promise<void>;
   /** Removes an image from the miniature. The source and the file stay, as history. */

@@ -11,6 +11,8 @@ import type { Id, MiniatureSubject, Tables } from '../../domain/types';
 import { subjectReferences } from '../../domain/views';
 import { Button, ErrorNote, ImagePicker } from '../../ui/components';
 import { startImageHunt } from './agentRuns';
+import { addPasted, removePasted, usePasted } from './pasted';
+import { dataUrlToBlob, parsePasted } from './pasteLinks';
 
 interface Candidate extends ReferenceImage {
   proposal_id: Id | null;
@@ -97,13 +99,55 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
       }
       const direct = chosen.filter((c) => !c.proposal_id);
       if (direct.length) await app.cmd.attachWebImages(s.id, direct, cover && direct.some((c) => c.image_url === cover) ? cover : undefined);
+      removePasted(s.id, chosen.map((c) => c.image_url));
       setSelected(new Map()); setCover(null);
     } catch (e) {
-      setLocalError(e instanceof Error ? e.message : String(e));
+      const pastedFailed = [...selected.values()].some((c) => pasted.some((p) => p.image_url === c.image_url));
+      setLocalError((e instanceof Error ? e.message : String(e))
+        + (pastedFailed ? ' Stenger nettstedet for lenken (vanlig på Instagram og Facebook), høyreklikk bildet i Google og velg «Kopier bilde», og lim det inn i stedet.' : ''));
     } finally {
       setBusy(null);
     }
   };
+
+  const pasted = usePasted(s.id);
+  const [pasteText, setPasteText] = useState('');
+
+  // What the user pastes from Google Images: pictures are saved at once, image links become
+  // candidates (already ticked), and a page link opens that page's pictures.
+  const takePaste = async (files: File[], text: string) => {
+    setLocalError(null);
+    const images = files.filter((f) => f.type.startsWith('image/'));
+    const items = images.length ? [] : parsePasted(text.replace(/&amp;/g, '&'));
+    const datas = items.flatMap((i) => (i.kind === 'data' ? [i.data_url] : []));
+    const blobs = [...images.map((f) => ({ blob: f as Blob, title: f.name && f.name !== 'image.png' ? f.name : null })),
+      ...(await Promise.all(datas.map(async (d) => ({ blob: await dataUrlToBlob(d), title: null }))))];
+    if (blobs.length) await cmdRun((c) => c.addSubjectImages(s.id, blobs));
+    const links = items.flatMap((i): Candidate[] => (i.kind === 'image' ? [{
+      image_url: i.image_url, page_url: i.page_url ?? i.image_url, page_title: hostOf(i.page_url ?? i.image_url), site: hostOf(i.page_url ?? i.image_url),
+      creator: null, caption: null, kind: null, proposal_id: null,
+    }] : []));
+    if (links.length) {
+      addPasted(s.id, links);
+      setSelected((cur) => { const n = new Map(cur); links.forEach((c) => n.set(c.image_url, c)); return n; });
+    }
+    const page = items.find((i) => i.kind === 'page');
+    if (page && page.kind === 'page') setBrowseUrl(page.url);
+    if (!blobs.length && !links.length && !page) setLocalError('Fant ingen bilder eller lenker i det du limte inn.');
+  };
+
+  // Paste anywhere on the tab (not while typing in another field).
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !el.classList.contains('wsi-paste')))) return;
+      if (el?.classList.contains('wsi-paste')) return; // handled by the field itself
+      e.preventDefault();
+      void takePaste([...(e.clipboardData?.files ?? [])], `${e.clipboardData?.getData('text/plain') ?? ''}\n${e.clipboardData?.getData('text/html') ?? ''}`);
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  });
 
   const running = run?.status === 'running';
   // While the hunt runs, the anchor and phase arrive as events; afterwards they are in the proposal.
@@ -139,7 +183,15 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
       <div className="ws-toolbar">
         <div>{phase && <p className="small wsi-phase">{phase}</p>}</div>
         <div className="ws-toolbar-actions">
-          <ImagePicker onPick={(f) => cmdRun((c) => c.setSubjectImage(s.id, f, f.name))}>Last opp bilde</ImagePicker>
+          <input className="wsi-paste" value={pasteText} placeholder="Lim inn bilde eller lenke fra Google Bilder"
+            aria-label="Lim inn bilde eller bildelenke"
+            onChange={(e) => setPasteText(e.target.value)}
+            onPaste={(e) => {
+              e.preventDefault();
+              void takePaste([...e.clipboardData.files], `${e.clipboardData.getData('text/plain')}\n${e.clipboardData.getData('text/html')}`);
+            }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && pasteText.trim()) { void takePaste([], pasteText); setPasteText(''); } }} />
+          <ImagePicker onPick={(f) => cmdRun((c) => c.setSubjectImage(s.id, f, f.name))}>Last opp</ImagePicker>
           <Button variant="primary" disabled={running} onClick={() => startImageHunt(app, s, game, referenceFileId)}
             title={`Agenten finner først det beste offisielle bildet (utgiver, Kickstarter eller Gamefound, BoardGameGeek), og leter så bredt etter malte versjoner og malevideoer, på flere språk.`}>
             {running ? 'Agenten leter …' : data.suggested.length ? 'Let etter flere' : 'Let etter bilder med AI'}
@@ -147,6 +199,19 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
         </div>
       </div>
       <ErrorNote error={localError ?? error} onClose={() => { setLocalError(null); clearError(); }} />
+
+      {pasted.length > 0 && (
+        <section className="wsi-section">
+          <div className="wsi-section-head">
+            <h3>Limt inn</h3>
+            <button type="button" className="link small" onClick={() => {
+              removePasted(s.id);
+              setSelected((cur) => { const n = new Map(cur); pasted.forEach((p) => n.delete(p.image_url)); return n; });
+            }}>Fjern</button>
+          </div>
+          {grid(pasted.map((p) => ({ ...p, proposal_id: null })), false)}
+        </section>
+      )}
 
       {anchor && (
         <section className="wsi-section">
@@ -227,7 +292,7 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
         </section>
       )}
 
-      {!data.suggested.length && !videos.length && !anchor && !livePages.length && !browseUrl && (
+      {!data.suggested.length && !videos.length && !anchor && !livePages.length && !browseUrl && !pasted.length && (
         <div className="ws-empty">
           <p>Ingen bilder å velge mellom ennå.</p>
         </div>
@@ -244,6 +309,10 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
       )}
     </div>
   );
+}
+
+function hostOf(u: string): string {
+  try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; }
 }
 
 function dedupeVideos(list: VideoRef[]): VideoRef[] {

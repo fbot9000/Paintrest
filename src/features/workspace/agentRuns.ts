@@ -8,6 +8,17 @@ import { buildAgentContext } from '../../domain/agent';
 import type { Id, MiniatureSubject } from '../../domain/types';
 import { runAgentTurn } from '../../data/agent-runner';
 import { imageDataUrl } from '../../ui/imageData';
+import { subjectReferences } from '../../domain/views';
+import { getPasted } from './pasted';
+
+/** Pictures the user already found (saved with a web address, or pasted): the agent starts from them. */
+function userImages(app: App, s: MiniatureSubject) {
+  const saved = subjectReferences(app.store.getTables(), s).flatMap((r) => (r.asset.locator && /^https?:/.test(r.asset.locator)
+    ? [{ image_url: r.asset.locator, page_url: r.source.url ?? r.asset.locator, title: r.source.title }] : []));
+  const pasted = getPasted(s.id).map((p) => ({ image_url: p.image_url, page_url: p.page_url, title: p.page_title }));
+  const seen = new Set<string>();
+  return [...pasted, ...saved].filter((i) => !seen.has(i.image_url) && !!seen.add(i.image_url)).slice(0, 12);
+}
 
 type App = ReturnType<typeof useApp>;
 
@@ -33,7 +44,7 @@ export function startImageHunt(app: App, s: MiniatureSubject, game: string, refe
       + '(utgiverens side, Kickstarter eller Gamefound, BoardGameGeek), og let så bredt etter malte versjoner og malevideoer, på flere språk. '
       + 'Foreslå kandidater med begrunnelse; jeg vurderer bildene selv.';
     await runAgentTurn({ store: app.store, research: app.research, agent: app.agent, ai: app.ai }, task, prompt, onEvent, signal,
-      { kind: 'images', subject_ref: ref, subject_name: s.name, game, reference_image: reference });
+      { kind: 'images', subject_ref: ref, subject_name: s.name, game, reference_image: reference, user_images: userImages(app, s) });
   });
 }
 

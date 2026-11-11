@@ -81,6 +81,8 @@ export interface ImageFocus {
   game: string;
   /** A known picture of the miniature (data URL), sent along when the agent looks at candidates. */
   reference_image?: string | null;
+  /** Pictures the user found themselves (for example in Google Images), with the pages they are on. */
+  user_images?: { image_url: string; page_url: string; title: string }[];
 }
 
 /** The best official picture of the miniature, chosen and checked in phase 1 of an image hunt. */
@@ -242,13 +244,18 @@ ${JSON.stringify(context)}`;
 /** Phase 1 finds and checks the best official picture; phase 2 searches broadly and compares with it. */
 function huntInstructions(focus: ImageFocus, hunt: HuntState, mode: WebMode, vision: boolean, img: boolean): string {
   const lookIt = vision && mode !== 'none';
+  const mine = (focus.user_images ?? []).slice(0, 12);
+  const userBlock = mine.length ? `
+Brukeren har allerede funnet ${mine.length === 1 ? 'dette bildet' : 'disse bildene'} av figuren selv (for eksempel i Google Bilder):
+${mine.map((u) => `- ${u.image_url} (side: ${u.page_url}${u.title ? ` — ${u.title}` : ''})`).join('\n')}
+Bruk dem som fasit og som spor: ${lookIt ? 'se på dem med «look» for å vite hvordan figuren ser ut, ' : ''}bruk sidene, nettstedene og titlene til å finne flere bilder (samme maler, samme tråd, samme butikk, lignende søkeord), og let etter andre vinkler og andre maleres versjoner. Ikke foreslå disse bildene på nytt.` : '';
   const head = `OPPDRAG: BILDEJAKT for miniatyren «${focus.subject_name}» (${focus.subject_ref}) fra spillet «${focus.game}».
 Slike bilder er vanskelige å finne og ofte dårlig merket. Jakten har to faser, og Paintrest styrer overgangen mellom dem.
 Åpne sider i known_sources direkte når de er relevante, i stedet for å søke dem fram på nytt.`;
   if (hunt.phase === 'official') {
     return `
 
-${head}
+${head}${userBlock}
 
 FASE 1 AV 2: OFFISIELT ANKER (høyst ${OFFICIAL_STEPS} verktøysteg)
 Finn det beste offisielle bildet av akkurat denne figuren. Resten av jakten sammenlignes med det.
@@ -272,7 +279,7 @@ Kjennetegn: ${a.description ?? 'ikke oppgitt'}.${vision && mode !== 'none' ? '\n
     : `Ingen offisielle bilder ble funnet. Det som er kjent om figuren: ${a?.description ?? 'lite'}. Vær ekstra nøye med å avgjøre om et bilde viser riktig figur.`;
   return `
 
-${head}
+${head}${userBlock}
 
 FASE 2 AV 2: BREDT SØK (resten av verktøystegene)
 ${anchorText}
@@ -352,6 +359,13 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   // Image search needs a Tavily or Brave key; it works next to UiB's own web search too.
   const imageSearchOn = !!deps.search?.configured() && !plan;
   const imageHits = new Map<string, ImageHit>();
+  // The user's own finds count as seen: the agent may look at them and use them as the anchor.
+  for (const u of (focus?.user_images ?? []).slice(0, 12)) {
+    if (!/^https?:\/\//.test(u.image_url) || !/^https?:\/\//.test(u.page_url)) continue;
+    let site = '';
+    try { site = new URL(u.page_url).hostname.replace(/^www\./, ''); } catch { /* keep empty */ }
+    imageHits.set(normUrl(u.image_url), { image_url: u.image_url, thumbnail_url: null, page_url: u.page_url, title: String(u.title ?? '').slice(0, 200), site });
+  }
   const build = () => researchInstructions(input.context, input.result_types, mode, input.focus ?? null, vision, imagesAttached, !!input.direct_apply && !input.focus, hunt, imageSearchOn);
   const withImages = (): ResponsesMessage[] => {
     if (!imagesAttached || !plan) return history;
@@ -767,7 +781,9 @@ async function finishHunt(checked: { proposals: unknown[]; warnings: string[] },
       confidence: 'high', reason: a.why, original_text: img?.context ?? null, page_language: page?.language ?? null,
     });
   }
-  sel.payload.images = images;
+  // The user's own finds are already theirs; they are not suggested back.
+  const mine = new Set((focus.user_images ?? []).map((u) => normUrl(u.image_url)));
+  sel.payload.images = images.filter((i) => !mine.has(normUrl(String(i.image_url))));
   sel.payload.anchor = a;
   sel.payload.videos = videos;
 }

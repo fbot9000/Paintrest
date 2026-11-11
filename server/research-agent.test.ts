@@ -467,3 +467,30 @@ describe('bildesøk', () => {
     expect(events.some((e) => e.type === 'image_search_done')).toBe(true);
   });
 });
+
+describe('brukerens egne bilder', () => {
+  it('gir agenten bildene som spor, lar den se på dem, og foreslår dem ikke på nytt', async () => {
+    const mine = { image_url: 'https://i.redd.it/mine.jpg', page_url: 'https://www.reddit.com/r/dune/9', title: 'Painted agents by u/brush' };
+    const focus = { kind: 'images' as const, subject_ref: 'M1', subject_name: 'Agenter', game: 'Dune Imperium', reference_image: null, user_images: [mine] };
+    const seen: string[] = [];
+    const looked: string[][] = [];
+    const replies = [
+      '{"action":"look","image_urls":["https://i.redd.it/mine.jpg"]}',
+      '{"action":"anchor","image_url":"https://i.redd.it/mine.jpg","page_url":"https://www.reddit.com/r/dune/9"}',
+      JSON.stringify({ action: 'final', message: 'ok', proposals: [{ type: 'reference_selection', payload: { subject: 'M1',
+        images: [{ image_url: 'https://i.redd.it/mine.jpg', page_url: 'https://www.reddit.com/r/dune/9' }] } }] }),
+    ];
+    let i = 0;
+    const prov = { respond: async (_m: unknown, o: { instructions: string }) => { seen.push(o.instructions); return { text: replies[i++] ?? '{"action":"final","message":"slutt","proposals":[]}', model: 'm', usage: null, searches: [], citations: [] }; } } as unknown as ResponsesProvider;
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider: prov, search: fakeSearch, openPage: async () => PAGE, lookAtImages: async (urls) => { looked.push(urls); return 'ja'; } },
+      { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: ['reference_selection'], focus }, (e) => events.push(e));
+    expect(seen[0]).toContain('Brukeren har allerede funnet dette bildet');
+    expect(seen[0]).toContain('https://www.reddit.com/r/dune/9');
+    expect(looked).toEqual([['https://i.redd.it/mine.jpg']]);
+    expect(events.find((e) => e.type === 'anchor')).toMatchObject({ anchor: { image_url: 'https://i.redd.it/mine.jpg' } });
+    const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    const images = (final.proposals[0] as { payload: { images: unknown[] } } | undefined)?.payload.images ?? [];
+    expect(images).toEqual([]);
+  });
+});

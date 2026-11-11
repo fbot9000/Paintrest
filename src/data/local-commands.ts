@@ -350,6 +350,35 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
       });
     },
 
+    async addSubjectImages(subject_id, files) {
+      if (!files.length) return;
+      const ws = store.snapshot.workspace_id;
+      const stored: (typeof files[number] & { sf: Awaited<ReturnType<typeof storeFile>> })[] = [];
+      for (const f of files) stored.push({ ...f, sf: await storeFile(ws, 'source_asset', f.blob) });
+      tx((t) => {
+        const s = must(t.miniature_subject[subject_id], 'Miniatyren');
+        if (s.deleted_at) throw new CommandError('Miniatyren er slettet');
+        for (const f of stored) {
+          const taken = Object.values(t.source).filter((x) => !x.deleted_at).map((x) => x.title);
+          const source_id = newId();
+          const asset_id = newId();
+          const link_id = newId();
+          t.stored_file[f.sf.id] = f.sf;
+          t.source[source_id] = {
+            id: source_id, workspace_id: ws, kind: 'image', title: f.title?.trim() || nextAutoName(AUTO.image, taken),
+            creator: null, url: f.page_url ?? null, locator: null, analysis_state: 'stored', retention: 'kept',
+            created_by_task_id: null, created_at: now(), deleted_at: null,
+          };
+          t.source_asset[asset_id] = { id: asset_id, source_id, position: 0, locator: null, caption: null, file_id: f.sf.id, deleted_at: null };
+          t.source_link[link_id] = { id: link_id, source_id, target_type: 'subject', target_id: subject_id, use: 'visual_reference', layer_id: null, deleted_at: null };
+          if (!s.official_asset_id) s.official_asset_id = asset_id;
+          record(t, ws, { target_type: 'source', target_id: source_id, action: 'create' });
+          record(t, ws, { target_type: 'source_link', target_id: link_id, action: 'attach' });
+        }
+        record(t, ws, { target_type: 'miniature_subject', target_id: subject_id, action: 'update' });
+      });
+    },
+
     async attachWebImages(subject_id, images, cover_image_url) {
       if (!images.length) throw new CommandError('Velg minst ett bilde');
       const files = await downloadImages(store, deps.fetchImage, images);

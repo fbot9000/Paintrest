@@ -53,7 +53,9 @@ export interface AgentTurnInput {
   direct_apply?: boolean;
   /** Image hunt for one miniature (own strategy, more steps, may look at images). */
   focus?:
-    | { kind: 'images'; subject_ref: string; subject_name: string; game: string; reference_image?: string | null }
+    | { kind: 'images'; subject_ref: string; subject_name: string; game: string; reference_image?: string | null;
+        /** Pictures the user found themselves (for example from Google Images), with their pages. */
+        user_images?: { image_url: string; page_url: string; title: string }[] }
     | { kind: 'plan'; subject_ref: string; subject_name: string; game: string; reference_images: string[]; revision: boolean }
     | null;
 }

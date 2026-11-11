@@ -188,3 +188,9 @@
 .ws-body.no-refs { grid-template-columns: minmax(0, 1fr) 340px; }
 .ws-body.no-refs.side-hidden { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 1180px) { .ws-body.no-refs { grid-template-columns: minmax(0, 1fr); } }
+
+.wsi-paste { min-height: var(--tap); width: min(320px, 100%); padding: 0 12px; border: 1px dashed var(--line); border-radius: var(--r-sm); background: var(--card); font: inherit; font-size: 14px; }
+.wsi-paste:focus { border-style: solid; border-color: var(--pine); outline: none; }
+
+.wsi .ws-toolbar-actions { flex: 1; justify-content: flex-end; flex-wrap: wrap; }
+.wsi .ws-toolbar > div:first-child:empty { display: none; }

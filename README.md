@@ -92,6 +92,13 @@ Panelet viser hvert søk og hver side mens agenten jobber, og du kan stoppe den.
 
 Bilder-fanen viser ankeret øverst, deretter forslagene delt i «Offisielle bilder og konseptkunst» og «Malt av andre», og så videoene.
 
+**Lim inn fra Google Bilder.** Feltet øverst i Bilder-fanen tar imot det du kopierer fra Google Bilder eller andre steder. Du kan også lime inn hvor som helst i fanen.
+- **Kopiert bilde** («Kopier bilde» i nettleseren): lagres med en gang. Det virker også for bilder fra Instagram og Facebook, der Paintrest ikke kan hente bildet selv.
+- **Lenke fra Google Bilder** (lenken til et treff, `google.com/imgres?…`): Paintrest leser ut bildet og siden det står på. Bildet legges under «Limt inn», allerede valgt. Trykk «Lagre».
+- **Bildelenke** («Kopier bildeadresse»): som over, uten side.
+- **Lenke til en side:** åpner sidens bilder, slik som en kilde.
+- **Agenten bygger på det du har funnet.** Bildene du har lagret eller limt inn, sendes med når du trykker «Let etter flere». Agenten ser på dem for å vite hvordan figuren ser ut, bruker sidene og titlene som spor for å finne flere, og foreslår dem ikke på nytt.
+
 **Bildesøk.** Med en nøkkel for Brave Search (eller Tavily) under «⋯ → Innstillinger» får agenten et bildesøk, slik du bruker Google Bilder. Det virker også når UiB-søket brukes til vanlig nettsøk.
 - Agenten søker bredt og kort («dune imperium painted minis»), ser på bildene i bunker og foreslår dem som viser figuren, uten å åpne sidene. Mange av de beste kildene (Reddit, BoardGameGeek, Etsy, Instagram) stenger Paintrest ute, men bildene deres finnes i bildesøket.
 - Brave gir et lite bilde fra sin egen server ved siden av originalen. Stenger originalsiden, vises og lagres det lille bildet.
