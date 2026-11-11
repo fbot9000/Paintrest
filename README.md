@@ -51,6 +51,14 @@ Panelet til høyre i hvert prosjekt. Det bruker nøkkelen og standardmodellen fr
 - Bildeutvalg og planer med malinger som ikke finnes i katalogen, venter på deg som forslag. «Godkjenn alle» godkjenner dem som ikke trenger valg.
 - Agenten kan ikke endre noe utenfor prosjektet. Forslag som prøver, avvises før de lagres, og panelet sier hvorfor.
 
+## Research til biblioteket
+
+«Bibliotek → Research» (eller «Research ny teknikk» og «Research ny oppskrift»). Beskriv hva du vil lære, og legg eventuelt ved en lenke. Agenten bruker samme nøkkel og nettsøk som i prosjektene.
+
+- Agenten leser biblioteket og malingskatalogen, ikke prosjektene. Den søker, åpner sider og lager ett utkast.
+- Utkastet viser hvilke steg kildene viser og hvilke agenten foreslår, og hvilke kilder den faktisk åpnet.
+- Ingenting lagres i biblioteket før du trykker «Lagre i biblioteket». Da lagres det som utkast, og du kan endre alt etterpå. Malinger som ikke finnes i katalogen, kobler du til et produkt eller legger til som ubekreftet.
+
 ## Research på nettet
 
 Agenten bruker først **nettsøket som er bygget inn i UiB sitt API** (OpenAIs `web_search`-verktøy i Responses API). Det står på som standard under «⋯ → AI og nettsøk», og «Test nettsøk via UiB» viser om det virker for modellen din. Avviser UiB verktøyet, går agenten automatisk over til **Tavily** eller **Brave Search** hvis du har lagt inn en nøkkel, ellers svarer den uten nettsøk. Sidene og bildene leses uansett av Paintrest-serveren, uten nøkkel. Da kan agenten:
@@ -91,9 +99,9 @@ Alle sider agenten leser, lagres automatisk som kilder for spillet («Funnet av 
 | 1 Prosjekter og spill | Nytt prosjekt med en gang («Nytt spill N»), endring av navn, år, utgiver og illustrasjon, utvidelser med kobling og løsning, simulert BGG-kobling, sletting og gjenoppretting |
 | 2 (delvis) Miniatyrer | Galleri med planstatus og malefremdrift hver for seg, filtre, legge til, redigere og slette |
 | 5 Painting Mode | iPad liggende: referanser på 1/3 og plan på 2/3. Felles operasjoner og deler, steg, materialer med eierstatus, blandinger, «Finn fram malingene», avvik, delen ferdig, gruppeteller, «Marker ferdig» og historikk |
-| 7.0–7.3 Bibliotek | Teknikker og oppskrifter (fargerekke med valgfri fremgangsmåte) i datamodellen. «Bibliotek» i toppfeltet: søk, merkelapper og redigering av teknikker og oppskrifter, som lagres når du forlater et felt. Teknikken som artikkel, verkstedguide for iPad og registrering av erfaring. Se [docs/BIT7-KUNNSKAP.md](docs/BIT7-KUNNSKAP.md) |
+| 7.0–7.4 Bibliotek | Teknikker og oppskrifter (fargerekke med valgfri fremgangsmåte) i datamodellen. «Bibliotek» i toppfeltet: søk, merkelapper og redigering av teknikker og oppskrifter, som lagres når du forlater et felt. Teknikken som artikkel, verkstedguide for iPad og registrering av erfaring. Research med agenten gir utkast til teknikker og oppskrifter, som du godkjenner inn i biblioteket. Se [docs/BIT7-KUNNSKAP.md](docs/BIT7-KUNNSKAP.md) |
 
-Neste: bit 3 (maling og palett), bit 4 (redigering av maleplanen), bit 6 (kilder), bit 7.4 og videre (research i biblioteket) og bit 8 (simulert agent).
+Neste: bit 3 (maling og palett), bit 4 (redigering av maleplanen), bit 6 (kilder), bit 7.5 og videre (kildearbeid, forbedring fra erfaring og bruk i prosjekt) og bit 8 (simulert agent).
 
 ## Arkitektur
 

@@ -31,6 +31,11 @@ export async function runAgentTurn(deps: {
   const t = store.getTables();
   const ctx = buildAgentContext(t, task_id);
   const scope = t.task_scope[task_id]!;
+  // Library tasks get their own assignment; the agent only drafts (global zone).
+  const library = scope.area_kind === 'new_knowledge';
+  if (library) {
+    focus = { kind: 'knowledge', target: ctx.allowedTypes.includes('recipe') ? 'recipe' : 'technique' };
+  }
   const project = scope.work_project_id ? t.project[scope.work_project_id] : undefined;
   agent.recordContext(task_id, [
     ...(project ? [{ target_type: 'project' as const, target_id: project.id, revision: String(project.content_revision) }] : []),
@@ -65,7 +70,7 @@ export async function runAgentTurn(deps: {
   const summary: TurnSummary = { created: [], updated: [], refused: [], change_set_id: null };
   const written: Id[] = [];
   for (const raw of r.proposals) {
-    const n = normaliseProposal(raw as Record<string, unknown>, ctx.subjectRefs);
+    const n = normaliseProposal(raw as Record<string, unknown>, ctx.subjectRefs, ctx.techniqueRefs);
     if (!n.ok) {
       summary.refused.push(n.reason);
       continue;
@@ -91,8 +96,9 @@ export async function runAgentTurn(deps: {
     ...r.warnings,
     ...summary.refused.map((x) => `Forslag avvist av omfangssjekken: ${x}`),
     ...kept.map((x) => `Venter på deg: ${x}`),
+    ...(library && (summary.created.length || summary.updated.length) ? ['Utkastet er ikke lagret i biblioteket før du godkjenner det.'] : []),
     // Nothing is stored out of sight: say which pages were kept as sources for the game.
-    ...(newSources.length ? [`Lagret ${newSources.length} ${newSources.length === 1 ? 'side' : 'sider'} som kilder for spillet: ${newSources.slice(0, 5).join(' · ')}${newSources.length > 5 ? ' …' : ''}`] : []),
+    ...(newSources.length ? [`Lagret ${newSources.length} ${newSources.length === 1 ? 'side' : 'sider'} som kilder for ${library ? 'biblioteket' : 'spillet'}: ${newSources.slice(0, 5).join(' · ')}${newSources.length > 5 ? ' …' : ''}`] : []),
   ].filter(Boolean);
   if (notes.length) agent.addSystemMessage(task_id, notes.join('\n'));
   return summary;

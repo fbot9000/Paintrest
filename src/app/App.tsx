@@ -12,6 +12,8 @@ import { TechniquesPage } from '../features/library/TechniquesPage';
 import { TechniquePage } from '../features/library/TechniquePage';
 import { TechniqueEditPage } from '../features/library/TechniqueEditPage';
 import { WorkshopGuide } from '../features/library/WorkshopGuide';
+import { ResearchPage } from '../features/library/ResearchPage';
+import { ResearchTaskPage } from '../features/library/ResearchTaskPage';
 import { RecipesPage } from '../features/library/RecipesPage';
 import { RecipePage } from '../features/library/RecipePage';
 import { Button, Dialog } from '../ui/components';
@@ -36,6 +38,8 @@ const routes = [
           { path: 'teknikker/:techniqueId', element: <TechniquePage /> },
           { path: 'teknikker/:techniqueId/rediger', element: <TechniqueEditPage /> },
           { path: 'oppskrifter', element: <RecipesPage /> },
+          { path: 'research', element: <ResearchPage /> },
+          { path: 'research/:taskId', element: <ResearchTaskPage /> },
           { path: 'oppskrifter/:recipeId', element: <RecipePage /> },
         ],
       },

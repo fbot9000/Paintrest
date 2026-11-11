@@ -293,3 +293,46 @@ describe('maleplan-oppdrag', () => {
     expect(events.at(-1)?.type).toBe('final');
   });
 });
+
+describe('research til biblioteket (bit 7.4)', () => {
+  const focus = { kind: 'knowledge' as const, target: 'technique' as const };
+
+  it('har egen instruks, åpner kilder og nedgraderer «vist i kilde» uten åpnet side', async () => {
+    const seen: string[] = [];
+    const replies = [
+      '{"action":"final","message":"Utkast","proposals":[{"type":"technique","evidence":"documented","payload":{"name":"Svamp","steps":[{"title":"Dupp","instruction":"Lite maling","basis":"documented"}],"sources":[{"url":"https://ukjent.example/x","title":"X"}]}}]}',
+    ];
+    let i = 0;
+    const provider = { respond: async (_input: unknown, opts: { instructions?: string }) => {
+      seen.push(opts.instructions ?? '');
+      return { text: replies[i++] ?? '{"action":"final","message":"slutt","proposals":[]}', model: 'm', usage: null, searches: [], citations: [] };
+    } } as unknown as ResponsesProvider;
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider, search: null, openPage: async () => PAGE },
+      { context: {}, messages: [{ role: 'user', content: 'Svamp og oljemaling' }], result_types: ['technique'], focus }, (e) => events.push(e));
+    expect(seen[0]).toContain('OPPDRAG: TEKNIKK');
+    expect(seen[0]).not.toContain('BILDEJAKT');
+    const final = events.find((e) => e.type === 'final') as Extract<ResearchEvent, { type: 'final' }>;
+    const p = final.proposals[0] as { evidence: string; payload: { sources: unknown[]; steps: { basis: string }[] } };
+    expect(p.payload.sources).toEqual([]);
+    expect(p.evidence).toBe('synthesized');
+    expect(p.payload.steps[0]!.basis).toBe('synthesized');
+    expect(final.warnings.join(' ')).toContain('forslag fra agenten');
+  });
+
+  it('beholder «vist i kilde» og sammendrag når siden er åpnet', async () => {
+    const events = [] as ResearchEvent[];
+    const replies = [
+      '{"action":"open","url":"https://example.com/gallery","why":"guide"}',
+      '{"action":"final","message":"Utkast","proposals":[{"type":"recipe","evidence":"documented","payload":{"name":"Rust","paints":[{"product":"Ryza Rust"}],"steps":[{"instruction":"Dupp","paints":[1],"basis":"documented"}],"sources":[{"url":"https://example.com/gallery","title":"G"}],"sources_read":[{"url":"https://example.com/gallery","summary":"Viser rust"}]}}]}',
+    ];
+    await runResearch({ provider: fakeProvider(replies), search: fakeSearch, openPage: async () => PAGE },
+      { context: {}, messages: [{ role: 'user', content: 'Rust' }], result_types: ['recipe'], focus: { kind: 'knowledge', target: 'recipe' } }, (e) => events.push(e));
+    const final = events.find((e) => e.type === 'final') as Extract<ResearchEvent, { type: 'final' }>;
+    const p = final.proposals[0] as { evidence: string; payload: { steps: { basis: string }[]; sources_read: { summary: string }[] } };
+    expect(p.evidence).toBe('documented');
+    expect(p.payload.steps[0]!.basis).toBe('documented');
+    expect(p.payload.sources_read[0]!.summary).toBe('Viser rust');
+    expect(final.pages?.map((x) => x.url)).toEqual(['https://example.com/gallery']);
+  });
+});

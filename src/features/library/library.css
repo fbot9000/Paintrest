@@ -114,6 +114,42 @@
 .experience-list p { flex-basis: 100%; }
 .experience-list .link { margin-left: auto; }
 
+/* Research (bit 7.4) */
+.head-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.head-actions .btn { text-decoration: none; }
+.nav-waiting {
+  min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; display: inline-grid; place-items: center;
+  background: var(--warn); color: #fff; font: 500 12px var(--font-mono);
+}
+.research-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.research-list a {
+  display: grid; gap: 4px; padding: 14px 16px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--card);
+  text-decoration: none; color: inherit;
+}
+.research-list a:hover { border-color: var(--muted); }
+.research-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.research-chat {
+  display: grid; gap: 10px; padding: 16px; border-radius: var(--r-lg); background: var(--pine); color: var(--on-dark);
+}
+.research-chat:empty { display: none; }
+.research-chat a { color: var(--moss); }
+.research-input { display: flex; gap: 10px; align-items: flex-end; }
+.research-input textarea {
+  flex: 1; min-height: var(--tap); padding: 10px 12px; resize: vertical;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-sm);
+}
+.research-input textarea:focus { outline: none; border-color: var(--fore); box-shadow: 0 0 0 3px var(--moss-soft); }
+.draft-card { border-color: var(--warn-soft); box-shadow: var(--shadow); }
+.draft-card h2 { font-size: 26px; }
+.draft-paints { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.draft-paints li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.draft-missing { display: grid; gap: 8px; padding: 12px 14px; border-radius: var(--r-md); background: var(--panel); }
+.draft-missing-row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+.draft-missing-row select { min-height: 40px; padding: 0 8px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-sm); max-width: 100%; }
+.draft-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.draft-hint { text-align: right; }
+.done-line { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
 /* Oppskrift */
 .recipe-strip { display: flex; gap: 3px; flex-wrap: wrap; }
 .recipe-strip-lg .swatch { border-radius: 6px; }

@@ -4,7 +4,7 @@
  * Pure functions only; writes live in data/agent-commands.ts and data/research-commands.ts.
  */
 import type {
-  ElementKind, Evidence, Grouping, Id, MaterialRole, PaintProduct, ResultType, Tables, Uncertainty,
+  ElementKind, Evidence, Grouping, Id, MaterialRole, PaintProduct, ResultType, StepBasis, Tables, Uncertainty,
 } from './types';
 import { attachedExpansions, liveSubjects, ownershipOf } from './views';
 
@@ -123,7 +123,64 @@ export interface NormalisedProposal {
   update_of: string | null;
   evidence: Evidence;
   uncertainty: Uncertainty[];
-  payload: CatalogSubjectPayload | PaintPlanPayload | ReferenceSelectionPayload | CatalogChangePayload;
+  payload: CatalogSubjectPayload | PaintPlanPayload | ReferenceSelectionPayload | CatalogChangePayload | TechniquePayload | RecipePayload;
+}
+
+// ---------- Bibliotek (bit 7.4): teknikk og oppskrift ----------
+
+export interface TechniqueStepPayload {
+  title: string;
+  instruction: string;
+  /** documented = a source shows it; synthesized = the agent's own suggestion. */
+  basis: StepBasis | null;
+}
+
+/** A technique draft for the library. Approved by the user into a new technique (status draft). */
+export interface TechniquePayload {
+  name: string;
+  tags: string[];
+  desired_result: string | null;
+  use_area: string | null;
+  materials: string[];
+  variants: string | null;
+  risk_note: string | null;
+  steps: TechniqueStepPayload[];
+  note: string | null;
+  sources: SourceRef[];
+  sources_read?: SourceRead[];
+}
+
+export interface RecipePaintPayload {
+  product: ProductRef;
+  role: MaterialRole | null;
+  note: string | null;
+}
+
+export interface RecipeStepPayload {
+  instruction: string;
+  /** Positions (0-based) in `paints`. */
+  paints: number[];
+  /** A technique in the library, resolved from the ref shown to the agent (T1, T2 …). */
+  technique_id: Id | null;
+}
+
+/** A recipe draft: a colour sequence, optionally with steps. */
+export interface RecipePayload {
+  name: string;
+  tags: string[];
+  effect: string | null;
+  note: string | null;
+  paints: RecipePaintPayload[];
+  steps: RecipeStepPayload[];
+  sources: SourceRef[];
+  sources_read?: SourceRead[];
+}
+
+/** The paints in a recipe draft, for matching against the catalogue. */
+export function recipeProductRefs(p: RecipePayload): ProductRef[] {
+  const seen = new Map<string, ProductRef>();
+  for (const x of p.paints) if (!seen.has(productKey(x.product))) seen.set(productKey(x.product), x.product);
+  return [...seen.values()];
 }
 
 /** Fields of a miniature the agent may set; omitted fields are left as they are. */
@@ -148,7 +205,7 @@ export interface CatalogChangePayload {
   note: string | null;
 }
 
-export type ProposalKind = 'catalog_subject' | 'paint_plan' | 'reference_selection' | 'catalog_change';
+export type ProposalKind = 'catalog_subject' | 'paint_plan' | 'reference_selection' | 'catalog_change' | 'technique' | 'recipe';
 
 const ROLES: MaterialRole[] = ['base', 'shade', 'layer', 'highlight', 'wash', 'glaze', 'mix', 'other'];
 const EVIDENCE: Evidence[] = ['documented', 'synthesized', 'unresolved'];
@@ -157,7 +214,7 @@ const EVIDENCE: Evidence[] = ['documented', 'synthesized', 'unresolved'];
  * Turns one model proposal into a typed payload, or explains why it cannot.
  * `subjectRefs` maps the short refs shown to the model (M1, M2 …) to subject ids.
  */
-export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, Id>):
+export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, Id>, techniqueRefs: Record<string, Id> = {}):
   { ok: true; value: NormalisedProposal } | { ok: false; reason: string } {
   const o = obj(raw.payload);
   const common = {
@@ -169,6 +226,51 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
       return reason ? [{ path: str(x.path) || '', reason }] : [];
     }),
   };
+
+  if (raw.type === 'technique' || raw.type === 'recipe') {
+    const name = str(o.name).trim();
+    if (!name) return { ok: false, reason: `${raw.type === 'technique' ? 'Teknikken' : 'Oppskriften'} mangler navn` };
+    const text = (v: unknown, max = 2000) => str(v).trim().slice(0, max) || null;
+    const list = (v: unknown, max = 40) => arr(v).map((x) => str(x).trim()).filter(Boolean).slice(0, max);
+    const sources = sourceRefs(o.sources);
+    const read = sourcesRead(o.sources_read);
+    if (raw.type === 'technique') {
+      const steps = arr(o.steps).flatMap((x): TechniqueStepPayload[] => {
+        const st = obj(x);
+        const title = str(st.title).trim().slice(0, 200);
+        const instruction = str(st.instruction).trim().slice(0, 2000);
+        if (!title && !instruction) return [];
+        return [{ title, instruction, basis: st.basis === 'documented' || st.basis === 'synthesized' ? st.basis : null }];
+      }).slice(0, 40);
+      const payload: TechniquePayload = {
+        name: name.slice(0, 200), tags: list(o.tags, 12), desired_result: text(o.desired_result), use_area: text(o.use_area),
+        materials: list(o.materials), variants: text(o.variants), risk_note: text(o.risk_note), steps, note: text(o.note),
+        sources, ...(read.length ? { sources_read: read } : {}),
+      };
+      return { ok: true, value: { ...common, result_type: 'technique', payload } };
+    }
+    const paints = arr(o.paints).flatMap((x) => {
+      const pe = obj(x);
+      const product = productRef(typeof x === 'string' ? x : pe.product ?? pe);
+      if (!product) return [];
+      return [{ product, role: (ROLES as string[]).includes(String(pe.role)) ? pe.role as MaterialRole : null, note: text(pe.note, 400) }];
+    }).slice(0, 40);
+    if (!paints.length) return { ok: false, reason: `Oppskriften «${name}» har ingen malinger` };
+    const steps = arr(o.steps).flatMap((x) => {
+      const st = obj(x);
+      const instruction = str(st.instruction).trim().slice(0, 2000);
+      if (!instruction) return [];
+      // The model numbers the paints from 1, as shown in the prompt.
+      const idx = [...new Set(arr(st.paints).map((n) => Math.round(Number(n)) - 1).filter((n) => Number.isInteger(n) && n >= 0 && n < paints.length))];
+      const ref = str(st.technique).trim();
+      return [{ instruction, paints: idx, technique_id: techniqueRefs[ref] ?? techniqueRefs[ref.toUpperCase()] ?? null }];
+    }).slice(0, 40);
+    const payload: RecipePayload = {
+      name: name.slice(0, 200), tags: list(o.tags, 12), effect: text(o.effect), note: text(o.note), paints, steps,
+      sources, ...(read.length ? { sources_read: read } : {}),
+    };
+    return { ok: true, value: { ...common, result_type: 'recipe', payload } };
+  }
 
   if (raw.type === 'catalog_change') {
     const ref = (v: unknown): Id | null => {
@@ -356,6 +458,8 @@ export interface AgentContext {
   /** Sent to the model as JSON. */
   data: Record<string, unknown>;
   subjectRefs: Record<string, Id>;
+  /** Library tasks: the short refs (T1, T2 …) shown for techniques. */
+  techniqueRefs?: Record<string, Id>;
   allowedTypes: ResultType[];
 }
 
@@ -365,6 +469,7 @@ export function buildAgentContext(t: Tables, task_id: Id): AgentContext {
   const project = scope?.work_project_id ? t.project[scope.work_project_id] : undefined;
   const game = project ? t.game[project.game_id] : undefined;
   const allowedTypes = t.task_result_type.filter((r) => r.task_id === task_id).map((r) => r.result_type);
+  if (scope?.area_kind === 'new_knowledge') return knowledgeContext(t, task_id, allowedTypes);
   if (!project || !game) return { data: {}, subjectRefs: {}, allowedTypes };
 
   const subjects = liveSubjects(t, project.id);
@@ -435,6 +540,68 @@ export function buildAgentContext(t: Tables, task_id: Id): AgentContext {
   };
 }
 
+/**
+ * What the agent reads in a library task (bit 7.4): the library itself (to avoid
+ * duplicates and to refer to techniques), the paint catalogue for recipes, its own
+ * pending drafts, and sources already found for the library. No project data.
+ */
+function knowledgeContext(t: Tables, task_id: Id, allowedTypes: ResultType[]): AgentContext {
+  const techniqueRefs: Record<string, Id> = {};
+  const techniques = Object.values(t.technique).filter((x) => !x.deleted_at)
+    .sort((a, b) => a.name.localeCompare(b.name, 'nb'))
+    .map((x, i) => {
+      const ref = `T${i + 1}`;
+      techniqueRefs[ref] = x.id;
+      return { ref, name: x.name, tags: x.tags, desired_result: x.desired_result, materials: x.materials };
+    });
+  const recipes = Object.values(t.recipe).filter((x) => !x.deleted_at).map((x) => ({
+    name: x.name, tags: x.tags, effect: x.effect,
+    paints: Object.values(t.recipe_paint).filter((p) => p.recipe_id === x.id).sort((a, b) => a.position - b.position)
+      .map((p) => { const pr = t.paint_product[p.product_id]; return pr ? fullName(pr) : '?'; }),
+  }));
+  const paints = Object.values(t.paint_product)
+    .filter((p) => !p.deleted_at)
+    .map((p) => ({ manufacturer: p.manufacturer, range: p.range_name, name: p.name, kind: p.product_kind, ownership: ownershipOf(t, p.id) }))
+    .sort((a, b) => Number(b.ownership === 'owns') - Number(a.ownership === 'owns'))
+    .slice(0, 300);
+  const pending = Object.values(t.research_proposal)
+    .filter((p) => p.task_id === task_id && p.decision === 'pending')
+    .map((p) => ({ ref: p.ref, type: p.result_type, summary: proposalTitle(t, p.result_type, p.payload) }));
+  return {
+    subjectRefs: {},
+    techniqueRefs,
+    allowedTypes,
+    data: {
+      library: { techniques, recipes },
+      paints,
+      your_pending_proposals: pending,
+      known_sources: libraryKnownSources(t).slice(0, 60).map((k) => ({
+        url: k.source.url, title: k.source.title, status: k.status, ...(k.summary ? { summary: k.summary.slice(0, 300) } : {}),
+      })),
+    },
+  };
+}
+
+/** Sources for the library: linked to a technique or recipe, or read in a library task. */
+export function libraryKnownSources(t: Tables): KnownSource[] {
+  const ids = new Set(Object.values(t.source_link)
+    .filter((l) => !l.deleted_at && (l.target_type === 'technique' || l.target_type === 'recipe'))
+    .map((l) => l.source_id));
+  for (const s of Object.values(t.source)) {
+    if (s.created_by_task_id && t.task_scope[s.created_by_task_id]?.area_kind === 'new_knowledge') ids.add(s.id);
+  }
+  return [...ids]
+    .map((id) => t.source[id])
+    .filter((x): x is NonNullable<typeof x> => !!x && !x.deleted_at && !!x.url)
+    .map((source) => ({
+      source,
+      asset_count: 0,
+      status: source.retention === 'kept' ? 'kept' as const : 'found' as const,
+      summary: Object.values(t.source_layer).find((l) => l.source_id === source.id && l.layer === 'translation' && !l.deleted_at)?.body ?? null,
+    }))
+    .sort((a, b) => Number(b.status === 'kept') - Number(a.status === 'kept'));
+}
+
 export interface KnownSource {
   source: import('./types').Source;
   asset_count: number;
@@ -487,6 +654,8 @@ export function proposalTitle(t: Tables, type: ResultType, payload: unknown): st
     const p = payload as PaintPlanPayload;
     return `Maleplan for ${t.miniature_subject[p.subject_id]?.name ?? 'ukjent miniatyr'}`;
   }
+  if (type === 'technique') return `Teknikk: ${(payload as TechniquePayload).name}`;
+  if (type === 'recipe') return `Oppskrift: ${(payload as RecipePayload).name}`;
   return type;
 }
 

@@ -10,7 +10,7 @@ import { hostedSearchOf } from './provider.ts';
 import type { ResponsesProvider } from './provider.ts';
 import { runResearch } from './research-agent.ts';
 import { lookAtImages } from './vision.ts';
-import type { ImageFocus, PlanFocus, ResearchEvent, ResearchInput } from './research-agent.ts';
+import type { ImageFocus, KnowledgeFocus, PlanFocus, ResearchEvent, ResearchInput } from './research-agent.ts';
 import { SEARCH_PROVIDERS } from './search.ts';
 import type { SearchProviderId, WebSearch } from './search.ts';
 
@@ -176,9 +176,12 @@ async function streamResearch(req: IncomingMessage, res: ServerResponse, d: AppD
 
 const DATA_IMAGE = /^data:image\/(jpeg|png|webp);base64,/;
 
-function parseFocus(v: unknown): ImageFocus | PlanFocus | null {
+function parseFocus(v: unknown): ImageFocus | PlanFocus | KnowledgeFocus | null {
   if (!v || typeof v !== 'object') return null;
   const f = v as Record<string, unknown>;
+  if (f.kind === 'knowledge') {
+    return { kind: 'knowledge', target: f.target === 'recipe' ? 'recipe' : 'technique' };
+  }
   if (f.kind === 'plan') {
     return {
       kind: 'plan',

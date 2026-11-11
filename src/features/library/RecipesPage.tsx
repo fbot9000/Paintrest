@@ -41,7 +41,10 @@ export function RecipesPage() {
           <h1>Oppskrifter</h1>
           <p className="muted">Fargerekker, og hvordan du bruker dem.</p>
         </div>
-        <Button variant="primary" icon="+" onClick={create}>Ny oppskrift</Button>
+        <div className="head-actions">
+          <Link className="btn btn-secondary" to="/bibliotek/research?type=recipe">Research ny oppskrift</Link>
+          <Button variant="primary" icon="+" onClick={create}>Ny oppskrift</Button>
+        </div>
       </div>
       <ErrorNote error={error} onClose={clearError} />
 

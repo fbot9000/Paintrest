@@ -571,7 +571,7 @@ const KIND_LABEL: Record<string, string> = {
   catalog_change: 'Endring i katalogen',
 };
 
-function Message({ m }: { m: ResearchMessage }) {
+export function Message({ m }: { m: ResearchMessage }) {
   const [open, setOpen] = useState(false);
   return (
     <div className={`msg msg-${m.role}`}>

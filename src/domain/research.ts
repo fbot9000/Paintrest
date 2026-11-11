@@ -27,8 +27,15 @@ export interface ApplyResult {
   kept_as_proposal: { id: Id; reason: string }[];
 }
 
+export type KnowledgeTarget = 'technique' | 'recipe';
+
 export interface ResearchCommands {
   startTask(project_id: Id): Promise<Id>;
+  /**
+   * A library task (bit 7.4): area new_knowledge, no work project, and one result type
+   * (technique or recipe). The agent only drafts; the user approves into the library.
+   */
+  startKnowledgeTask(target: KnowledgeTarget): Promise<Id>;
   closeTask(task_id: Id): Promise<void>;
   addUserMessage(task_id: Id, body: string): Promise<Id>;
   openRevisionTarget(task_id: Id, subject_id: Id): Promise<void>;

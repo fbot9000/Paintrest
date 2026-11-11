@@ -585,6 +585,8 @@ export interface ResearchProposal {
   last_error?: string | null;
   /** PROTOTYPE: set when the change was applied directly by the agent (open zone), as part of this change set. */
   change_set_id?: Id | null;
+  /** PROTOTYPE (bit 7.4): the technique or recipe created when a library draft was approved. */
+  applied_target_id?: Id | null;
 }
 
 export interface ContextRef {

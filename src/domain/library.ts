@@ -4,8 +4,8 @@
  * left out unless a function says otherwise.
  */
 import type {
-  Id, Ownership, PaintProduct, Recipe, RecipePaint, RecipeStep, Source, SourceLink, Tables, Technique,
-  TechniqueExperience, TechniqueStep,
+  Id, Ownership, PaintProduct, Recipe, RecipePaint, RecipeStep, ResearchMessage, ResearchProposal, ResearchTask, Source,
+  SourceLink, Tables, Technique, TechniqueExperience, TechniqueStep,
 } from './types';
 import { ownershipOf } from './views';
 
@@ -231,4 +231,56 @@ export function catalogProducts(t: Tables): PaintProduct[] {
   return Object.values(t.paint_product)
     .filter((p) => !p.deleted_at)
     .sort((a, b) => a.name.localeCompare(b.name, 'nb'));
+}
+
+// ---------- Research til biblioteket (bit 7.4) ----------
+
+export interface KnowledgeTaskSummary {
+  task: ResearchTask;
+  target: 'technique' | 'recipe';
+  /** The first line of the user's first message. */
+  title: string;
+  pending: number;
+  approved: number;
+}
+
+function knowledgeTarget(t: Tables, task_id: Id): 'technique' | 'recipe' {
+  return t.task_result_type.some((r) => r.task_id === task_id && r.result_type === 'recipe') ? 'recipe' : 'technique';
+}
+
+function taskMessages(t: Tables, task_id: Id): ResearchMessage[] {
+  return Object.values(t.research_message).filter((m) => m.task_id === task_id).sort((a, b) => a.created_at.localeCompare(b.created_at));
+}
+
+function taskProposals(t: Tables, task_id: Id): ResearchProposal[] {
+  return Object.values(t.research_proposal).filter((p) => p.task_id === task_id).sort((a, b) => a.created_at.localeCompare(b.created_at));
+}
+
+/** Library research tasks, newest first. */
+export function knowledgeTasks(t: Tables): KnowledgeTaskSummary[] {
+  return Object.values(t.research_task)
+    .filter((task) => t.task_scope[task.id]?.area_kind === 'new_knowledge')
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .map((task) => {
+      const first = taskMessages(t, task.id).find((m) => m.role === 'user');
+      const proposals = taskProposals(t, task.id);
+      return {
+        task,
+        target: knowledgeTarget(t, task.id),
+        title: first?.body.split('\n')[0]?.slice(0, 120) || 'Ny research',
+        pending: proposals.filter((p) => p.decision === 'pending').length,
+        approved: proposals.filter((p) => p.decision === 'approved').length,
+      };
+    });
+}
+
+export interface KnowledgeTaskView extends KnowledgeTaskSummary {
+  messages: ResearchMessage[];
+  proposals: ResearchProposal[];
+}
+
+export function knowledgeTaskView(t: Tables, task_id: Id): KnowledgeTaskView | undefined {
+  const summary = knowledgeTasks(t).find((x) => x.task.id === task_id);
+  if (!summary) return undefined;
+  return { ...summary, messages: taskMessages(t, task_id), proposals: taskProposals(t, task_id) };
 }

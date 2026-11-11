@@ -38,7 +38,10 @@ export function TechniquesPage() {
           <h1>Teknikker</h1>
           <p className="muted">Metoder du kan bruke i alle spillene dine.</p>
         </div>
-        <Button variant="primary" icon="+" onClick={create}>Ny teknikk</Button>
+        <div className="head-actions">
+          <Link className="btn btn-secondary" to="/bibliotek/research?type=technique">Research ny teknikk</Link>
+          <Button variant="primary" icon="+" onClick={create}>Ny teknikk</Button>
+        </div>
       </div>
       <ErrorNote error={error} onClose={clearError} />
 

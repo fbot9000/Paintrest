@@ -1,7 +1,7 @@
 import { CommandError } from '../domain/commands';
 import { newId, now } from '../domain/ids';
-import { describeOps, matchProduct, planProductRefs, productKey, proposalTitle } from '../domain/agent';
-import type { CatalogChangePayload, CatalogSubjectPayload, NormalisedProposal, PaintPlanPayload, PaletteItem, ProductRef, ProposalKind, ReferenceSelectionPayload, SourceRef, SubjectFields } from '../domain/agent';
+import { describeOps, matchProduct, planProductRefs, productKey, proposalTitle, recipeProductRefs } from '../domain/agent';
+import type { CatalogChangePayload, CatalogSubjectPayload, NormalisedProposal, PaintPlanPayload, PaletteItem, ProductRef, ProposalKind, RecipePayload, ReferenceSelectionPayload, SourceRead, SourceRef, SubjectFields, TechniquePayload } from '../domain/agent';
 import type { AgentCommands, ApproveOptions, ProposalWrite, ResearchCommands } from '../domain/research';
 import type { ChangeAction, Id, MiniatureSubject, ResearchProposal, ResultType, RowPatch, Tables, Uncertainty } from '../domain/types';
 import { attachedExpansions } from '../domain/views';
@@ -48,6 +48,16 @@ export function checkScope(t: Tables, task_id: Id, p: { result_type: ProposalKin
   if (task.status !== 'open') throw new CommandError('Oppgaven er lukket');
   const scope = must(t.task_scope[task_id], 'Omfanget');
   const types = new Set(t.task_result_type.filter((r) => r.task_id === task_id).map((r) => r.result_type));
+
+  // Library tasks (bit 7.4): only drafts for the library, never anything in a project.
+  if (p.result_type === 'technique' || p.result_type === 'recipe') {
+    if (scope.area_kind !== 'new_knowledge' || !scope.allow_new_knowledge || !types.has(p.result_type)) {
+      throw new CommandError(p.result_type === 'technique' ? 'Oppgaven tillater ikke nye teknikker' : 'Oppgaven tillater ikke nye oppskrifter');
+    }
+    return { result_type: p.result_type, base_version_id: null };
+  }
+  if (scope.area_kind === 'new_knowledge') throw new CommandError('Oppgaven gjelder biblioteket og kan ikke endre prosjekter');
+
   const project = scope.work_project_id ? t.project[scope.work_project_id] : undefined;
   if (!project || project.deleted_at) throw new CommandError('Arbeidsprosjektet finnes ikke lenger');
 
@@ -159,7 +169,9 @@ export function createAgentCommands(store: Store): AgentCommands {
           record(t, ws, 'source', id, 'create', { initiated_by: 'agent', task_id });
           created.push(pg.title);
         }
-        addSourceLayers(t, read, t.task_scope[task_id]?.work_project_id ?? undefined);
+        const scope = t.task_scope[task_id];
+        if (scope?.area_kind === 'new_knowledge') addSourceLayers(t, read.filter((r) => libraryMayWrite(t, task_id, r.url)));
+        else addSourceLayers(t, read, scope?.work_project_id ?? undefined);
         return created;
       });
     },
@@ -196,6 +208,18 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
         // System sets scope and result types in the same transaction (skjema §7).
         t.task_scope[id] = { task_id: id, area_kind: 'new_project', work_project_id: project_id, allow_new_knowledge: false };
         for (const result_type of IMPLEMENTED_TYPES) t.task_result_type.push({ task_id: id, result_type });
+        record(t, ws, 'research_task', id, 'create', { initiated_by: 'user', task_id: id });
+        return id;
+      });
+    },
+
+    async startKnowledgeTask(target) {
+      if (target !== 'technique' && target !== 'recipe') throw new CommandError('Ukjent researchtype');
+      return tx((t, ws) => {
+        const id = newId();
+        t.research_task[id] = { id, workspace_id: ws, status: 'open', created_at: now() };
+        t.task_scope[id] = { task_id: id, area_kind: 'new_knowledge', work_project_id: null, allow_new_knowledge: true };
+        t.task_result_type.push({ task_id: id, result_type: target });
         record(t, ws, 'research_task', id, 'create', { initiated_by: 'user', task_id: id });
         return id;
       });
@@ -375,6 +399,7 @@ const TABLE_LABEL: Record<string, string> = {
 /** Why a proposal cannot be applied without the user (null when it can). */
 function needsUser(t: Tables, p: ResearchProposal): string | null {
   if (p.result_type === 'reference_selection') return 'Bildeutvalg velger du selv';
+  if (p.result_type === 'technique' || p.result_type === 'recipe') return 'Biblioteket endres bare når du godkjenner';
   if (p.result_type === 'paint_plan' || p.result_type === 'plan_revision') {
     const missing = planProductRefs(p.payload as PaintPlanPayload).filter((r) => !matchProduct(t, r));
     if (missing.length) return `Malinger som ikke finnes i katalogen: ${missing.map((m) => m.name).join(', ')}`;
@@ -406,8 +431,22 @@ function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions, files
   const p = must(t.research_proposal[proposal_id], 'Forslaget');
   if (p.decision !== 'pending') throw new CommandError('Forslaget er allerede behandlet');
   const who: Who = { initiated_by: 'agent', task_id: p.task_id, proposal_id };
-  const kind: ProposalKind = p.result_type === 'catalog_subject' || p.result_type === 'reference_selection' || p.result_type === 'catalog_change' ? p.result_type : 'paint_plan';
+  const kind: ProposalKind = p.result_type === 'catalog_subject' || p.result_type === 'reference_selection' || p.result_type === 'catalog_change'
+    || p.result_type === 'technique' || p.result_type === 'recipe' ? p.result_type : 'paint_plan';
   const scope = checkScope(t, p.task_id, { result_type: kind, payload: p.payload });
+
+  if (kind === 'technique' || kind === 'recipe') {
+    // The user approves the draft into the library; it starts as «utkast» and is edited freely after.
+    const userWho: Who = { ...who, initiated_by: 'user' };
+    p.applied_target_id = kind === 'technique'
+      ? approveTechnique(t, ws, p, userWho)
+      : approveRecipe(t, ws, p, opts.product_choices ?? {}, userWho);
+    p.decision = 'approved';
+    p.updated_at = now();
+    p.last_error = null;
+    record(t, ws, 'research_proposal', proposal_id, 'update', userWho);
+    return;
+  }
   const project_id = t.task_scope[p.task_id]!.work_project_id!;
 
   if (kind === 'catalog_change') {
@@ -576,6 +615,85 @@ function addPalette(t: Tables, ws: Id, project_id: Id, subject_id: Id, items: Pa
     added++;
   }
   if (added && t.project[project_id]) t.project[project_id]!.content_revision++;
+}
+
+// ---------- Bibliotek (bit 7.4) ----------
+
+/**
+ * A library task may add summaries only to sources it found itself, or to sources
+ * already linked to the library. Sources of a game are left untouched (AVVIK regel 1).
+ */
+function libraryMayWrite(t: Tables, task_id: Id, url: string): boolean {
+  const s = Object.values(t.source).find((x) => !x.deleted_at && x.url === url);
+  if (!s) return false;
+  if (s.created_by_task_id === task_id) return true;
+  return Object.values(t.source_link).some((l) => !l.deleted_at && l.source_id === s.id && (l.target_type === 'technique' || l.target_type === 'recipe'));
+}
+
+/** Links the draft's sources to the new technique or recipe (use = method), with the agent's summaries. */
+function linkMethodSources(t: Tables, ws: Id, target_type: 'technique' | 'recipe', target_id: Id, sources: SourceRef[], read: SourceRead[] | undefined, who: Who) {
+  const linked = new Set<string>();
+  // Decided before linking: a page that already belongs to a game keeps its content (AVVIK regel 1).
+  const writable = new Set((read ?? []).map((r) => r.url).filter((url) =>
+    !Object.values(t.source).some((x) => !x.deleted_at && x.url === url) || libraryMayWrite(t, who.task_id ?? '', url)));
+  for (const s of sources) {
+    if (linked.has(s.url)) continue;
+    linked.add(s.url);
+    const source_id = sourceFor(t, ws, { url: s.url, title: s.title, creator: s.author, kind: 'article' }, who.task_id ?? null, (tt, id, a) => record(t, ws, tt, id, a, who));
+    const id = newId();
+    t.source_link[id] = { id, source_id, target_type, target_id, use: 'method', layer_id: null, deleted_at: null };
+    record(t, ws, 'source_link', id, 'attach', who);
+  }
+  // Summaries only for the pages that are now linked to the library.
+  addSourceLayers(t, (read ?? []).filter((r) => linked.has(r.url) && writable.has(r.url)));
+}
+
+function approveTechnique(t: Tables, ws: Id, p: ResearchProposal, who: Who): Id {
+  const x = p.payload as TechniquePayload;
+  const id = newId();
+  const ts = now();
+  const taken = new Set(Object.values(t.technique).filter((r) => !r.deleted_at).map((r) => r.name.toLowerCase()));
+  t.technique[id] = {
+    id, workspace_id: ws, name: taken.has(x.name.toLowerCase()) ? `${x.name} (ny)` : x.name, tags: x.tags, status: 'draft',
+    desired_result: x.desired_result, use_area: x.use_area, materials: x.materials, variants: x.variants, risk_note: x.risk_note,
+    evidence: p.evidence, uncertainty: p.uncertainty, created_at: ts, updated_at: ts, deleted_at: null,
+  };
+  x.steps.forEach((st, position) => {
+    const sid = newId();
+    t.technique_step[sid] = { id: sid, technique_id: id, position, title: st.title, instruction: st.instruction, basis: st.basis };
+  });
+  record(t, ws, 'technique', id, 'create', who);
+  linkMethodSources(t, ws, 'technique', id, x.sources, x.sources_read, who);
+  return id;
+}
+
+function approveRecipe(t: Tables, ws: Id, p: ResearchProposal, choices: Record<string, Id | 'create'>, who: Who): Id {
+  const x = p.payload as RecipePayload;
+  const products = resolveProducts(t, ws, recipeProductRefs(x), choices, who);
+  const id = newId();
+  const ts = now();
+  const taken = new Set(Object.values(t.recipe).filter((r) => !r.deleted_at).map((r) => r.name.toLowerCase()));
+  t.recipe[id] = {
+    id, workspace_id: ws, name: taken.has(x.name.toLowerCase()) ? `${x.name} (ny)` : x.name, tags: x.tags, status: 'draft',
+    effect: x.effect, note: x.note, evidence: p.evidence, uncertainty: p.uncertainty, created_at: ts, updated_at: ts, deleted_at: null,
+  };
+  const paintIds = x.paints.map((pe, position) => {
+    const pid = newId();
+    t.recipe_paint[pid] = { id: pid, recipe_id: id, position, product_id: products[productKey(pe.product)]!, role: pe.role, note: pe.note };
+    return pid;
+  });
+  x.steps.forEach((st, position) => {
+    const sid = newId();
+    const tech = st.technique_id ? t.technique[st.technique_id] : undefined;
+    t.recipe_step[sid] = {
+      id: sid, recipe_id: id, position, instruction: st.instruction,
+      paint_ids: st.paints.map((i) => paintIds[i]).filter((v): v is Id => !!v),
+      technique_id: tech && !tech.deleted_at ? tech.id : null,
+    };
+  });
+  record(t, ws, 'recipe', id, 'create', who);
+  linkMethodSources(t, ws, 'recipe', id, x.sources, x.sources_read, who);
+  return id;
 }
 
 /** Every product must be an existing id, an unambiguous match, or created by the user here (skjema §8 step 3). */
