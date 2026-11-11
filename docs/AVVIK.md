@@ -71,7 +71,7 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
     - **Samtidighet med revisjon, ikke sammenslåing.** En lagring som bygger på en gammel revisjon, avvises (409), og appen ber brukeren laste inn på nytt. Endringer fra den fanen etter konflikten lagres ikke. Skjemaets `content_revision` per rad er uendret.
     - **Bilder slettes aldri.** Fjernede bilder flyttes til `files/trash/`. Skjemaet har ingen regel for opprydding.
 
-30. **Bildejakt i to faser med offisielt anker og videoer.** Fase 1 velger et offisielt anker (handlingen `anchor`, høyst 10 steg), og fase 2 leter bredt. Til sammen er grensen 30 steg, ikke 24 (jf. avvik 23). Forslaget (`reference_selection`) får `anchor` og `videos` i nyttelasten. Ankerbildet legges først blant bildene. Et forslag kan nå ha bare videoer og ingen bilder. Videoer lagres som `source` med `kind = video` og `source_link.use = method`, uten fil. Skjemaet har typen `video`, men ingen regel for hvordan videoer kommer inn.
+30. **Bildejakt i to faser med offisielt anker og videoer** (fasene er erstattet av avvik 33). Fase 1 velger et offisielt anker (handlingen `anchor`, høyst 10 steg), og fase 2 leter bredt. Til sammen er grensen 30 steg, ikke 24 (jf. avvik 23). Forslaget (`reference_selection`) får `anchor` og `videos` i nyttelasten. Ankerbildet legges først blant bildene. Et forslag kan nå ha bare videoer og ingen bilder. Videoer lagres som `source` med `kind = video` og `source_link.use = method`, uten fil. Skjemaet har typen `video`, men ingen regel for hvordan videoer kommer inn.
 
 31. **Bildesøk og bilder uten åpnet side.** Agenten har handlingen `image_search` (Brave Image Search, eller bilder per resultat fra Tavily). Et bilde fra bildesøket kan foreslås og lagres uten at siden er åpnet. Kilden blir siden bildet kom fra, slik søketjenesten oppga den. Det er en oppmykning av kildekravet fra avvik 23: før måtte bildet stå på en side agenten hadde lest. Serveren sjekker fortsatt at hvert bilde faktisk kom fra et søk eller en åpnet side i samme runde. Forslaget kan ha `thumbnail_url` (søketjenestens lille kopi), som brukes når originalen ikke kan hentes.
 
@@ -107,7 +107,48 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
     - **Tolkning:** Research til biblioteket bruker den vanlige betydningen av korte forespørsler (for eksempel «flammer» = ild), og sier hva den antok. Er det fortsatt uklart, spør den før den lager utkast. Katalogen, eierstatus og tidligere utkast skal ikke avgjøre hva du mener.
     - **Kilder:** YouTube-adresser i ulike former (`youtu.be/…`, `watch?v=…&t=…`, `/shorts/…`) regnes som samme side, slik at en åpnet video ikke fjernes som kilde.
 
-33. **BRUKERBESLUTNING 11. november 2026: malingssamlingen er brukerens egen, og eksempeldataene har ingen malinger.**
+33. **BRUKERØNSKE 11. november 2026: bildejakt i tre faser, figuren huskes, og du kan merke kilder.** Dette erstatter fasene i avvik 30.
+    - **Faser:** 1 identifiser figuren (handlingen `identify`, høyst 10 steg), 2 malt av andre, og 3 maleguider (de siste 8 av 30 steg). Agenten går fra fase 2 til 3 med `next_phase`, eller automatisk. Svarer agenten med `final` i fase 2, holder serveren svaret og slår det sammen med svaret etter fase 3. `anchor` fra før tolkes som `identify` med ett bilde.
+    - **`miniature_subject.identity` (PROTOTYPE, ikke i skjemaet):**
+      - **Innhold:** offisielt navn, andre navn, utgave, rolle eller fraksjon, beskrivelse, opptil tre offisielle bilder (`concept_art`, `official` eller `render`), maler, sikkerhet, begrunnelse og kilder.
+      - **Status:** `proposed` eller `confirmed`.
+      - **Hvem skriver:** Agenten skriver den som `proposed` etter en bildejakt, med `change_record` (`initiated_by = agent`) og en melding i samtalen. Den skriver aldri over en bekreftet figur, og den kan ikke skrive i et annet prosjekt.
+      - **Brukerens valg:** «Riktig figur» setter `confirmed`. «Feil figur» flytter navn og bilder til `identity_rejected` (høyst 5), som agenten får beskjed om å unngå.
+      - **Bruk:** En bekreftet figur gjør at jakten hopper over fase 1. Maleplanen og agentpanelets kontekst får den også.
+    - **Merking «Viser figuren»:** lagres som `source_link` med `use = evidence` til miniatyren, og kilden blir `kept`. Å fjerne merket skjuler lenken. Kildene til en godkjent `catalog_subject` har samme slags lenke og vises derfor også som merket.
+      - Merkede sider sendes med til bildejakten og maleplanen, og agenten åpner dem først.
+      - **Beskjed underveis (`POST /api/agent/hint`):** Klienten gir hver bildejakt en `run_id`. Merker du en side mens jakten går, legger serveren beskjeden i en kø for kjøringen. Agenten får den før neste steg. Køen finnes bare mens kjøringen går, og bare i serverens minne.
+    - **Maleguider:** `reference_selection` har `guides` (adresse, tittel, om siden er lest, begrunnelse, malinger og språk). Serveren beholder bare guider som er åpnet eller funnet i et søk i samme kjøring. YouTube-adresser blir videoer. «Lagre» lager en `source` med `kind = guide` og `use = method`. Lagrede guider sendes med til maleplanen. Et forslag kan ha bare guider.
+    - **Feilretting:** Serveren tok ikke med `user_images` (bildene du har lagret eller limt inn) da den leste forespørselen. Agenten fikk dem derfor aldri. Nå kommer de fram, sammen med `identity`, `rejected` og `tagged_sources`. Et forslag med bare videoer gikk også tapt før, fordi bildekontrollen fjernet det. Nå bygges videoer og guider fra agentens eget svar.
+    - Det er ikke testet mot UiB. Testene bruker en simulert modell. Hele kjeden fra merking i nettleseren til agenten er testet med en simulert modell bak Paintrest-serveren.
+
+34. **BRUKERØNSKE 11. november 2026: kartlegging av hele spillet.** Én kjøring fra miniatyrlisten finner kildene for spillet og hvem som er hvem. Resultatet lagres, slik at senere kjøringer bygger på det.
+    - **Egen oppgave:** `task_scope.game_focus` (PROTOTYPE). Oppgaven har bare resultattypen `reference_selection` og får ikke nye typer automatisk (`syncResultTypes`). Agentpanelet bruker den ikke.
+    - **Faser:** `sources` (høyst 18 steg) og `match`. Til sammen er grensen 50 steg. `identify` har `subject` (M1 …), og en miniatyr brukeren har bekreftet, kan ikke identifiseres på nytt. `look` kan ha `compare_with`: da viser serveren de offisielle bildene av opptil fire miniatyrer først, merket. Et `final` i fase 1 holdes og slås sammen med svaret på slutten, per miniatyr.
+    - **Serverens kontroll:**
+      - Bildeforslag godtas bare for miniatyrene i prosjektet, og bare med bilder fra åpnede sider eller bildesøk.
+      - `game_sources` godtas bare for sider som er åpnet eller sett i søk i samme kjøring. `role` er `official`, `painted`, `guide` eller `other`, og `shows` begrenses til prosjektets miniatyrer.
+    - **Lagring:**
+      - Hvem miniatyrene er, lagres som før (`identity`, `proposed`).
+      - Kildene blir `source` med `retention = draft`, også sider som bare ble sett i et søk (for eksempel Reddit).
+      - **`source.role` (PROTOTYPE):** settes bare på sider som hører til prosjektet. Det samme gjelder sammendraget (kildelag).
+      - **«Trolig figuren»:** Hvilke miniatyrer en side viser, lagres som `source_link` med `use = evidence` og `suggested_by_task_id` (PROTOTYPE). Når du bekrefter, tømmes feltet, og lenken blir ditt merke. Fjerner du den, skjules lenken, og en senere kartlegging foreslår den ikke igjen. En side et annet spill bruker, kan få lenken (unntaket i regel 1), men rolle og innhold endres ikke.
+    - **Gjenbruk:**
+      - `known_sources` i konteksten har nå `role`, `shows_confirmed` og `shows_suggested`.
+      - Bildejakten får sidene merket «Trolig figuren» (`suggested_sources`). Maleplanen får maleguidene for spillet (`game_guides`).
+    - **Synlighet:** Panelet sier hva som ble lagret («lagret N nye kilder … koblet sider til miniatyrer M ganger»), og miniatyrkortene viser navn og antall bildeforslag.
+    - **Miniatyrer som mangler (brukerønske 11.11.2026):**
+      - **Forslag:** Kartleggingens oppgave har også resultattypen `catalog_subject`. Eldre kartleggingsoppgaver får den når de kjøres igjen. Forslaget kan ha `key` (N1 …), som `game_sources.shows` kan vise til, og `identity`. Serveren kontrollerer identiteten på samme måte som `identify`.
+      - **Kilder som viser figuren:** Klienten lagrer sidene som viser figuren i `shown_on` (PROTOTYPE).
+      - **Ved «Legg til»** (vanlig godkjenning av `catalog_subject`):
+        - Miniatyren får `identity` med status `proposed`.
+        - `sources` blir bekreftede `evidence`-lenker, som før.
+        - Sidene i `shown_on` blir «Trolig figuren»-lenker.
+      - **Duplikater:** `writeProposal` avviser et nytt `catalog_subject` hvis navnet eller det offisielle navnet (uten hensyn til store og små bokstaver) finnes på en miniatyr i prosjektet, eller på et ventende forslag i en åpen oppgave i prosjektet. Det gjelder også agentpanelet. Panelets runder tar ellers endringer i bruk direkte, så et duplikat ville blitt lagt inn uten at du så det.
+      - **Utvidelser:** Instruksen sier at bare figurer fra grunnspillet og utvidelsene i prosjektet skal foreslås. Foreslår agenten likevel en ukjent utvidelse, står det på forslaget, og miniatyren får en usikkerhet når den legges til.
+    - **Testing:** Det er ikke testet mot UiB. Hele kjeden er kjørt i nettleseren mot en simulert modell, et simulert bildesøk og lokale sider. Kjeden går fra knappen, via kartlegging og lagring, til bildejakt og maleplan som bygger på resultatet.
+
+35. **BRUKERBESLUTNING 11. november 2026: malingssamlingen er brukerens egen, og eksempeldataene har ingen malinger.**
     - **Eksempeldata:** `buildSampleData` lager ikke lenger malinger, og eksempelplanene har steg uten malinger. Eksempeloppskriftene er fjernet, fordi de bare var fargerekker med eksempelmalinger. Testene ber om de gamle eksempelmalingene med `examplePaints: true`.
     - **Eksempelmalinger i eksisterende data** kjennes igjen ved at de ble laget i samme øyeblikk som arbeidsrommet (`paint_product.created_at = workspace.created_at`) og ikke har noen `change_record`. En maling brukeren har endret eller satt eierskap på, regnes som brukerens. «Fjern eksempelmalingene» skjuler dem (`deleted_at`) og fjerner `inventory_entry`-radene, fordi eierskapet aldri var brukerens. Ingenting fjernes automatisk ved oppstart: brukeren trykker selv.
     - **Tilbakestill eksempeldata beholder malingssamlingen** (`paint_product`, `inventory_entry` og deres `change_record`), men ikke eksempelmalingene. Resten erstattes som før.
@@ -139,7 +180,7 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 - **Brave Image Search er ikke testet mot den ekte tjenesten.** Feltene (`results[].title`, `url`, `source`, `thumbnail.src`, `properties.url`) er hentet fra Braves dokumentasjon slik den er gjengitt i søkeresultater 10. november 2026. Selve dokumentasjonssidene kunne ikke åpnes fra utviklingsmiljøet. Om bildefilene fra Reddit og BoardGameGeek lar seg hente direkte, er ikke kjent. Er de stengt, brukes Braves lille kopi.
 - **Søketjenestene:** Endepunktene er hentet fra dokumentasjonen til Tavily (`POST /search`, Bearer) og Brave (`GET /res/v1/web/search`, `X-Subscription-Token`). De er ikke testet mot de ekte tjenestene, fordi utviklingsmiljøet blokkerte all utgående trafikk. Prisene (Tavily: 1 000 gratis kreditter i måneden, Brave: kreditt på 5 dollar i måneden og kredittkort) er sjekket mot oppslag 9. november 2026.
 - **BGG:** Oppslaget er simulert. Navnene og thing-id-ene (9000xx) er oppdiktet.
-- **Eksempeldata:** Spillet og kildene er plassholdere hentet fra Figma. Eksempeldataene har ingen malinger lenger (avvik 33). De gamle eksempelmalingene, som bare testene bruker, er Citadel-navn med omtrentlige farger; det er ikke sjekket om de er i produksjon i dag.
+- **Eksempeldata:** Spillet og kildene er plassholdere hentet fra Figma. Eksempeldataene har ingen malinger lenger (avvik 35). De gamle eksempelmalingene, som bare testene bruker, er Citadel-navn med omtrentlige farger; det er ikke sjekket om de er i produksjon i dag.
 - **Fargene AI-en foreslår er anslag.** De vises med «≈» i samlingen og merkes som gjettet i importen. De er ikke sjekket mot produsentens farger.
 - **Skrift:** DM Serif Display, DM Sans og DM Mono, lastet fra Google Fonts. Valget er gjort ut fra skjermbildene i Figma og ikke kontrollert mot filen.
 

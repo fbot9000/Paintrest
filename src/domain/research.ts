@@ -8,7 +8,7 @@
 import type { NormalisedProposal } from './agent';
 import type { CatalogSubjectPayload, PaintPlanPayload, SourceRead } from './agent';
 import type { PageSeen } from './ai';
-import type { Id, PaintChoice, SubjectFocus } from './types';
+import type { Id, PaintChoice, SourceRole, SubjectFocus, SubjectIdentity } from './types';
 
 export interface ApproveOptions {
   /** productKey → existing product id, or 'create' to create an unconfirmed product. */
@@ -33,7 +33,8 @@ export type KnowledgeTarget = 'technique' | 'recipe';
 
 export interface ResearchCommands {
   /** Opens a task in the project: the panel's (no focus) or the workspace's own for one miniature and kind. */
-  startTask(project_id: Id, focus?: SubjectFocus): Promise<Id>;
+  /** focus: a workspace task for one miniature, or 'game' for the game survey's task. */
+  startTask(project_id: Id, focus?: SubjectFocus | 'game'): Promise<Id>;
   /**
    * A library task (bit 7.4): area new_knowledge, no work project, and one result type
    * (technique or recipe). The agent only drafts; the user approves into the library.
@@ -73,7 +74,7 @@ export interface ResearchCommands {
 export type ProposalWrite = { ok: true; id: Id; ref: string; updated: boolean } | { ok: false; reason: string };
 
 export interface AgentCommands {
-  addAssistantMessage(task_id: Id, body: string, model_id: string | null, trace?: { action: 'search' | 'open' | 'look' | 'anchor' | 'image_search'; target: string; result: string }[]): Id;
+  addAssistantMessage(task_id: Id, body: string, model_id: string | null, trace?: { action: 'search' | 'open' | 'look' | 'anchor' | 'identify' | 'image_search' | 'hint'; target: string; result: string }[]): Id;
   addSystemMessage(task_id: Id, body: string): Id;
   /** Creates a draft, or updates the agent's own pending draft when `update_of` names one. */
   writeProposal(task_id: Id, p: NormalisedProposal, provider: string, model_id: string): ProposalWrite;
@@ -84,4 +85,25 @@ export interface AgentCommands {
    */
   /** Returns the titles of the sources it created, so the panel can say so. */
   recordSources(task_id: Id, pages: PageSeen[], read: SourceRead[]): string[];
+  /**
+   * Image hunt: keeps who the figure is on the miniature, as «proposed» (PROTOTYPE, brukerønske 11.11.2026).
+   * A confirmed identity is left alone. Returns the name it was stored under, or null when nothing was stored.
+   */
+  recordIdentity(task_id: Id, subject_id: Id, identity: SubjectIdentity): string | null;
+  /**
+   * Game survey: keeps the sources for the whole game (draft sources, with role and summary) and
+   * suggests which miniatures each page shows (evidence links marked as suggestions). Only pages and
+   * miniatures in the task's project are written. Returns what was stored, for the conversation.
+   */
+  recordGameSources(task_id: Id, sources: GameSourceIn[], subjectRefs: Record<string, Id>): { sources: number; links: number };
+}
+
+/** A source for the whole game from a survey (server/research-agent.ts GameSource). */
+export interface GameSourceIn {
+  url: string;
+  title: string;
+  role: SourceRole;
+  shows: string[];
+  summary: string | null;
+  read: boolean;
 }

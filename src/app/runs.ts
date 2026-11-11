@@ -13,10 +13,11 @@ import type { Id } from '../domain/types';
  * 'knowledge' runs a library research turn (id = research task id);
  * 'project' runs a turn from the project's agent panel (id = project id,
  * since the panel may open its task inside the run);
+ * 'game' runs a game survey from the miniature list (id = project id);
  * 'paints' reads a paint list or answers in the import dialog (id = import draft id).
  * Runs of different kinds never block each other, even on the same task.
  */
-export type RunKind = 'images' | 'plan' | 'knowledge' | 'project' | 'paints';
+export type RunKind = 'images' | 'plan' | 'knowledge' | 'project' | 'game' | 'paints';
 
 /** What the global indicator shows for a run, and where it leads. */
 export interface RunMeta {

@@ -402,6 +402,72 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
       });
     },
 
+    async saveGuideSource(subject_id, guide) {
+      if (!/^https?:\/\//.test(guide.url)) throw new CommandError('Guiden mangler en nettadresse');
+      tx((t, ws) => {
+        const s = must(t.miniature_subject[subject_id], 'Miniatyren');
+        if (s.deleted_at) throw new CommandError('Miniatyren er slettet');
+        const log = (tt: Parameters<typeof record>[2]['target_type'], id: Id, a: Parameters<typeof record>[2]['action']) => record(t, ws, { target_type: tt, target_id: id, action: a });
+        const source_id = sourceFor(t, ws, { url: guide.url, title: guide.title, creator: guide.site, kind: 'article' }, null, log);
+        const src = t.source[source_id]!;
+        if (src.kind === 'article') src.kind = 'guide';
+        const linked = Object.values(t.source_link).some((l) => !l.deleted_at && l.source_id === source_id && l.target_type === 'subject' && l.target_id === subject_id && l.use === 'method');
+        if (linked) return;
+        const id = newId();
+        t.source_link[id] = { id, source_id, target_type: 'subject', target_id: subject_id, use: 'method', layer_id: null, deleted_at: null };
+        log('source_link', id, 'attach');
+      });
+    },
+
+    async tagSource(subject_id, page, on) {
+      if (!/^https?:\/\//.test(page.url)) throw new CommandError('Bare nettsider kan merkes');
+      tx((t, ws) => {
+        const s = must(t.miniature_subject[subject_id], 'Miniatyren');
+        if (s.deleted_at) throw new CommandError('Miniatyren er slettet');
+        const log = (tt: Parameters<typeof record>[2]['target_type'], id: Id, a: Parameters<typeof record>[2]['action']) => record(t, ws, { target_type: tt, target_id: id, action: a });
+        const existing = Object.values(t.source).find((x) => !x.deleted_at && x.url === page.url);
+        const links = existing ? Object.values(t.source_link).filter((l) => !l.deleted_at && l.source_id === existing.id && l.target_type === 'subject' && l.target_id === subject_id && l.use === 'evidence') : [];
+        if (!on) {
+          for (const l of links) { l.deleted_at = now(); log('source_link', l.id, 'detach'); }
+          return;
+        }
+        if (links.length) {
+          // Confirming the agent's suggestion («Trolig figuren») makes it the user's own tag.
+          for (const l of links.filter((x) => x.suggested_by_task_id)) {
+            l.suggested_by_task_id = null;
+            log('source_link', l.id, 'update');
+          }
+          if (existing && existing.retention !== 'kept') existing.retention = 'kept';
+          return;
+        }
+        // Tagging is the user's choice to keep the page (a draft found by the agent becomes kept).
+        const source_id = sourceFor(t, ws, { url: page.url, title: page.title || page.url, creator: null, kind: 'article' }, null, log);
+        const id = newId();
+        t.source_link[id] = { id, source_id, target_type: 'subject', target_id: subject_id, use: 'evidence', layer_id: null, deleted_at: null };
+        log('source_link', id, 'attach');
+      });
+    },
+
+    async confirmIdentity(subject_id) {
+      tx((t, ws) => {
+        const s = must(t.miniature_subject[subject_id], 'Miniatyren');
+        if (!s.identity) throw new CommandError('Miniatyren er ikke identifisert');
+        s.identity = { ...s.identity, status: 'confirmed', updated_at: now() };
+        record(t, ws, { target_type: 'miniature_subject', target_id: subject_id, action: 'update' });
+      });
+    },
+
+    async rejectIdentity(subject_id) {
+      tx((t, ws) => {
+        const s = must(t.miniature_subject[subject_id], 'Miniatyren');
+        if (!s.identity) return;
+        const wrong = { official_name: s.identity.official_name, image_urls: s.identity.images.map((i) => i.image_url).slice(0, 3) };
+        s.identity_rejected = [...(s.identity_rejected ?? []), wrong].slice(-5);
+        s.identity = null;
+        record(t, ws, { target_type: 'miniature_subject', target_id: subject_id, action: 'update' });
+      });
+    },
+
     async setSubjectCover(subject_id, asset_id) {
       tx((t, ws) => {
         must(t.miniature_subject[subject_id], 'Miniatyren');

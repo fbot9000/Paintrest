@@ -16,7 +16,15 @@ function newestOpen(t: Tables, keep: (task: ResearchTask) => boolean): ResearchT
 export function panelTask(t: Tables, project_id: Id): ResearchTask | undefined {
   return newestOpen(t, (x) => {
     const scope = t.task_scope[x.id];
-    return scope?.work_project_id === project_id && !scope.subject_focus;
+    return scope?.work_project_id === project_id && !scope.subject_focus && !scope.game_focus;
+  });
+}
+
+/** The game survey's task for the project (started from the miniature list), if one is open. */
+export function gameTask(t: Tables, project_id: Id): ResearchTask | undefined {
+  return newestOpen(t, (x) => {
+    const scope = t.task_scope[x.id];
+    return scope?.work_project_id === project_id && !!scope.game_focus;
   });
 }
 
