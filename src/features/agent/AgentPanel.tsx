@@ -596,7 +596,13 @@ export function Message({ m }: { m: ResearchMessage }) {
   );
 }
 
+/**
+ * The agent's progress while it works. Compact by default: the phase, what it
+ * is doing now, and a count. Every step is one click away («Vis alle steg»),
+ * so nothing is hidden, only folded.
+ */
 export function LiveSteps({ events, onStop }: { events: ResearchEvent[]; onStop: () => void }) {
+  const [all, setAll] = useState(false);
   // An image hunt reports its phases; the general status line would only repeat them.
   const phased = events.some((e) => e.type === 'phase');
   const short = (t: string) => { const one = t.split('\n').filter(Boolean).slice(-1)[0] ?? t; return one.length > 110 ? `${one.slice(0, 108)} …` : one; };
@@ -619,16 +625,47 @@ export function LiveSteps({ events, onStop }: { events: ResearchEvent[]; onStop:
       default: return [];
     }
   });
+  const phase = [...events].reverse().find((e): e is Extract<ResearchEvent, { type: 'phase' }> => e.type === 'phase');
+  const last = [...lines].reverse().find((l) => !(phase && l.key === 'p' + phase.phase));
+  const count = {
+    searches: events.filter((e) => e.type === 'search' || e.type === 'image_search').length,
+    read: events.filter((e) => e.type === 'open_done').length,
+    failed: events.filter((e) => e.type === 'tool_error').length,
+    looked: events.reduce((n, e) => n + (e.type === 'look' ? e.count : 0), 0),
+  };
+  const parts = [
+    count.searches && `${count.searches} søk`,
+    count.read && `${count.read} ${count.read === 1 ? 'side' : 'sider'} lest`,
+    count.looked && `${count.looked} ${count.looked === 1 ? 'bilde' : 'bilder'} sett`,
+  ].filter(Boolean) as string[];
   return (
     <div className="msg msg-assistant live">
       <div className="live-head">
         <span className="msg-who">Agenten jobber</span>
         <button type="button" className="agent-link small" onClick={onStop}>Stopp</button>
       </div>
-      <ol className="live-steps">
-        {lines.length === 0 && <li className="run">Starter …</li>}
-        {lines.map((l, i) => <li key={l.key + i} className={i === lines.length - 1 && l.state === 'run' ? 'run' : l.state}>{l.text}</li>)}
-      </ol>
+      {phase && <p className="live-phase">{phase.text}</p>}
+      <p className={`live-now ${last?.state === 'run' ? 'run' : last?.state === 'err' ? 'err' : ''}`} aria-live="polite">
+        {last ? last.text : 'Starter …'}
+      </p>
+      {(parts.length > 0 || count.failed > 0) && (
+        <p className="live-count small">
+          {parts.join(' · ')}
+          {count.failed > 0 && <span className="live-failed">{parts.length ? ' · ' : ''}{count.failed} feilet</span>}
+        </p>
+      )}
+      {lines.length > 1 && (
+        <>
+          <button type="button" className="agent-link small live-toggle" aria-expanded={all} onClick={() => setAll((v) => !v)}>
+            {all ? 'Skjul stegene' : `Vis alle steg (${lines.length})`}
+          </button>
+          {all && (
+            <ol className="live-steps">
+              {lines.map((l, i) => <li key={l.key + i} className={i === lines.length - 1 && l.state === 'run' ? 'run' : l.state}>{l.text}</li>)}
+            </ol>
+          )}
+        </>
+      )}
     </div>
   );
 }

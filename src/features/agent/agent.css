@@ -91,6 +91,14 @@
 }
 
 .live-head { display: flex; justify-content: space-between; align-items: center; }
+.live-phase { font-weight: 600; color: var(--on-dark); }
+.live-now { color: var(--on-dark); overflow-wrap: anywhere; }
+.live-now.run { animation: agent-pulse 1.2s ease-in-out infinite; }
+.live-now.err { color: #f3c9a8; }
+.live-count { color: var(--soft-dark); }
+.live-failed { color: #f3c9a8; }
+.live-toggle { justify-self: start; text-align: left; }
+@media (prefers-reduced-motion: reduce) { .live-now.run { animation: none; } }
 .live-steps { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; color: var(--soft-dark); }
 .live-steps li.run { color: var(--on-dark); animation: agent-pulse 1.2s ease-in-out infinite; }
 .live-steps li.err { color: #f3c9a8; }
