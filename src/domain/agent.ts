@@ -4,7 +4,7 @@
  * Pure functions only; writes live in data/agent-commands.ts and data/research-commands.ts.
  */
 import type {
-  ElementKind, Evidence, Grouping, Id, MaterialRole, PaintChoice, PaintProduct, ResultType, StepBasis, Tables, Uncertainty,
+  ElementKind, Evidence, Grouping, Id, MaterialRole, PaintChoice, PaintProduct, ResultType, StepBasis, SubjectIdentity, Tables, Uncertainty,
 } from './types';
 import { attachedExpansions, liveSubjects, ownershipOf } from './views';
 
@@ -75,17 +75,17 @@ export interface SourceRead {
   original_excerpt: string | null;
 }
 
-/** Image hunt, phase 1: the best official picture, checked by the agent, that the rest is compared with. */
-export interface HuntAnchor {
-  image_url: string | null;
-  page_url: string | null;
-  page_title: string | null;
-  site: string | null;
-  kind: 'official' | 'concept_art' | 'painted' | null;
-  /** The painter the publisher or campaign credits, when named. */
-  painter: string | null;
-  description: string | null;
+/** A painting guide found in phase 3 of an image hunt (server/research-agent.ts GuideFound). */
+export interface GuideRef {
+  url: string;
+  title: string;
+  site: string;
+  /** True when the agent read the page; false when it only saw it in a search. */
+  read: boolean;
   why: string | null;
+  /** Paints the guide names, as written there. */
+  paints: string[];
+  language: string | null;
 }
 
 /** A YouTube video found in an image hunt. Confirmed by YouTube or the search; nobody has watched it. */
@@ -103,8 +103,10 @@ export interface ReferenceSelectionPayload {
   note: string | null;
   images: ReferenceImage[];
   sources_read?: SourceRead[];
-  anchor?: HuntAnchor | null;
   videos?: VideoRef[];
+  guides?: GuideRef[];
+  /** PROTOTYPE: pictures the user set aside («Forkast» on one picture); the rest of the proposal stays. */
+  dismissed?: string[];
 }
 
 export interface CatalogSubjectPayload {
@@ -117,6 +119,10 @@ export interface CatalogSubjectPayload {
   grouping_basis: 'documented' | 'inferred' | null;
   note: string | null;
   sources: SourceRef[];
+  /** Game survey: who the missing figure is, checked by the server; kept on the miniature (proposed) when added. */
+  identity?: SubjectIdentity | null;
+  /** Game survey: pages that show the missing figure; they become «Trolig figuren» when it is added. */
+  shown_on?: string[];
 }
 
 export interface PlanMaterialPayload {
@@ -412,6 +418,8 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
           grouping_basis: basis(o.grouping_basis),
           note: str(o.note).trim() || null,
           sources: sourceRefs(o.sources),
+          ...(normaliseIdentity(o.identity) ? { identity: normaliseIdentity(o.identity) } : {}),
+          ...(arr(o.shown_on).length ? { shown_on: [...new Set(arr(o.shown_on).map(str).filter((u) => /^https?:\/\//.test(u)))].slice(0, 20) } : {}),
         },
       },
     };
@@ -485,10 +493,10 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
       }];
     });
     const videos = videoRefs(o.videos);
-    const anchor = huntAnchor(o.anchor);
-    if (!images.length && !videos.length) return { ok: false, reason: 'Bildeutvalget har ingen gyldige bilder' };
+    const guides = guideRefs(o.guides);
+    if (!images.length && !videos.length && !guides.length) return { ok: false, reason: 'Bildeutvalget har ingen gyldige bilder' };
     const sources_read = sourcesRead(o.sources_read);
-    return { ok: true, value: { ...common, result_type: 'reference_selection', payload: { subject_id, images, note: str(o.note).trim() || null, sources_read, anchor, videos } } };
+    return { ok: true, value: { ...common, result_type: 'reference_selection', payload: { subject_id, images, note: str(o.note).trim() || null, sources_read, videos, guides } } };
   }
 
   return { ok: false, reason: `Ukjent forslagstype (${String(raw.type)})` };
@@ -562,6 +570,11 @@ export function buildAgentContext(t: Tables, task_id: Id): AgentContext {
       physical_count: s.physical_count,
       expansion: expansions.find((e) => e.id === s.expansion_id)?.name ?? null,
       category: s.category_label,
+      // Who the figure is, from an image hunt; «confirmed» means the user said it is right.
+      ...(s.identity ? { identity: {
+        status: s.identity.status, official_name: s.identity.official_name, aliases: s.identity.aliases,
+        edition: s.identity.edition, description: s.identity.description,
+      } } : {}),
       reference_images: Object.values(t.source_link).filter((l) => !l.deleted_at && l.target_type === 'subject' && l.target_id === s.id && l.use === 'visual_reference').length
         + (s.official_asset_id ? 1 : 0),
       plan: pv
@@ -606,10 +619,19 @@ export function buildAgentContext(t: Tables, task_id: Id): AgentContext {
       miniatures: subjectData,
       paints,
       your_pending_proposals: pending,
-      known_sources: knownSources(t, project.id).slice(0, 60).map((k) => ({
-        url: k.source.url, title: k.source.title, status: k.status, saved_images: k.asset_count,
-        ...(k.summary ? { summary: k.summary.slice(0, 300) } : {}),
-      })),
+      // Which miniatures each page shows, and what it is good for, so no agent has to find it again.
+      known_sources: knownSources(t, project.id).slice(0, 80).map((k) => {
+        const refOf = (id: Id) => Object.entries(subjectRefs).find(([, sid]) => sid === id)?.[0];
+        const confirmed = k.shows_confirmed.map(refOf).filter(Boolean);
+        const suggested = k.shows_suggested.map(refOf).filter(Boolean);
+        return {
+          url: k.source.url, title: k.source.title, status: k.status, saved_images: k.asset_count,
+          ...(k.source.role ? { role: k.source.role } : {}),
+          ...(confirmed.length ? { shows_confirmed: confirmed } : {}),
+          ...(suggested.length ? { shows_suggested: suggested } : {}),
+          ...(k.summary ? { summary: k.summary.slice(0, 300) } : {}),
+        };
+      }),
     },
   };
 }
@@ -688,6 +710,8 @@ export function libraryKnownSources(t: Tables): KnownSource[] {
       asset_count: 0,
       status: source.retention === 'kept' ? 'kept' as const : 'found' as const,
       summary: Object.values(t.source_layer).find((l) => l.source_id === source.id && l.layer === 'translation' && !l.deleted_at)?.body ?? null,
+      // The library has no miniatures.
+      shows_confirmed: [], shows_suggested: [],
     }))
     .sort((a, b) => Number(b.status === 'kept') - Number(a.status === 'kept'));
 }
@@ -698,6 +722,9 @@ export interface KnownSource {
   /** kept: the user saved images or evidence from it; found: the agent read it (draft). */
   status: 'kept' | 'found';
   summary: string | null;
+  /** Miniatures the page shows: confirmed by the user (tag or approval), or suggested by a game survey. */
+  shows_confirmed: Id[];
+  shows_suggested: Id[];
 }
 
 /**
@@ -720,8 +747,16 @@ export function knownSources(t: Tables, project_id: Id): KnownSource[] {
       asset_count: Object.values(t.source_asset).filter((a) => a.source_id === source.id && !a.deleted_at).length,
       status: source.retention === 'kept' ? 'kept' as const : 'found' as const,
       summary: Object.values(t.source_layer).find((l) => l.source_id === source.id && l.layer === 'translation' && !l.deleted_at)?.body ?? null,
+      ...showsOf(t, source.id, subjectIds),
     }))
     .sort((a, b) => Number(b.status === 'kept') - Number(a.status === 'kept') || b.asset_count - a.asset_count);
+}
+
+function showsOf(t: Tables, source_id: Id, subjectIds: Set<Id>): { shows_confirmed: Id[]; shows_suggested: Id[] } {
+  const links = Object.values(t.source_link).filter((l) => !l.deleted_at && l.source_id === source_id && l.target_type === 'subject' && l.use === 'evidence' && subjectIds.has(l.target_id)
+    && !t.miniature_subject[l.target_id]?.deleted_at);
+  const confirmed = [...new Set(links.filter((l) => !l.suggested_by_task_id).map((l) => l.target_id))];
+  return { shows_confirmed: confirmed, shows_suggested: [...new Set(links.filter((l) => l.suggested_by_task_id && !confirmed.includes(l.target_id)).map((l) => l.target_id))] };
 }
 
 export function proposalTitle(t: Tables, type: ResultType, payload: unknown): string {
@@ -773,17 +808,40 @@ function fullName(p: PaintProduct): string {
 
 // ---------- små hjelpere ----------
 
-function huntAnchor(v: unknown): HuntAnchor | null {
+function guideRefs(v: unknown): GuideRef[] {
+  return arr(v).flatMap((x) => {
+    const o = obj(x);
+    const url = str(o.url).trim();
+    if (!/^https?:\/\//.test(url)) return [];
+    return [{
+      url, title: str(o.title).trim() || url, site: str(o.site).trim() || hostOf(url), read: o.read === true, why: str(o.why).trim() || null,
+      paints: arr(o.paints).map((p) => str(p).trim()).filter(Boolean).slice(0, 20), language: str(o.language).trim() || null,
+    }];
+  }).slice(0, 8);
+}
+
+/** The identification from an image hunt's final event, checked for shape (the server has checked the sources). */
+export function normaliseIdentity(v: unknown): SubjectIdentity | null {
   if (!v || typeof v !== 'object') return null;
   const o = obj(v);
-  const s = (x: unknown) => str(x).trim() || null;
-  const url = (x: unknown) => (/^https?:\/\//.test(str(x)) ? str(x) : null);
-  const image_url = url(o.image_url);
-  return {
-    image_url, page_url: image_url ? url(o.page_url) : null, page_title: s(o.page_title), site: s(o.site),
-    kind: (['official', 'concept_art', 'painted'] as const).find((k) => k === o.kind) ?? null,
-    painter: s(o.painter), description: s(o.description), why: s(o.why),
+  const s = (x: unknown, n: number) => str(x).trim().slice(0, n) || null;
+  const http = (x: unknown) => /^https?:\/\//.test(str(x));
+  const images = arr(o.images).flatMap((x) => {
+    const i = obj(x);
+    if (!http(i.image_url) || !http(i.page_url)) return [];
+    return [{
+      image_url: str(i.image_url), page_url: str(i.page_url), page_title: s(i.page_title, 200), site: s(i.site, 120),
+      kind: i.kind === 'concept_art' ? 'concept_art' as const : i.kind === 'render' ? 'render' as const : 'official' as const,
+      thumbnail_url: http(i.thumbnail_url) ? str(i.thumbnail_url) : null,
+    }];
+  }).slice(0, 3);
+  const id: SubjectIdentity = {
+    official_name: s(o.official_name, 160), aliases: arr(o.aliases).map((a) => str(a).trim().slice(0, 120)).filter(Boolean).slice(0, 8),
+    edition: s(o.edition, 200), faction: s(o.faction, 160), description: s(o.description, 800), images, painter: s(o.painter, 120),
+    confidence: (['high', 'medium', 'low'] as const).find((c) => c === o.confidence) ?? null, why: s(o.why, 600),
+    sources: arr(o.sources).flatMap((x) => { const q = obj(x); return http(q.url) ? [{ url: str(q.url), title: str(q.title).trim() || str(q.url) }] : []; }).slice(0, 10),
   };
+  return id.official_name || id.description || id.images.length ? id : null;
 }
 
 function videoRefs(v: unknown): VideoRef[] {

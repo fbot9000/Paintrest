@@ -1,10 +1,11 @@
 import type { AiCredentialView, AiGateway, AiTestResult, FinalEvent, HostedSearchTest, ResearchEvent, SearchCredentialView } from '../domain/ai';
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(path, {
     method,
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
+    signal,
   });
   const text = await res.text();
   let data: { error?: string } & Record<string, unknown>;
@@ -74,6 +75,9 @@ export function httpAiGateway(): AiGateway {
       if (!final) throw new Error('Agenten avsluttet uten svar');
       return final;
     },
+    async sendHint(run_id, hint) {
+      return (await request<{ delivered: boolean }>('POST', '/api/agent/hint', { run_id, hint })).delivered;
+    },
     imageProxyUrl(url) {
       return `/api/research/image?${new URLSearchParams({ url })}`;
     },
@@ -99,6 +103,12 @@ export function httpAiGateway(): AiGateway {
     },
     async testSearch(query) {
       return request('POST', '/api/search/test', { query });
+    },
+    async readPaints(req, signal) {
+      return request('POST', '/api/paints/interpret', req, signal);
+    },
+    async discussPaints(req, signal) {
+      return request('POST', '/api/paints/interpret', req, signal);
     },
   };
 }

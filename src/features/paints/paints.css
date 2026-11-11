@@ -1,0 +1,180 @@
+/* Malingssamlingen og importen. Filter chips, search box, .empty and .tech-uncertain come from the shared styles. */
+.paints-page, .import-page { max-width: 1240px; }
+.spacer { flex: 1; }
+
+/* Eksempelmalinger */
+.sample-banner {
+  display: flex; gap: 20px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  padding: 18px 20px; border-radius: var(--r-lg); background: var(--warn-soft); color: var(--ink); border: 1px solid #e8c9b2;
+}
+.sample-banner > div { display: grid; gap: 6px; flex: 1 1 420px; }
+.sample-banner h2 { font-size: 20px; color: var(--warn); }
+
+.import-pending { padding: 10px 14px; border-radius: var(--r-md); background: var(--info-soft); }
+.paints-empty .head-actions { justify-content: center; margin-top: 8px; }
+.paint-add { display: grid; gap: 16px; }
+
+/* Listen */
+.paint-list { display: grid; gap: 22px; }
+.paint-group { display: grid; gap: 8px; }
+.paint-group-h { font-size: 20px; display: flex; align-items: baseline; gap: 8px; }
+.paint-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.paint-group li { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); }
+.paint-group li.open { padding: 16px; border-color: var(--fore); box-shadow: var(--shadow); }
+.paint-line { display: flex; align-items: center; gap: 12px; padding: 6px 10px 6px 12px; min-height: 56px; }
+.paint-swatch { position: relative; display: inline-flex; }
+.swatch-est {
+  position: absolute; right: -6px; bottom: -6px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--card); border: 1px solid var(--line); font-size: 11px; line-height: 14px; text-align: center; color: var(--muted);
+}
+.paint-line-main {
+  flex: 1; min-width: 0; display: grid; gap: 2px; text-align: left; padding: 6px 4px; border: 0; background: none; cursor: pointer; border-radius: var(--r-sm);
+}
+.paint-line-main:hover strong { text-decoration: underline; }
+.paint-line-name { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.own-select {
+  min-height: 36px; padding: 0 8px; border-radius: var(--r-sm); border: 1px solid transparent; cursor: pointer;
+  font: 500 12px var(--font-mono); letter-spacing: .03em; text-transform: uppercase;
+}
+.own-select.own-owns { background: var(--moss-soft); color: var(--pine); }
+.own-select.own-not_owned { background: var(--warn-soft); color: var(--warn); }
+.own-select.own-unknown { background: var(--panel); color: var(--muted); }
+
+.paint-hidden { border-top: 1px solid var(--line); padding-top: 14px; }
+.paint-hidden summary { cursor: pointer; font-weight: 500; padding: 10px 0; }
+.paint-hidden ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.paint-hidden li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.paint-hidden > .btn { margin-top: 12px; }
+.link-danger { color: var(--warn); }
+.purge-list, .purge-usage ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.purge-list { list-style: none; padding: 0; }
+.purge-list li { display: flex; align-items: center; gap: 8px; }
+.purge-usage { display: grid; gap: 8px; padding: 12px 14px; border-radius: var(--r-md); background: var(--warn-soft); }
+
+/* Skjemaet for én maling */
+.paint-form { display: grid; gap: 14px; }
+.paint-form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 14px; }
+.pf-field { display: grid; gap: 6px; align-content: start; }
+.pf-field label, .pf-label { font-weight: 600; font-size: 14px; }
+.pf-field input:not([type=color]), .pf-field select {
+  width: 100%; min-height: var(--tap); padding: 8px 12px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-sm);
+}
+.pf-field input:focus, .pf-field select:focus { outline: none; border-color: var(--fore); box-shadow: 0 0 0 3px var(--moss-soft); }
+.pf-name { grid-column: span 2; }
+.pf-own { grid-column: span 2; }
+.pf-color-row { display: flex; align-items: center; gap: 10px; min-height: var(--tap); }
+.pf-color-row input[type=color] { width: 52px; height: 40px; padding: 2px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--paper); cursor: pointer; }
+.pf-color-row input.no-color { opacity: .35; }
+.pf-field.ai-filled input:not([type=color]), .pf-field.ai-filled select, .guessed {
+  background: #eef3ee !important; border-style: dashed !important; border-color: #8fae99 !important; font-style: italic;
+}
+.pf-field.ai-filled label::after { content: ' · AI'; font: 500 11px var(--font-mono); color: var(--fore); }
+.pf-field.ai-filled input[type=color] { border-style: dashed; border-color: #8fae99; }
+.ai-legend { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.ai-dot { flex: none; width: 18px; height: 12px; border: 1px dashed #8fae99; background: #eef3ee; border-radius: 3px; }
+.paint-twin { padding: 8px 12px; border-radius: var(--r-sm); background: var(--info-soft); }
+.paint-saved { color: var(--fore); font-weight: 500; }
+.paint-form-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+@media (max-width: 860px) {
+  .paint-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pf-name, .pf-own { grid-column: 1 / -1; }
+}
+
+/* Import: start */
+.import-start { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
+.import-input { display: grid; gap: 16px; }
+.import-input textarea { min-height: 300px; font: 400 14px/1.5 var(--font-mono); }
+.import-input textarea.drag { border-color: var(--fore); background: var(--moss-soft); }
+.import-file { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.import-start-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+.import-how { display: grid; gap: 12px; padding: 4px 4px 0; }
+.import-how h2 { font-size: 20px; }
+.import-how ol { margin: 0; padding-left: 20px; display: grid; gap: 10px; }
+@media (max-width: 980px) { .import-start { grid-template-columns: 1fr; } }
+
+/* Import: gjennomgang */
+.import-review { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }
+.import-main { display: grid; gap: 14px; min-width: 0; }
+.import-aside { position: sticky; top: 76px; max-height: calc(100vh - 160px); overflow: auto; }
+@media (max-width: 1180px) {
+  .import-review { grid-template-columns: 1fr; }
+  .import-aside { position: static; max-height: none; order: -1; }
+}
+.import-progress { display: grid; gap: 8px; }
+.import-progress .run-dot { margin-right: 4px; vertical-align: middle; box-shadow: none; }
+.import-progress .btn { min-height: 36px; margin-left: 6px; }
+.import-bar { height: 6px; border-radius: 3px; background: var(--panel); overflow: hidden; }
+.import-bar span { display: block; height: 100%; background: var(--fore); transition: width .3s; }
+.import-uncovered { display: grid; gap: 8px; padding: 14px 16px; border-radius: var(--r-md); background: var(--warn-soft); }
+.import-uncovered .btn { justify-self: start; }
+.line-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 13px; }
+.line-list .mono { display: inline-block; min-width: 44px; color: var(--muted); }
+.import-skipped summary { cursor: pointer; font-weight: 500; padding: 6px 0; }
+.import-skipped .line-list { margin: 6px 0 8px; }
+
+.import-rows { display: grid; gap: 6px; }
+.import-row {
+  display: grid; align-items: center; gap: 6px 8px;
+  grid-template-columns: 56px 30px minmax(88px, 1fr) minmax(80px, 1fr) minmax(130px, 1.5fr) 76px 124px 92px;
+  grid-template-areas: 'check color maker range name code kind own' 'meta meta meta meta meta meta meta meta';
+  padding: 6px 8px; border-radius: var(--r-md); background: var(--card); border: 1px solid var(--line);
+}
+.import-row input:not([type=checkbox]):not([type=color]), .import-row select {
+  width: 100%; min-width: 0; min-height: 38px; padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--paper); font-size: 14px;
+}
+.import-row input:focus, .import-row select:focus { outline: none; border-color: var(--fore); box-shadow: 0 0 0 3px var(--moss-soft); }
+.import-row input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--pine); }
+.import-head { background: none; border-color: transparent; padding-block: 0; font: 500 11px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); grid-template-areas: 'check color maker range name code kind own'; }
+.import-row.excluded { opacity: .55; }
+.import-row.touched { border-color: var(--fore); background: #f3f8ee; }
+.import-row.flash { box-shadow: 0 0 0 3px var(--moss); }
+.import-row.has-doubt { border-left: 3px solid var(--warn); }
+.ir-check { grid-area: check; display: flex; align-items: center; gap: 6px; }
+.ir-color { grid-area: color; }
+.ir-color label { position: relative; display: inline-flex; cursor: pointer; }
+.ir-color.guessed { background: none !important; border: 0 !important; }
+.ir-color.guessed .swatch { outline: 2px dashed #8fae99; outline-offset: 1px; }
+.color-hidden { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+.ir-maker { grid-area: maker; } .ir-range { grid-area: range; } .ir-name { grid-area: name; } .ir-code { grid-area: code; }
+.ir-kind { grid-area: kind; } .ir-own { grid-area: own; }
+.ir-name input { font-weight: 600; }
+.ir-meta { grid-area: meta; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding-left: 4px; }
+.ir-doubt { color: var(--warn); font-weight: 500; }
+@media (max-width: 860px) {
+  .import-head { display: none; }
+  .import-row {
+    grid-template-columns: 56px 34px repeat(4, minmax(0, 1fr));
+    grid-template-areas: 'check color name name name name' 'maker maker maker range range range' 'code code kind kind own own' 'meta meta meta meta meta meta';
+  }
+}
+
+.import-dialog { display: grid; gap: 14px; padding: 18px; border-radius: var(--r-lg); background: var(--card); border: 1px solid var(--line); }
+.import-dialog h2 { font-size: 20px; }
+.import-dialog .btn-primary { justify-self: start; }
+.iq { display: grid; gap: 8px; padding: 12px; border-radius: var(--r-md); background: var(--paper); border: 1px solid var(--line); }
+.iq-rows { display: flex; flex-wrap: wrap; gap: 4px; }
+.iq-row { border: 0; border-radius: 4px; padding: 3px 8px; background: var(--panel); cursor: pointer; font-size: 12px; }
+.iq-row:hover { background: #e0ded4; }
+.iq-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.iq-options button { min-height: 36px; padding: 0 12px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--card); cursor: pointer; font-weight: 500; text-align: left; }
+.iq-options button.on { border-color: var(--pine); background: var(--moss-soft); }
+.iq-own { display: flex; gap: 8px; align-items: center; }
+.iq-own input { flex: 1; min-width: 0; min-height: 36px; padding: 4px 10px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--card); }
+.import-log summary { cursor: pointer; font-weight: 500; }
+.import-log ol { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; font-size: 14px; }
+.import-log li { display: grid; gap: 2px; padding: 8px 10px; border-radius: var(--r-sm); background: var(--paper); }
+.import-log li.user { background: var(--info-soft); }
+
+.import-footer {
+  position: sticky; bottom: 0; z-index: 5; display: grid; gap: 8px;
+  margin: 0 -32px -64px; padding: 14px 32px calc(14px + env(safe-area-inset-bottom));
+  background: var(--card); border-top: 1px solid var(--line); box-shadow: 0 -6px 18px rgb(20 39 34 / .06);
+}
+.import-footer-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.import-footer-row p { flex: 1 1 320px; }
+.import-footer-row .spacer { display: none; }
+@media (max-width: 860px) { .import-footer { margin: 0 -16px -48px; padding-inline: 16px; } }
+
+.import-done { display: grid; gap: 14px; max-width: 640px; }
+.import-done ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }

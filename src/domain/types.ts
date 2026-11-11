@@ -56,6 +56,13 @@ export interface PaintProduct {
    * but the schema has no column for it. Nullable hex colour.
    */
   swatch_hex: string | null;
+  /**
+   * PROTOTYPE (malingssamlingen, 11.11.2026): the maker's product code or item number
+   * (Vallejo 70.950, Army Painter WP3001). Not in skjema. Absent = unknown.
+   */
+  product_code?: string | null;
+  /** PROTOTYPE: true when swatch_hex is the AI's estimate, not a colour the user chose. */
+  swatch_estimated?: boolean;
   created_at: Timestamp;
   deleted_at: Timestamp | null;
 }
@@ -133,6 +140,46 @@ export interface MiniatureSubject {
   uncertainty: unknown[] | null;
   current_plan_version_id: Id | null;
   deleted_at: Timestamp | null;
+  /**
+   * PROTOTYPE (brukerønske 11.11.2026): who the figure is, from phase 1 of an image hunt.
+   * «proposed» until the user confirms it; a confirmed identity is used by later hunts (phase 1 is skipped) and by the paint plan.
+   */
+  identity?: SubjectIdentityRecord | null;
+  /** PROTOTYPE: identifications the user said were wrong («Feil figur»), so the agent does not pick them again. */
+  identity_rejected?: { official_name: string | null; image_urls: string[] }[];
+}
+
+/** An official picture of the figure (concept art, the publisher's photo, or a render). */
+export interface IdentityImage {
+  image_url: string;
+  page_url: string;
+  page_title: string | null;
+  site: string | null;
+  kind: 'concept_art' | 'official' | 'render';
+  thumbnail_url: string | null;
+}
+
+/** Who the figure is, as the image hunt found it (server/research-agent.ts SubjectIdentity). */
+export interface SubjectIdentity {
+  official_name: string | null;
+  /** Other names: card name, Kickstarter name, sculpt name, translations. */
+  aliases: string[];
+  /** Base game, expansion, Kickstarter add-on or promo. */
+  edition: string | null;
+  faction: string | null;
+  /** What the figure looks like. */
+  description: string | null;
+  images: IdentityImage[];
+  painter: string | null;
+  confidence: 'high' | 'medium' | 'low' | null;
+  why: string | null;
+  sources: { url: string; title: string }[];
+}
+
+export interface SubjectIdentityRecord extends SubjectIdentity {
+  status: 'proposed' | 'confirmed';
+  found_by_task_id: Id | null;
+  updated_at: Timestamp;
 }
 
 export type ScopeKind = 'project' | 'expansion' | 'category' | 'subjects';
@@ -289,7 +336,12 @@ export interface Source {
   deleted_at: Timestamp | null;
   /** PROTOTYPE: the page's language when known (html lang or guessed). */
   language?: string | null;
+  /** PROTOTYPE (game survey): what the page is good for in this game. Set only on pages that belong to the project. */
+  role?: SourceRole | null;
 }
+
+/** official: the publisher's or the campaign's own; painted: others' painted figures; guide: how to paint. */
+export type SourceRole = 'official' | 'painted' | 'guide' | 'other';
 
 export interface SourceAsset {
   id: Id;
@@ -323,6 +375,11 @@ export interface SourceLink {
   use: LinkUse;
   layer_id: Id | null;
   deleted_at: Timestamp | null;
+  /**
+   * PROTOTYPE (game survey): an evidence link the agent suggested («Trolig figuren»), from this task.
+   * The user confirms it (the field is cleared) or removes it. Absent: made or confirmed by the user, or by an approval.
+   */
+  suggested_by_task_id?: Id | null;
 }
 
 export interface SourceLinkAsset {
@@ -547,6 +604,8 @@ export interface TaskScope {
    * project's agent panel or with each other. Absent or null: the panel's task.
    */
   subject_focus?: SubjectFocus | null;
+  /** PROTOTYPE: the game survey's own task (started from the miniature list), apart from the panel and the workspace. */
+  game_focus?: boolean;
 }
 
 export interface SubjectFocus {
@@ -580,7 +639,7 @@ export interface ResearchMessage {
   /** PROTOTYPE: which model answered (skjema stores provider/model on proposals only). */
   model_id?: string | null;
   /** PROTOTYPE: the searches and pages behind an answer, shown as «Slik fant agenten dette». */
-  trace?: { action: 'search' | 'open' | 'look' | 'anchor' | 'image_search'; target: string; result: string }[];
+  trace?: { action: 'search' | 'open' | 'look' | 'anchor' | 'identify' | 'image_search' | 'hint'; target: string; result: string }[];
 }
 
 export type Evidence = 'documented' | 'synthesized' | 'unresolved';
@@ -611,6 +670,8 @@ export interface ResearchProposal {
   change_set_id?: Id | null;
   /** PROTOTYPE (bit 7.4): the technique or recipe created when a library draft was approved. */
   applied_target_id?: Id | null;
+  /** PROTOTYPE: 'images' when an image proposal closed by itself because every picture was used or set aside. */
+  closed_by?: 'images' | null;
 }
 
 export interface ContextRef {

@@ -5,7 +5,7 @@
  */
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useApp, useView } from '../../app/context';
 import { describeOps, matchProduct, planProductRefs, productKey, proposalTitle } from '../../domain/agent';
 import type { CatalogChangePayload, CatalogSubjectPayload, PaintPlanPayload, ReferenceSelectionPayload, SourceRef } from '../../domain/agent';
@@ -14,6 +14,7 @@ import { runs, useRuns } from '../../app/runs';
 import type { AgentChangeSet, Id, ResearchMessage, ResearchProposal, Tables } from '../../domain/types';
 import { ownershipOf, projectSummary } from '../../domain/views';
 import { panelTask } from '../../domain/tasks';
+import { openImages, savedImageUrls } from '../../domain/review';
 import { runAgentTurn } from '../../data/agent-runner';
 import { Badge, Button, Dialog, ErrorNote, Field, OwnershipFlag, ProductName, Segmented, Stepper, Swatch } from '../../ui/components';
 import './agent.css';
@@ -125,6 +126,7 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
   const [error, setError] = useState<string | null>(null);
   const [review, setReview] = useState<ResearchProposal | null>(null);
   const [showDone, setShowDone] = useState(false);
+  const navigate = useNavigate();
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -210,10 +212,9 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
         <div>
           <h2>Researchagent</h2>
           {ai === 'ready' && (
-            <>
-              <span className="agent-sub">UiB · {model ?? 'ingen standardmodell'}</span>
-              <span className="agent-sub">{web ? `Nettsøk: ${web}` : 'Uten nettsøk'}</span>
-            </>
+            <span className="agent-sub" title={`Modell: ${model ?? 'ingen standardmodell'} · ${web ? `nettsøk: ${web}` : 'uten nettsøk'}`}>
+              UiB · {model ?? 'ingen standardmodell'} · {web ? `nettsøk: ${web}` : 'uten nettsøk'}
+            </span>
           )}
         </div>
         <div className="agent-head-actions">
@@ -241,8 +242,10 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
 
       <div className="agent-scroll" ref={listRef}>
         <div className="agent-scope">
-          <span className="eyebrow">Arbeidskontekst</span>
-          <span>Dette prosjektet. Agenten kan lese prosjektet, miniatyrene, maleplanene og malingene dine{web ? ', søke på nettet og lese sider' : ''}, og foreslå nye og endrede miniatyrer, referansebilder og maleplaner. Den kan ikke endre noe utenfor prosjektet.</span>
+          <details>
+            <summary>Arbeider i dette prosjektet</summary>
+            <span>Agenten kan lese prosjektet, miniatyrene, maleplanene og malingene dine{web ? ', søke på nettet og lese sider' : ''}, og foreslå nye og endrede miniatyrer, referansebilder og maleplaner. Den kan ikke endre noe utenfor prosjektet.</span>
+          </details>
           {ai === 'ready' && !web && <span>Uten nettsøk bygger agenten bare på det modellen kan fra før. Legg inn en søketjeneste under <Link to="/innstillinger">AI og nettsøk</Link>.</span>}
           {view?.targets.map((r) => (
             <Badge key={r.id} tone={r.stale ? 'warn' : 'moss'}>
@@ -270,7 +273,7 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
                 <button type="button" className="agent-link small" onClick={approveAll} disabled={busy}>Godkjenn alle {simple.length}</button>
               )}
             </div>
-            {pending.map((p) => (
+            {pending.filter((p) => p.result_type !== 'reference_selection').map((p) => (
               <ProposalCard
                 key={p.id}
                 p={p}
@@ -280,6 +283,11 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
                 onApprove={() => act(() => app.research.approveProposal(p.id))}
               />
             ))}
+            {pending.some((p) => p.result_type === 'reference_selection') && (
+              <ImageProposals proposals={pending.filter((p) => p.result_type === 'reference_selection')}
+                onOpen={(subject_id) => navigate(`/p/${projectId}/m/${subject_id}/bilder?gjennomgang=1`)}
+                onReject={(id) => act(() => app.research.rejectProposal(id))} />
+            )}
           </section>
         )}
         {done.length > 0 && (
@@ -361,10 +369,10 @@ function ProposalCard({ p, title, onReview, onReject, onApprove }: {
       {p.result_type === 'catalog_subject' && <SourceList sources={(p.payload as CatalogSubjectPayload).sources ?? []} compact />}
       {p.result_type === 'catalog_change' && <ChangeList payload={p.payload as CatalogChangePayload} />}
       {p.uncertainty.length > 0 && (
-        <ul className="proposal-unc">
-          {p.uncertainty.slice(0, 3).map((u, i) => <li key={i}>{u.reason}</li>)}
-          {p.uncertainty.length > 3 && <li>… og {p.uncertainty.length - 3} til</li>}
-        </ul>
+        <details className="proposal-unc">
+          <summary>Usikkerhet ({p.uncertainty.length})</summary>
+          <ul>{p.uncertainty.map((u, i) => <li key={i}>{u.reason}</li>)}</ul>
+        </details>
       )}
       {p.last_error && <p className="proposal-err">{p.last_error}</p>}
       <div className="proposal-actions">
@@ -375,6 +383,43 @@ function ProposalCard({ p, title, onReview, onReject, onApprove }: {
         <Button variant="ghost" onClick={onReject}>Avvis</Button>
       </div>
     </article>
+  );
+}
+
+/**
+ * Image proposals take little room here: one row per miniature, opened in the workshop's walkthrough,
+ * where the pictures are chosen (the sure ones ticked in advance) next to who the figure is and its sources.
+ */
+function ImageProposals({ proposals, onOpen, onReject }: { proposals: ResearchProposal[]; onOpen: (subject_id: Id) => void; onReject: (id: Id) => void }) {
+  const { ai } = useApp();
+  const names = useView((t) => Object.fromEntries(proposals.map((p) => {
+    const sid = (p.payload as ReferenceSelectionPayload).subject_id;
+    return [p.id, t.miniature_subject[sid]?.name ?? 'ukjent miniatyr'];
+  })), [proposals]);
+  // Only what is still open: not yet on a miniature, not set aside.
+  const open = useView((t) => {
+    const pid = t.task_scope[proposals[0]?.task_id ?? '']?.work_project_id ?? '';
+    const saved = savedImageUrls(t, pid);
+    return Object.fromEntries(proposals.map((p) => [p.id, openImages(p, saved)]));
+  }, [proposals]);
+  return (
+    <div className="img-props">
+      <span className="small img-props-head">Bildeforslag · velges i verkstedet</span>
+      {proposals.filter((p) => (open[p.id] ?? []).length > 0).map((p) => {
+        const pl = { ...(p.payload as ReferenceSelectionPayload), images: open[p.id]! };
+        return (
+          <div key={p.id} className="img-prop">
+            <button type="button" className="img-prop-open" onClick={() => onOpen(pl.subject_id)} title={`Velg bilder til ${names[p.id]} (${p.ref})`}>
+              <span className="img-prop-thumbs">
+                {pl.images.slice(0, 3).map((i) => <img key={i.image_url} src={ai.imageProxyUrl(i.thumbnail_url ?? i.image_url)} alt="" loading="lazy" />)}
+              </span>
+              <span className="img-prop-text"><strong>{names[p.id]}</strong><span className="small">{pl.images.length} {pl.images.length === 1 ? 'bilde' : 'bilder'} ›</span></span>
+            </button>
+            <button type="button" className="img-prop-x" onClick={() => onReject(p.id)} aria-label={`Avvis bildeforslaget til ${names[p.id]}`} title="Avvis">×</button>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -570,10 +615,18 @@ const KIND_LABEL: Record<string, string> = {
 
 export function Message({ m }: { m: ResearchMessage }) {
   const [open, setOpen] = useState(false);
+  const [full, setFull] = useState(false);
+  // Paintrest's own notes (sources saved, what was refused) are bookkeeping: the first line, the rest on request.
+  const lines = m.body.split('\n').filter(Boolean);
+  const fold = m.role === 'system' && (lines.length > 1 || m.body.length > 160);
+  const first = lines[0] ?? '';
   return (
     <div className={`msg msg-${m.role}`}>
       <span className="msg-who">{m.role === 'user' ? 'Du' : m.role === 'assistant' ? 'Agenten' : 'Paintrest'}</span>
-      <p>{m.body}</p>
+      {fold && !full
+        ? <p>{first.length > 160 ? `${first.slice(0, 158)} …` : first}{' '}
+            <button type="button" className="agent-link small msg-more" onClick={() => setFull(true)}>{lines.length > 1 ? `+${lines.length - 1} til` : 'Vis alt'}</button></p>
+        : <p>{m.body}</p>}
       {m.trace && m.trace.length > 0 && (
         <div className="trace">
           <button type="button" className="agent-link small" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
@@ -583,8 +636,10 @@ export function Message({ m }: { m: ResearchMessage }) {
             <ol>
               {m.trace.map((s, i) => (
                 <li key={i}>
-                  <span className="mono">{s.action === 'search' ? 'Søk' : s.action === 'image_search' ? 'Bildesøk' : s.action === 'look' ? 'Se' : s.action === 'anchor' ? 'Anker' : 'Les'}</span>{' '}
-                  {s.action === 'open' ? <a href={s.target} target="_blank" rel="noreferrer">{shortUrl(s.target)}</a> : s.action === 'look' || s.action === 'anchor' ? <em>{shortUrl(s.target)}</em> : <em>«{s.target}»</em>}
+                  <span className="mono">{s.action === 'search' ? 'Søk' : s.action === 'image_search' ? 'Bildesøk' : s.action === 'look' ? 'Se' : s.action === 'anchor' ? 'Anker'
+                    : s.action === 'identify' ? 'Identifisert' : s.action === 'hint' ? 'Fra deg' : 'Les'}</span>{' '}
+                  {s.action === 'open' || s.action === 'hint' ? <a href={s.target} target="_blank" rel="noreferrer">{shortUrl(s.target)}</a>
+                    : s.action === 'look' || s.action === 'anchor' ? <em>{shortUrl(s.target)}</em> : <em>«{s.target}»</em>}
                   <span className="trace-res"> — {s.result}</span>
                 </li>
               ))}
@@ -618,9 +673,9 @@ export function LiveSteps({ events, onStop }: { events: ResearchEvent[]; onStop:
       case 'look': return [{ key: 'l' + e.count + (e.why ?? ''), text: <>Ser på {e.count} {e.count === 1 ? 'bilde' : 'bilder'}</>, state: 'run' }];
       case 'look_done': return [{ key: 'ld' + e.summary.slice(0, 20), text: <span title={e.summary}>{short(e.summary)}</span>, state: 'ok' }];
       case 'phase': return [{ key: 'p' + e.phase, text: <strong>{e.text}</strong>, state: 'ok' }];
-      case 'anchor': return [{ key: 'a' + (e.anchor.image_url ?? ''), text: e.anchor.image_url
-        ? <>Offisielt anker valgt{e.anchor.site ? ` fra ${e.anchor.site}` : ''}{e.anchor.painter ? `, malt av ${e.anchor.painter}` : ''}</>
-        : <>Fant ikke noe offisielt bilde; leter videre uten anker</>, state: 'ok' }];
+      case 'identity': return [{ key: 'id' + (e.identity.official_name ?? ''), text: <>Identifisert: <strong>{e.identity.official_name ?? 'uten navn'}</strong>
+        {e.identity.images.length ? ` · ${e.identity.images.length} offisielle ${e.identity.images.length === 1 ? 'bilde' : 'bilder'}` : ' · ingen offisielle bilder'}</>, state: 'ok' }];
+      case 'hint': return [{ key: 'h' + e.text, text: e.text, state: 'ok' }];
       case 'tool_error': return [{ key: 'e' + e.target, text: <>{e.action === 'search' ? 'Søk' : 'Lesing'} feilet: {e.error}</>, state: 'err' }];
       default: return [];
     }

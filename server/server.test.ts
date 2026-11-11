@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFile
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createHandler, normaliseBaseUrl } from './app.ts';
+import { createHandler, normaliseBaseUrl, parseFocus, parseHint } from './app.ts';
 import { CredentialStore } from './credential-store.ts';
 import { decrypt, encrypt, loadOrCreateMasterKey } from './crypto.ts';
 import { ResponsesProvider } from './provider.ts';
@@ -194,5 +194,85 @@ describe('datamappen', () => {
     const other = mkdtempSync(join(tmpdir(), 'paintrest-new2-'));
     writeFileSync(join(other, 'master.key'), 'b'.repeat(64));
     expect(moveKeysFrom(oldDir, other)).toEqual([]);
+  });
+});
+
+describe('bildejakt: det klienten sender (brukerønske 11.11.2026)', () => {
+  it('tar med brukerens egne bilder, identifiseringen, avviste figurer og merkede sider', () => {
+    const f = parseFocus({
+      kind: 'images', subject_ref: 'M1', subject_name: 'Merlin', game: 'Avalon',
+      user_images: [{ image_url: 'https://i.redd.it/a.jpg', page_url: 'https://www.reddit.com/r/x/1', title: 'Mine' }, { image_url: 'javascript:x', page_url: 'https://a.example' }],
+      identity: { status: 'confirmed', official_name: 'Merlin, the Archmage', aliases: ['Merlin', 7], description: 'Trollmann',
+        images: [{ image_url: 'https://pub.example/a.jpg', page_url: 'https://pub.example/m', kind: 'concept_art' }, { image_url: 'file:///etc/passwd', page_url: 'https://pub.example/m' }],
+        sources: [{ url: 'https://pub.example/m', title: 'Merlin' }] },
+      rejected: [{ official_name: 'Morgana', image_urls: ['https://x.example/m.jpg', 'ftp://bad'] }],
+      tagged_sources: [{ url: 'https://blog.example/merlin', title: 'Merlin painted', summary: 'Galleri' }, { url: 'nei', title: 'x' }],
+    });
+    expect(f).toMatchObject({
+      kind: 'images',
+      // Before this, the user's own finds were dropped here and never reached the agent.
+      user_images: [{ image_url: 'https://i.redd.it/a.jpg', page_url: 'https://www.reddit.com/r/x/1', title: 'Mine' }],
+      identity: { status: 'confirmed', official_name: 'Merlin, the Archmage', aliases: ['Merlin'], images: [{ image_url: 'https://pub.example/a.jpg', kind: 'concept_art' }] },
+      rejected: [{ official_name: 'Morgana', image_urls: ['https://x.example/m.jpg'] }],
+      tagged_sources: [{ url: 'https://blog.example/merlin', title: 'Merlin painted', summary: 'Galleri' }],
+    });
+    expect(f && f.kind === 'images' && f.identity!.images).toHaveLength(1);
+    expect(parseFocus({ kind: 'images', identity: { status: 'whatever', official_name: 'x' } })).toMatchObject({ identity: null });
+    expect(parseFocus({ kind: 'plan', subject_ref: 'M1', guides: [{ url: 'https://blog.example/g', title: 'G' }], identity: { status: 'confirmed', official_name: 'M' } }))
+      .toMatchObject({ kind: 'plan', guides: [{ url: 'https://blog.example/g' }], identity: { official_name: 'M' } });
+    expect(parseHint({ kind: 'tagged_source', url: 'https://blog.example/merlin', title: 'T' })).toEqual({ kind: 'tagged_source', url: 'https://blog.example/merlin', title: 'T' });
+    expect(parseHint({ kind: 'tagged_source', url: 'javascript:x' })).toBeNull();
+    expect(parseHint({ kind: 'other', url: 'https://a.example' })).toBeNull();
+  });
+
+  it('beskjed til en kjøring som ikke går, leveres ikke, og ugyldige beskjeder avvises', async () => {
+    const ok = await call('POST', '/api/agent/hint', { run_id: 'run-12345678', hint: { kind: 'tagged_source', url: 'https://blog.example/m', title: 'M' } });
+    expect(ok.status).toBe(200);
+    expect(ok.json).toEqual({ delivered: false });
+    expect((await call('POST', '/api/agent/hint', { run_id: 'x', hint: { kind: 'tagged_source', url: 'https://blog.example/m' } })).status).toBe(400);
+    expect((await call('POST', '/api/agent/hint', { run_id: 'run-12345678', hint: { kind: 'tagged_source', url: 'javascript:x' } })).status).toBe(400);
+  });
+});
+
+describe('beskjed til agenten mens den jobber', () => {
+  it('når fram til kjøringen før neste steg, og køen forsvinner når kjøringen er ferdig', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'paintrest-hint-'));
+    const key = loadOrCreateMasterKey(dir);
+    const aiStore = new CredentialStore(dir, key);
+    const searchStore = new CredentialStore(dir, key, 'local', 'search_credential.json');
+    let release!: () => void;
+    const waiting = new Promise<void>((r) => { release = r; });
+    const seen: string[] = [];
+    const provider = { respond: async (msgs: unknown) => {
+      seen.push(JSON.stringify(msgs));
+      if (seen.length === 1) await waiting;
+      return { text: '{"action":"final","message":"ferdig","proposals":[]}', model: 'm', usage: null };
+    } } as unknown as ResponsesProvider;
+    const srv = createServer(createHandler({
+      aiStore, provider, searchStore, search: new WebSearch(searchStore),
+      openPage: async () => { throw new Error('not used'); }, getImage: async () => { throw new Error('not used'); },
+      data: new DataStore(join(dir, 'paintrest')),
+    }));
+    await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r));
+    const base = `http://127.0.0.1:${(srv.address() as AddressInfo).port}`;
+    const hint = { kind: 'tagged_source', url: 'https://blog.example/merlin', title: 'Merlin painted' };
+    try {
+      const run = fetch(`${base}/api/agent/run`, { method: 'POST', body: JSON.stringify({
+        messages: [{ role: 'user', content: 'Finn Merlin' }], result_types: ['reference_selection'], run_id: 'run-abcdefgh',
+        focus: { kind: 'images', subject_ref: 'M1', subject_name: 'Merlin', game: 'Avalon' },
+      }) }).then((r) => r.text());
+      while (seen.length === 0) await new Promise((r) => setTimeout(r, 5));
+      const sent = await fetch(`${base}/api/agent/hint`, { method: 'POST', body: JSON.stringify({ run_id: 'run-abcdefgh', hint }) }).then((r) => r.json());
+      expect(sent).toEqual({ delivered: true });
+      release();
+      const out = await run;
+      expect(seen[1]).toContain('Brukeren har nå merket denne siden som at den viser figuren: https://blog.example/merlin');
+      expect(out).toContain('"type":"hint"');
+      const after = await fetch(`${base}/api/agent/hint`, { method: 'POST', body: JSON.stringify({ run_id: 'run-abcdefgh', hint }) }).then((r) => r.json());
+      expect(after).toEqual({ delivered: false });
+    } finally {
+      release();
+      srv.close();
+    }
   });
 });

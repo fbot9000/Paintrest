@@ -12,7 +12,7 @@ import { panelTask, subjectTask } from '../domain/tasks';
 
 async function setup() {
   const p = memoryPersistence();
-  const store = new Store(await buildSampleData(p), p);
+  const store = new Store(await buildSampleData(p, { examplePaints: true }), p);
   const t0 = store.getTables();
   const project = Object.values(t0.project).find((x) => t0.game[x.game_id]!.primary_name.startsWith('Avalon'))!;
   const research = createResearchCommands(store, {
@@ -40,12 +40,17 @@ describe('normalisering av modellsvar', () => {
     const c = normaliseProposal({ type: 'catalog_subject', payload: { name: 'Ulv', grouping: 'group', physical_count: '4' } }, {});
     expect(c.ok && c.value.payload).toMatchObject({ name: 'Ulv', physical_count: 4 });
     const hunt = normaliseProposal({ type: 'reference_selection', payload: { subject: 'M1', images: [],
-      anchor: { image_url: 'https://pub.example/b.jpg', page_url: 'https://pub.example/', kind: 'official', painter: 'Studio Nine', description: 'Demon', why: 'Utgiver' },
+      guides: [{ url: 'https://blog.example/balor-guide', title: 'How I painted Balor', site: 'blog.example', read: true, why: 'Viser malingene', paints: ['Citadel Mephiston Red', 42] },
+        { url: 'javascript:alert(1)', title: 'x' }],
       videos: [{ url: 'https://www.youtube.com/watch?v=abcdefghijk', video_id: 'abcdefghijk', title: 'Painting Balor', channel: null, thumbnail_url: 'javascript:x', why: 'Video' },
         { url: 'https://evil.example/watch?v=abcdefghijk', video_id: 'x', title: 'x' }] } }, { M1: 'a' });
-    expect(hunt.ok && hunt.value.payload).toMatchObject({ images: [], anchor: { painter: 'Studio Nine', kind: 'official' },
+    expect(hunt.ok && hunt.value.payload).toMatchObject({ images: [],
+      guides: [{ url: 'https://blog.example/balor-guide', read: true, paints: ['Citadel Mephiston Red', '42'] }],
       videos: [{ video_id: 'abcdefghijk', thumbnail_url: null }] });
     expect(hunt.ok && (hunt.value.payload as { videos: unknown[] }).videos).toHaveLength(1);
+    expect(hunt.ok && (hunt.value.payload as { guides: unknown[] }).guides).toHaveLength(1);
+    // A hunt that found only guides is still a proposal.
+    expect(normaliseProposal({ type: 'reference_selection', payload: { subject: 'M1', images: [], guides: [{ url: 'https://blog.example/g', title: 'G' }] } }, { M1: 'a' }).ok).toBe(true);
     const bad = normaliseProposal({ type: 'paint_plan', payload: { subject: 'M9', elements: [{ name: 'x', steps: [] }] } }, { M1: 'a' });
     expect(bad.ok).toBe(false);
     const ok = normaliseProposal({ type: 'paint_plan', payload: { subject: 'M1', elements: [{ name: 'Hud', steps: [{ instruction: 'x', materials: [{ product: 'Nuln Oil', role: 'wash' }] }] }] } }, { M1: 'a' });
@@ -335,7 +340,7 @@ describe('kontekst og migrering', () => {
 
   it('migrerer v1-data uten å miste prosjekter', async () => {
     const p = memoryPersistence();
-    const s = await buildSampleData(p);
+    const s = await buildSampleData(p, { examplePaints: true });
     const v1 = { ...s, schema_version: 1, tables: { ...s.tables } } as typeof s;
     delete (v1.tables as Partial<typeof s.tables>).research_task;
     delete (v1.tables as Partial<typeof s.tables>).technique;

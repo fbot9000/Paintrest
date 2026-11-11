@@ -213,7 +213,7 @@ describe('søk og merkelapper (bit 7)', () => {
 describe('migrering til v5', () => {
   it('legger til tomme bibliotektabeller og beholder alt annet', async () => {
     const p = memoryPersistence();
-    const s = await buildSampleData(p);
+    const s = await buildSampleData(p, { examplePaints: true });
     const tables = { ...s.tables } as Partial<typeof s.tables>;
     for (const k of ['technique', 'technique_step', 'technique_experience', 'recipe', 'recipe_paint', 'recipe_step'] as const) delete tables[k];
     const m = migrate({ ...s, schema_version: 4, tables: tables as typeof s.tables })!;

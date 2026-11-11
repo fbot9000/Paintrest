@@ -14,7 +14,7 @@ function emptyStore() {
 
 async function sampleStore() {
   const p = memoryPersistence();
-  const store = new Store(await buildSampleData(p), p);
+  const store = new Store(await buildSampleData(p, { examplePaints: true }), p);
   return { store, cmd: createLocalCommands(store) };
 }
 
@@ -206,7 +206,7 @@ describe('bilder på miniatyren (brukerens egne valg)', () => {
 describe('palett for miniatyren', () => {
   it('legger til, endrer og fjerner rader, og øker innholdsrevisjonen', async () => {
     const p = memoryPersistence();
-    const store = new Store(await buildSampleData(p), p);
+    const store = new Store(await buildSampleData(p, { examplePaints: true }), p);
     const cmd = createLocalCommands(store);
     const t0 = store.getTables();
     const s = Object.values(t0.miniature_subject).find((x) => x.name === 'Merlin')!;

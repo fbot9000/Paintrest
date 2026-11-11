@@ -6,7 +6,7 @@
 import type {
   Expansion, Game, GroupProgress, Id, LocalDeviation, MiniatureSubject, MixComponent,
   Ownership, PaintCompletion, PaintPlanVersion, PaintProduct, PlanElement, PlanStep,
-  Project, SourceAsset, Source, StepMaterial, Tables,
+  LinkUse, Project, SourceAsset, Source, StepMaterial, Tables,
 } from './types';
 
 export function liveExpansionsOfGame(t: Tables, game_id: Id): Expansion[] {
@@ -321,4 +321,25 @@ export function productList(view: PaintingView, element_ids?: Id[]): ShoppingRow
 
 function byPosition(a: { position: number }, b: { position: number }): number {
   return a.position - b.position;
+}
+
+/**
+ * Web pages linked to the miniature for one use: 'evidence' are pages that show or document the
+ * figure (tagged «Viser figuren» by the user, or sources of the catalog entry); 'method' are saved
+ * painting guides and videos.
+ */
+export function linkedSources(t: Tables, subject_id: Id, use: LinkUse): Source[] {
+  const ids = new Set(Object.values(t.source_link)
+    .filter((l) => !l.deleted_at && l.target_type === 'subject' && l.target_id === subject_id && l.use === use && !l.suggested_by_task_id)
+    .map((l) => l.source_id));
+  return [...ids].map((id) => t.source[id]).filter((s): s is Source => !!s && !s.deleted_at && !!s.url);
+}
+
+/** Pages a game survey suggested show the miniature («Trolig figuren»), not yet confirmed by the user. */
+export function suggestedSources(t: Tables, subject_id: Id): Source[] {
+  const confirmed = new Set(linkedSources(t, subject_id, 'evidence').map((s) => s.id));
+  const ids = new Set(Object.values(t.source_link)
+    .filter((l) => !l.deleted_at && l.target_type === 'subject' && l.target_id === subject_id && l.use === 'evidence' && !!l.suggested_by_task_id && !confirmed.has(l.source_id))
+    .map((l) => l.source_id));
+  return [...ids].map((id) => t.source[id]).filter((s): s is Source => !!s && !s.deleted_at && !!s.url);
 }

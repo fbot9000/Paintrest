@@ -10,7 +10,7 @@ import { Store, diffTables, emptyTables, revertPatches } from './store';
 
 async function setup() {
   const p = memoryPersistence();
-  const store = new Store(await buildSampleData(p), p);
+  const store = new Store(await buildSampleData(p, { examplePaints: true }), p);
   const t0 = store.getTables();
   const project = Object.values(t0.project).find((x) => t0.game[x.game_id]!.primary_name.startsWith('Avalon'))!;
   const research = createResearchCommands(store);

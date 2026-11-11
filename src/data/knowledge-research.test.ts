@@ -11,7 +11,7 @@ import { Store } from './store';
 
 async function setup() {
   const p = memoryPersistence();
-  const store = new Store(await buildSampleData(p), p);
+  const store = new Store(await buildSampleData(p, { examplePaints: true }), p);
   return { store, research: createResearchCommands(store), agent: createAgentCommands(store), cmd: createLocalCommands(store) };
 }
 
@@ -294,7 +294,7 @@ describe('research til biblioteket (bit 7.4)', () => {
 
   it('eksempelbilder: de valgte hentes og lagres på teknikken, med siden som kilde', async () => {
     const p = memoryPersistence();
-    const store = new Store(await buildSampleData(p), p);
+    const store = new Store(await buildSampleData(p, { examplePaints: true }), p);
     const fetched: string[] = [];
     const research = createResearchCommands(store, { fetchImage: async (url) => { fetched.push(url); return new Blob(['x'], { type: 'image/jpeg' }); } });
     const agent = createAgentCommands(store);

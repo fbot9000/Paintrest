@@ -5,9 +5,10 @@ import type { CatalogChangePayload, CatalogSubjectPayload, KnowledgeImage, Norma
 import type { AgentCommands, ApproveOptions, ProposalWrite, ResearchCommands } from '../domain/research';
 import type { ChangeAction, Id, MiniatureSubject, PaintChoice, ResearchProposal, ResultType, RowPatch, Tables, Uncertainty } from '../domain/types';
 import { attachedExpansions } from '../domain/views';
+import { openImages, pendingImageProposals, savedImageUrls } from '../domain/review';
 import type { Store } from './store';
 import { revertPatches } from './store';
-import { addSourceLayers, attachImages, attachImagesTo, downloadImages, setCover, sourceFor } from './images-tx';
+import { addSourceLayers, attachImages, attachImagesTo, downloadImages, setCover, sourceBelongsTo, sourceFor } from './images-tx';
 import type { Downloaded } from './images-tx';
 
 /** Result types implemented in this version. See docs/AVVIK.md. */
@@ -18,7 +19,29 @@ import type { Downloaded } from './images-tx';
  */
 export const IMPLEMENTED_TYPES: ResultType[] = ['catalog_subject', 'paint_plan', 'reference_selection', 'catalog_change', 'plan_revision'];
 
+/** The game survey's task: pictures for the miniatures, and miniatures missing from the list (brukerønske 11.11.2026). */
+export const GAME_TYPES: ResultType[] = ['reference_selection', 'catalog_subject'];
+
 const PAINT_CHOICES: PaintChoice[] = ['both', 'owned', 'best'];
+
+/**
+ * Why a proposed new miniature would be a duplicate: a miniature in the project with the same name or
+ * official name, or a pending proposal for one. Null when it is new. Names are compared without case.
+ */
+export function duplicateMiniature(t: Tables, task_id: Id, c: CatalogSubjectPayload): string | null {
+  const project_id = t.task_scope[task_id]?.work_project_id;
+  if (!project_id) return null;
+  const norm = (x: string | null | undefined) => (x ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const names = new Set([c.name, c.identity?.official_name].map(norm).filter(Boolean));
+  const same = (x: string | null | undefined) => !!norm(x) && names.has(norm(x));
+  const existing = Object.values(t.miniature_subject).find((s) => s.project_id === project_id && !s.deleted_at && (same(s.name) || same(s.identity?.official_name)));
+  if (existing) return `«${c.name}» finnes allerede i prosjektet (${existing.name})`;
+  const open = new Set(Object.values(t.research_task).filter((x) => x.status === 'open' && t.task_scope[x.id]?.work_project_id === project_id).map((x) => x.id));
+  const pending = Object.values(t.research_proposal).find((x) => x.decision === 'pending' && x.result_type === 'catalog_subject' && open.has(x.task_id)
+    && (same((x.payload as CatalogSubjectPayload).name) || same((x.payload as CatalogSubjectPayload).identity?.official_name)));
+  if (pending) return `«${c.name}» venter allerede som forslag (${pending.ref})`;
+  return null;
+}
 
 type Who = { initiated_by: 'user' | 'agent'; task_id?: Id | null; proposal_id?: Id | null };
 
@@ -138,6 +161,10 @@ export function createAgentCommands(store: Store): AgentCommands {
         return tx((t) => {
           const scope = checkScope(t, task_id, p);
           const ts = now();
+          if (scope.result_type === 'catalog_subject' && !p.update_of) {
+            const dup = duplicateMiniature(t, task_id, p.payload as CatalogSubjectPayload);
+            if (dup) throw new Error(dup);
+          }
           if (p.update_of) {
             // update_proposal: only the agent's own pending draft on the same task.
             const existing = Object.values(t.research_proposal).find((x) => x.task_id === task_id && x.ref === p.update_of);
@@ -185,6 +212,65 @@ export function createAgentCommands(store: Store): AgentCommands {
       });
     },
 
+    recordIdentity(task_id, subject_id, identity) {
+      return tx((t, ws) => {
+        const s = t.miniature_subject[subject_id];
+        const project_id = t.task_scope[task_id]?.work_project_id;
+        // Only a miniature in the task's own project (open zone), and never over what the user confirmed.
+        if (!s || s.deleted_at || !project_id || s.project_id !== project_id) return null;
+        if (s.identity?.status === 'confirmed') return null;
+        const name = identity.official_name ?? s.name;
+        const wrong = (s.identity_rejected ?? []).some((r) => (r.official_name && identity.official_name && r.official_name.trim().toLowerCase() === identity.official_name.trim().toLowerCase())
+          || identity.images.some((i) => r.image_urls.includes(i.image_url)));
+        if (wrong) return null;
+        s.identity = { ...structuredClone(identity), status: 'proposed', found_by_task_id: task_id, updated_at: now() };
+        record(t, ws, 'miniature_subject', subject_id, 'update', { initiated_by: 'agent', task_id });
+        return name;
+      });
+    },
+
+    recordGameSources(task_id, sources, subjectRefs) {
+      if (!sources.length) return { sources: 0, links: 0 };
+      return tx((t, ws) => {
+        const project_id = t.task_scope[task_id]?.work_project_id;
+        if (!project_id) return { sources: 0, links: 0 };
+        const who: Who = { initiated_by: 'agent', task_id };
+        let saved = 0;
+        let links = 0;
+        for (const g of sources) {
+          if (!/^https?:\/\//.test(g.url)) continue;
+          let src = Object.values(t.source).find((x) => !x.deleted_at && x.url === g.url);
+          if (!src) {
+            // Also pages only seen in a search (Reddit, Instagram …): kept as drafts so the next run finds them.
+            const id = newId();
+            src = { id, workspace_id: ws, kind: g.role === 'guide' ? 'guide' : 'article', title: g.title, creator: null, url: g.url, locator: null,
+              analysis_state: 'stored', retention: 'draft', created_by_task_id: task_id, created_at: now(), deleted_at: null };
+            t.source[id] = src;
+            record(t, ws, 'source', id, 'create', who);
+            saved++;
+          }
+          // A page shared with another game may get a link, but its content is left alone (AVVIK regel 1).
+          if (sourceBelongsTo(t, src.id, project_id)) {
+            if (g.role !== 'other' || !src.role) src.role = g.role;
+            if (g.summary) addSourceLayers(t, [{ url: src.url!, title: src.title, site: '', language: null, summary: g.summary, original_excerpt: null }], project_id);
+          }
+          for (const ref of g.shows) {
+            const subject_id = subjectRefs[ref];
+            const s = subject_id ? t.miniature_subject[subject_id] : undefined;
+            if (!s || s.deleted_at || s.project_id !== project_id) continue;
+            // An existing link (the user's tag, or an earlier suggestion) is left as it is; a removed one is not suggested again.
+            const before = Object.values(t.source_link).filter((l) => l.source_id === src!.id && l.target_type === 'subject' && l.target_id === s.id && l.use === 'evidence');
+            if (before.length) continue;
+            const id = newId();
+            t.source_link[id] = { id, source_id: src.id, target_type: 'subject', target_id: s.id, use: 'evidence', layer_id: null, deleted_at: null, suggested_by_task_id: task_id };
+            record(t, ws, 'source_link', id, 'attach', who);
+            links++;
+          }
+        }
+        return { sources: saved, links };
+      });
+    },
+
     recordContext(task_id, refs) {
       tx((t) => {
         const ts = now();
@@ -207,17 +293,42 @@ export interface ResearchDeps {
 export function createResearchCommands(store: Store, deps: ResearchDeps = {}): ResearchCommands {
   const tx = store.transaction.bind(store);
 
+  /** «Forkast» on single pictures: kept in the proposal as set aside, so it can be undone. */
+  const setAside = (project_id: Id, urls: string[], aside: boolean) => {
+    tx((t, ws) => {
+      const who: Who = { initiated_by: 'user', task_id: null };
+      // Taking pictures back (also undoing «legg på») reopens a proposal that closed because they were its last.
+      const proposals = Object.values(t.research_proposal).filter((p) => p.result_type === 'reference_selection'
+        && t.task_scope[p.task_id]?.work_project_id === project_id && t.research_task[p.task_id]?.status === 'open'
+        && (p.decision === 'pending' || (!aside && p.closed_by === 'images')));
+      for (const p of proposals) {
+        const pl = p.payload as ReferenceSelectionPayload;
+        if (!pl.images.some((i) => urls.includes(i.image_url))) continue;
+        const before = new Set(pl.dismissed ?? []);
+        for (const u of urls) { if (aside) before.add(u); else before.delete(u); }
+        pl.dismissed = [...before];
+        if (!aside && p.closed_by === 'images') { p.decision = 'pending'; p.closed_by = null; }
+        p.updated_at = now();
+        record(t, ws, 'research_proposal', p.id, 'update', { ...who, task_id: p.task_id, proposal_id: p.id });
+      }
+      settleImageProposals(t, ws, project_id);
+    });
+  };
+
   return {
     async startTask(project_id, focus) {
       return tx((t, ws) => {
         const p = must(t.project[project_id], 'Prosjektet');
         if (p.deleted_at) throw new CommandError('Prosjektet er slettet');
-        if (focus && t.miniature_subject[focus.subject_id]?.project_id !== project_id) throw new CommandError('Miniatyren hører til et annet prosjekt');
+        const game = focus === 'game';
+        if (focus && focus !== 'game' && t.miniature_subject[focus.subject_id]?.project_id !== project_id) throw new CommandError('Miniatyren hører til et annet prosjekt');
         const id = newId();
         t.research_task[id] = { id, workspace_id: ws, status: 'open', created_at: now() };
         // System sets scope and result types in the same transaction (skjema §7).
-        t.task_scope[id] = { task_id: id, area_kind: 'new_project', work_project_id: project_id, allow_new_knowledge: false, ...(focus ? { subject_focus: { ...focus } } : {}) };
-        for (const result_type of IMPLEMENTED_TYPES) t.task_result_type.push({ task_id: id, result_type });
+        t.task_scope[id] = { task_id: id, area_kind: 'new_project', work_project_id: project_id, allow_new_knowledge: false,
+          ...(game ? { game_focus: true } : focus ? { subject_focus: { ...focus } } : {}) };
+        // The game survey proposes pictures and missing miniatures; it never changes existing ones or the plans.
+        for (const result_type of game ? GAME_TYPES : IMPLEMENTED_TYPES) t.task_result_type.push({ task_id: id, result_type });
         record(t, ws, 'research_task', id, 'create', { initiated_by: 'user', task_id: id });
         return id;
       });
@@ -296,7 +407,8 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
 
     async syncResultTypes(task_id) {
       if (!store.getTables().research_task[task_id]) return;
-      const missing = IMPLEMENTED_TYPES.filter((rt) => !store.getTables().task_result_type.some((r) => r.task_id === task_id && r.result_type === rt));
+      const wanted = store.getTables().task_scope[task_id]?.game_focus ? GAME_TYPES : IMPLEMENTED_TYPES;
+      const missing = wanted.filter((rt) => !store.getTables().task_result_type.some((r) => r.task_id === task_id && r.result_type === rt));
       if (!missing.length) return;
       tx((t, ws) => {
         const task = must(t.research_task[task_id], 'Oppgaven');
@@ -429,6 +541,34 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
       });
     },
 
+    async placeImages(subject_id, images, opts = {}) {
+      if (!images.length) throw new CommandError('Velg minst ett bilde');
+      const files = await downloadImages(store, deps.fetchImage, images);
+      return tx((t, ws) => {
+        const s = must(t.miniature_subject[subject_id], 'Miniatyren');
+        if (s.deleted_at) throw new CommandError('Miniatyren er slettet');
+        const who: Who = { initiated_by: 'user', task_id: null };
+        const log = (tt: string, id: Id, a: ChangeAction) => record(t, ws, tt, id, a, who);
+        const assets = attachImages(t, ws, subject_id, images, files, null, log);
+        // The agent's summaries of the pages the pictures came from go with them.
+        const pages = new Set(images.map((i) => i.page_url));
+        addSourceLayers(t, pendingImageProposals(t, s.project_id).flatMap((p) => ((p.payload as ReferenceSelectionPayload).sources_read ?? []).filter((x) => pages.has(x.url))), s.project_id);
+        const cover = opts.cover_image_url ?? (opts.auto_cover && !s.official_asset_id ? images[0]!.image_url : undefined);
+        if (cover && assets[cover]) setCover(t, subject_id, assets[cover]!, log);
+        log('miniature_subject', subject_id, 'update');
+        settleImageProposals(t, ws, s.project_id);
+        return assets;
+      });
+    },
+
+    async dismissImages(project_id, image_urls) {
+      setAside(project_id, image_urls, true);
+    },
+
+    async restoreImages(project_id, image_urls) {
+      setAside(project_id, image_urls, false);
+    },
+
     async rejectProposal(proposal_id) {
       tx((t, ws) => {
         const p = must(t.research_proposal[proposal_id], 'Forslaget');
@@ -456,6 +596,23 @@ function needsUser(t: Tables, p: ResearchProposal): string | null {
     if (missing.length) return `Malinger som ikke finnes i katalogen: ${missing.map((m) => m.name).join(', ')}`;
   }
   return null;
+}
+
+/**
+ * Image proposals are used picture by picture. One that has nothing left (every picture saved on a
+ * miniature or set aside, and no videos or guides) is closed: approved when any of its pictures were
+ * saved, otherwise rejected. `closed_by: 'images'` lets a set-aside picture taken back reopen it.
+ */
+function settleImageProposals(t: Tables, ws: Id, project_id: Id) {
+  const saved = savedImageUrls(t, project_id);
+  for (const p of pendingImageProposals(t, project_id)) {
+    const pl = p.payload as ReferenceSelectionPayload;
+    if (openImages(p, saved).length || pl.videos?.length || pl.guides?.length) continue;
+    p.decision = pl.images.some((i) => saved.has(i.image_url)) ? 'approved' : 'rejected';
+    p.closed_by = 'images';
+    p.updated_at = now();
+    record(t, ws, 'research_proposal', p.id, 'update', { initiated_by: 'user', task_id: p.task_id, proposal_id: p.id });
+  }
 }
 
 /** Godkjenning (skjema §8). One proposal, one transaction. */
@@ -536,6 +693,15 @@ function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions, files
     };
     record(t, ws, 'miniature_subject', id, 'create', who);
     linkEvidence(t, ws, c.sources ?? [], id, who);
+    // From a game survey: who the figure is (still to be confirmed), and the pages that probably show it.
+    if (c.identity) t.miniature_subject[id]!.identity = { ...structuredClone(c.identity), status: 'proposed', found_by_task_id: p.task_id, updated_at: now() };
+    for (const url of c.shown_on ?? []) {
+      const src = Object.values(t.source).find((x) => !x.deleted_at && x.url === url);
+      if (!src || Object.values(t.source_link).some((l) => l.source_id === src.id && l.target_type === 'subject' && l.target_id === id && l.use === 'evidence')) continue;
+      const lid = newId();
+      t.source_link[lid] = { id: lid, source_id: src.id, target_type: 'subject', target_id: id, use: 'evidence', layer_id: null, deleted_at: null, suggested_by_task_id: p.task_id };
+      record(t, ws, 'source_link', lid, 'attach', who);
+    }
   } else if (kind === 'reference_selection') {
     const r = p.payload as ReferenceSelectionPayload;
     const s = t.miniature_subject[r.subject_id]!;

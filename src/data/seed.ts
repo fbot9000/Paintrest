@@ -1,8 +1,12 @@
 /**
  * Sample data so there is something to click on. Everything here is example
  * content: the game and the sources are placeholders taken from the Figma
- * concept, the images are generated SVG placeholders, and swatch colours are
- * approximations, not manufacturer values.
+ * concept, and the images are generated SVG placeholders.
+ *
+ * No paints (brukerbeslutning 11.11.2026): the paint catalogue is the user's own
+ * collection. The sample plans have steps without paints, and there are no sample
+ * recipes. `examplePaints` restores the old sample catalogue (Citadel names,
+ * approximate swatches) with paints in the plans and two recipes; only the tests use it.
  */
 import { newId, now } from '../domain/ids';
 import type {
@@ -38,7 +42,8 @@ function escapeXml(s: string): string {
   return s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]!);
 }
 
-export async function buildSampleData(persistence: Persistence): Promise<DbState> {
+export async function buildSampleData(persistence: Persistence, opts: { examplePaints?: boolean } = {}): Promise<DbState> {
+  const withPaints = !!opts.examplePaints;
   const t: Tables = emptyTables();
   const ws = newId();
   const ts = now();
@@ -58,6 +63,7 @@ export async function buildSampleData(persistence: Persistence): Promise<DbState
   const products: Record<string, Id> = {};
   const P = (key: string, name: string, kind: ProductKind, hex: string, own: Ownership,
     manufacturer: string | null = 'Citadel', range: string | null = null, confirmed = true) => {
+    if (!withPaints) return;
     const id = newId();
     products[key] = id;
     t.paint_product[id] = {
@@ -160,6 +166,7 @@ export async function buildSampleData(persistence: Persistence): Promise<DbState
       el.steps.forEach((st, si) => {
         const sid = newId();
         t.plan_step[sid] = { id: sid, element_id: eid, position: si, instruction: st.text, technique_version_id: null, recipe_version_id: null };
+        if (!withPaints) return;
         st.materials?.forEach(([key, role, label], mi) => {
           const mid = newId();
           t.step_material[mid] = { id: mid, step_id: sid, position: mi, product_id: products[key]!, role, role_label: label ?? null };
@@ -273,6 +280,7 @@ export async function buildSampleData(persistence: Persistence): Promise<DbState
       t.recipe_step[sid] = { id: sid, recipe_id: id, position, instruction, paint_ids: uses.map((i) => paintIds[i]!), technique_id: null };
     });
   };
+  if (!withPaints) return { schema_version: SCHEMA_VERSION, workspace_id: ws, tables: t };
   recipe('Hud, varm', ['hud', 'eksempel'], null,
     [['bugman', 'base'], ['reikland', 'shade'], ['kislev', 'layer']], []);
   recipe('Grønn kappe', ['stoff', 'eksempel'], 'Dyp grønn kappe med tydelige folder.',

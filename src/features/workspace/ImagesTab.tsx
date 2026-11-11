@@ -6,11 +6,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useApp, useCommand, useView } from '../../app/context';
 import type { Run } from '../../app/runs';
-import type { HuntAnchor, ReferenceImage, ReferenceSelectionPayload, VideoRef } from '../../domain/agent';
-import type { Id, MiniatureSubject, Tables } from '../../domain/types';
-import { subjectReferences } from '../../domain/views';
-import { Button, ErrorNote, ImagePicker } from '../../ui/components';
-import { startImageHunt } from './agentRuns';
+import type { GuideRef, ReferenceImage, ReferenceSelectionPayload, VideoRef } from '../../domain/agent';
+import type { Id, MiniatureSubject, SubjectIdentity, Tables } from '../../domain/types';
+import { linkedSources, subjectReferences, suggestedSources } from '../../domain/views';
+import { Badge, Button, ErrorNote, ImagePicker } from '../../ui/components';
+import { startImageHunt, tagPage } from './agentRuns';
 import { addPasted, removePasted, usePasted } from './pasted';
 import { dataUrlToBlob, parsePasted } from './pasteLinks';
 
@@ -26,19 +26,30 @@ function view(t: Tables, s: MiniatureSubject) {
     .filter((p) => p.decision === 'pending' && p.result_type === 'reference_selection' && openTasks.has(p.task_id)
       && (p.payload as ReferenceSelectionPayload).subject_id === s.id)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const suggested: Candidate[] = proposals.flatMap((p) => (p.payload as ReferenceSelectionPayload).images.map((i) => ({ ...i, proposal_id: p.id })));
+  // Pictures set aside (on the distribution board or here) are left out.
+  const suggested: Candidate[] = proposals.flatMap((p) => {
+    const pl = p.payload as ReferenceSelectionPayload;
+    const gone = new Set(pl.dismissed ?? []);
+    return pl.images.filter((i) => !gone.has(i.image_url)).map((i) => ({ ...i, proposal_id: p.id }));
+  });
   const saved = new Set(subjectReferences(t, s).map((r) => r.asset.locator).filter(Boolean) as string[]);
   const read = proposals.flatMap((p) => (p.payload as ReferenceSelectionPayload).sources_read ?? []);
-  const withAnchor = proposals.find((p) => (p.payload as ReferenceSelectionPayload).anchor);
-  const anchor = withAnchor ? { anchor: (withAnchor.payload as ReferenceSelectionPayload).anchor!, proposal_id: withAnchor.id } : null;
   const videos = proposals.flatMap((p) => (p.payload as ReferenceSelectionPayload).videos ?? []);
+  const guides = proposals.flatMap((p) => (p.payload as ReferenceSelectionPayload).guides ?? []);
   const linked = new Set(Object.values(t.source_link).filter((l) => !l.deleted_at && l.target_type === 'subject' && l.target_id === s.id).map((l) => l.source_id));
   const savedVideos = new Set(Object.values(t.source).filter((x) => !x.deleted_at && x.kind === 'video' && linked.has(x.id) && x.url).map((x) => x.url!));
-  return { proposals, suggested, saved, read, anchor, videos, savedVideos };
+  const savedGuides = new Set(linkedSources(t, s.id, 'method').map((x) => x.url!));
+  // Pages the user tagged as showing the figure («Viser figuren»).
+  const tagged = new Set(linkedSources(t, s.id, 'evidence').map((x) => x.url!));
+  // Pages a game survey found that probably show it («Trolig figuren»), not yet confirmed.
+  const likely = new Set(suggestedSources(t, s.id).map((x) => x.url!));
+  return { proposals, suggested, saved, read, videos, savedVideos, guides, savedGuides, tagged, likely };
 }
 
-export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, referenceFileId }: {
+export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, referenceFileId, review = null }: {
   subject: MiniatureSubject; game: string; run: Run | null; browseUrl: string | null; setBrowseUrl: (u: string | null) => void; referenceFileId: Id | null;
+  /** «Gjennomgang»: the pictures the agent is sure of are ticked in advance, and saving can go straight on to the next miniature. */
+  review?: { next: () => void; nextName: string | null } | null;
 }) {
   const app = useApp();
   const { run: cmdRun, error, clearError } = useCommand();
@@ -51,7 +62,9 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
   const [localError, setLocalError] = useState<string | null>(null);
   const [page, setPage] = useState<{ url: string; title: string; candidates: Candidate[] } | null>(null);
 
-  useEffect(() => { setSelected(new Map()); setCover(null); }, [s.id]);
+  // In a walkthrough: what the agent is sure of is ticked once per miniature, and the user removes what is wrong.
+  const [preselected, setPreselected] = useState<Id | null>(null);
+  useEffect(() => { setSelected(new Map()); setCover(null); setPreselected(null); }, [s.id]);
 
   useEffect(() => {
     if (!browseUrl) { setPage(null); return; }
@@ -85,26 +98,20 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
     if (!on && cover === c.image_url) setCover(null);
   };
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     setBusy('save'); setLocalError(null);
     try {
       const chosen = [...selected.values()];
-      const byProposal = new Map<Id, Candidate[]>();
-      for (const c of chosen) if (c.proposal_id) byProposal.set(c.proposal_id, [...(byProposal.get(c.proposal_id) ?? []), c]);
-      for (const [pid, imgs] of byProposal) {
-        await app.research.approveProposal(pid, {
-          image_urls: imgs.map((i) => i.image_url),
-          ...(cover && imgs.some((i) => i.image_url === cover) ? { cover_image_url: cover } : {}),
-        });
-      }
-      const direct = chosen.filter((c) => !c.proposal_id);
-      if (direct.length) await app.cmd.attachWebImages(s.id, direct, cover && direct.some((c) => c.image_url === cover) ? cover : undefined);
+      // Saved picture by picture: the proposals keep their other pictures (for other miniatures, or for later).
+      await app.research.placeImages(s.id, chosen, cover ? { cover_image_url: cover } : {});
       removePasted(s.id, chosen.map((c) => c.image_url));
       setSelected(new Map()); setCover(null);
+      return true;
     } catch (e) {
       const pastedFailed = [...selected.values()].some((c) => pasted.some((p) => p.image_url === c.image_url));
       setLocalError((e instanceof Error ? e.message : String(e))
         + (pastedFailed ? ' Stenger nettstedet for lenken (vanlig på Instagram og Facebook), høyreklikk bildet i Google og velg «Kopier bilde», og lim det inn i stedet.' : ''));
+      return false;
     } finally {
       setBusy(null);
     }
@@ -150,18 +157,39 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
   });
 
   const running = run?.status === 'running';
-  // While the hunt runs, the anchor and phase arrive as events; afterwards they are in the proposal.
-  const liveAnchor = running ? run!.events.flatMap((e) => (e.type === 'anchor' ? [e.anchor] : [])).at(-1) ?? null : null;
+  // While the hunt runs, the identification and phase arrive as events; afterwards the identification is on the miniature.
+  const liveIdentity = running ? run!.events.flatMap((e) => (e.type === 'identity' ? [e.identity] : [])).at(-1) ?? null : null;
   const phase = running ? run!.events.flatMap((e) => (e.type === 'phase' ? [e.text] : [])).at(-1) ?? null : null;
-  const anchor: { anchor: HuntAnchor; proposal_id: Id | null } | null = liveAnchor ? { anchor: liveAnchor, proposal_id: null } : data.anchor;
-  const anchorCandidate: Candidate | null = anchor?.anchor.image_url ? {
-    image_url: anchor.anchor.image_url, page_url: anchor.anchor.page_url ?? anchor.anchor.image_url,
-    page_title: anchor.anchor.page_title ?? '', site: anchor.anchor.site ?? '', creator: anchor.anchor.painter,
-    caption: null,
-    kind: anchor.anchor.kind === 'painted' ? 'official' : anchor.anchor.kind, proposal_id: anchor.proposal_id,
-    thumbnail_url: data.suggested.find((x) => x.image_url === anchor.anchor.image_url)?.thumbnail_url ?? null,
-  } : null;
-  const rest = dedupe(data.suggested).filter((c) => c.image_url !== anchorCandidate?.image_url);
+  const identity: SubjectIdentity | null = liveIdentity ?? s.identity ?? null;
+  const status = liveIdentity ? 'live' as const : s.identity?.status ?? null;
+  // The official pictures can be saved like the others; through the hunt's proposal when they are in it.
+  const allIdCandidates: Candidate[] = (identity?.images ?? []).map((i) => {
+    const inProposal = data.suggested.find((x) => x.image_url === i.image_url);
+    return {
+      image_url: i.image_url, page_url: i.page_url, page_title: i.page_title ?? i.page_url, site: i.site ?? hostOf(i.page_url), creator: identity?.painter ?? null,
+      caption: `${i.kind === 'concept_art' ? 'Konseptkunst' : i.kind === 'render' ? 'Render' : 'Offisielt bilde'} av ${identity?.official_name ?? s.name}`,
+      kind: i.kind === 'concept_art' ? 'concept_art' : 'official', proposal_id: inProposal?.proposal_id ?? null,
+      thumbnail_url: i.thumbnail_url ?? inProposal?.thumbnail_url ?? null,
+    };
+  });
+  const idUrls = new Set(allIdCandidates.map((c) => c.image_url));
+  // A picture that does not load is left out, as elsewhere on the tab.
+  const idCandidates = allIdCandidates.filter((c) => !broken.has(c.image_url));
+  const rest = dedupe(data.suggested).filter((c) => !idUrls.has(c.image_url));
+  const guides = dedupeGuides(data.guides);
+  useEffect(() => {
+    if (!review || running || preselected === s.id) return;
+    const sure = [...idCandidates, ...rest.filter((c) => c.confidence === 'high')].filter((c) => !data.saved.has(c.image_url));
+    if (!sure.length && !rest.length) return;
+    setPreselected(s.id);
+    setSelected(new Map(sure.map((c) => [c.image_url, c])));
+    // No illustration yet: the official picture (or the surest painted one) is suggested as it.
+    if (!s.official_asset_id && sure[0]) setCover(sure[0].image_url);
+  });
+  const tag = (page: { url: string; title: string }, on: boolean) => cmdRun(() => tagPage(app, s.id, page, on));
+  // The page being browsed may have moved (redirect); a tag on either address counts.
+  const marked = (u: string) => data.tagged.has(u) || data.likely.has(u);
+  const browseTagged = page && marked(page.url) ? page.url : browseUrl && marked(browseUrl) ? browseUrl : null;
   const official = rest.filter((c) => c.kind === 'official' || c.kind === 'concept_art');
   const painted = rest.filter((c) => c.kind !== 'official' && c.kind !== 'concept_art');
   const videos = dedupeVideos(data.videos);
@@ -193,7 +221,9 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
             onKeyDown={(e) => { if (e.key === 'Enter' && pasteText.trim()) { void takePaste([], pasteText); setPasteText(''); } }} />
           <ImagePicker onPick={(f) => cmdRun((c) => c.setSubjectImage(s.id, f, f.name))}>Last opp</ImagePicker>
           <Button variant="primary" disabled={running} onClick={() => startImageHunt(app, s, game, referenceFileId)}
-            title={`Agenten finner først det beste offisielle bildet (utgiver, Kickstarter eller Gamefound, BoardGameGeek), og leter så bredt etter malte versjoner og malevideoer, på flere språk.`}>
+            title={s.identity?.status === 'confirmed'
+              ? 'Figuren er bekreftet, så agenten går rett på bilder fra andre som har malt den, og så på maleguider og videoer.'
+              : 'Agenten finner først ut hvilken figur det er (offisielt navn, beskrivelse og konseptkunst), leter så bredt etter malte versjoner på flere språk, og til slutt etter maleguider og videoer.'}>
             {running ? 'Agenten leter …' : data.suggested.length ? 'Let etter flere' : 'Let etter bilder med AI'}
           </Button>
         </div>
@@ -213,27 +243,52 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
         </section>
       )}
 
-      {anchor && (
+      {identity && (
         <section className="wsi-section">
           <div className="wsi-section-head">
-            <h3 title="Det beste offisielle bildet agenten fant og kontrollerte. Resten av jakten er sammenlignet med det.">Offisielt bilde</h3>
+            <h3 title="Hvem figuren er: offisielt navn, beskrivelse og offisielle bilder. Agenten bruker dette i resten av jakten, og i maleplanen når du har bekreftet det.">Figuren</h3>
+            {status === 'confirmed' ? <Badge tone="moss">Bekreftet av deg</Badge>
+              : status === 'proposed' ? <Badge tone="neutral">Forslag fra agenten</Badge>
+              : <span className="small muted">Agenten bruker dette videre i jakten</span>}
           </div>
-          {anchorCandidate ? (
-            <div className="wsi-anchor">
-              <CandidateCard c={anchorCandidate} reasons={false} saved={data.saved.has(anchorCandidate.image_url)}
-                on={selected.has(anchorCandidate.image_url)} cover={cover === anchorCandidate.image_url}
-                onToggle={(on) => toggle(anchorCandidate, on)} onCover={() => { setCover(anchorCandidate.image_url); toggle(anchorCandidate, true); }}
-                onBroken={() => {}}
-                proxy={app.ai.imageProxyUrl(anchorCandidate.image_url)} fallback={anchorCandidate.thumbnail_url ? app.ai.imageProxyUrl(anchorCandidate.thumbnail_url) : null} />
-              <div className="wsi-anchor-text" title={anchor.anchor.why ?? undefined}>
-                {anchor.anchor.painter && <p><strong>Malt av {anchor.anchor.painter}</strong></p>}
-                {anchor.anchor.description && <p>{anchor.anchor.description}</p>}
-                {anchor.anchor.page_url && <a className="small" href={anchor.anchor.page_url} target="_blank" rel="noreferrer">{anchor.anchor.site || anchor.anchor.page_title} ↗</a>}
-              </div>
+          <div className={`wsi-id ${idCandidates.length ? '' : 'no-img'}`}>
+            {idCandidates.length > 0 && <div className="wsi-id-images">
+              {idCandidates.map((c) => (
+                <CandidateCard key={c.image_url} c={c} reasons={false} saved={data.saved.has(c.image_url)}
+                  on={selected.has(c.image_url)} cover={cover === c.image_url}
+                  onToggle={(on) => toggle(c, on)} onCover={() => { setCover(c.image_url); toggle(c, true); }}
+                  onBroken={() => setBroken((cur) => new Set(cur).add(c.image_url))}
+                  proxy={app.ai.imageProxyUrl(c.image_url)} fallback={c.thumbnail_url ? app.ai.imageProxyUrl(c.thumbnail_url) : null} />
+              ))}
+            </div>}
+            <div className="wsi-id-text" title={identity.why ?? undefined}>
+              <p className="wsi-id-name"><strong>{identity.official_name ?? 'Navnet ble ikke funnet'}</strong>
+                {identity.aliases.length > 0 && <span className="muted"> · også kalt {identity.aliases.join(', ')}</span>}</p>
+              {(identity.edition || identity.faction) && <p className="small">{[identity.edition, identity.faction].filter(Boolean).join(' · ')}</p>}
+              {identity.description && <p>{identity.description}</p>}
+              {identity.painter && <p className="small">Offisielt malt av {identity.painter}</p>}
+              {!allIdCandidates.length && <p className="small muted">Fant ikke offisielle bilder.</p>}
+              {allIdCandidates.length > 0 && !idCandidates.length && (
+                <p className="small muted">Det offisielle bildet kunne ikke vises. {allIdCandidates.map((c) => <a key={c.image_url} href={c.page_url} target="_blank" rel="noreferrer">Se det på {c.site} ↗</a>)}</p>
+              )}
+              {identity.sources.length > 0 && (
+                <p className="small wsi-id-sources">
+                  {identity.sources.slice(0, 4).map((x) => <a key={x.url} href={x.url} target="_blank" rel="noreferrer">{hostOf(x.url)} ↗</a>)}
+                </p>
+              )}
+              {status === 'proposed' && (
+                <span className="wsi-id-actions">
+                  <Button variant="primary" onClick={() => cmdRun((c) => c.confirmIdentity(s.id))}
+                    title="Agenten bygger på dette neste gang den leter etter bilder eller lager maleplan">Riktig figur</Button>
+                  <Button onClick={() => cmdRun((c) => c.rejectIdentity(s.id))} title="Agenten velger ikke dette igjen">Feil figur</Button>
+                </span>
+              )}
+              {status === 'confirmed' && (
+                <button type="button" className="link small" onClick={() => cmdRun((c) => c.rejectIdentity(s.id))}
+                  title="Fjerner identifiseringen. Neste jakt finner figuren på nytt, uten å velge dette igjen.">Feil figur</button>
+              )}
             </div>
-          ) : (
-            <p className="small muted" title={anchor.anchor.why ?? undefined}>Fant ikke et offisielt bilde.</p>
-          )}
+          </div>
         </section>
       )}
 
@@ -264,6 +319,28 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
         </section>
       )}
 
+      {guides.length > 0 && (
+        <section className="wsi-section">
+          <div className="wsi-section-head">
+            <h3 title="Sider som forklarer hvordan figuren, fraksjonen eller spillet males. Lagrede guider leser agenten først når den lager maleplan.">Maleguider</h3>
+          </div>
+          <ul className="wsi-guides">
+            {guides.map((g) => (
+              <li key={g.url} className="wsi-guide">
+                <a className="wsi-guide-title" href={g.url} target="_blank" rel="noreferrer">{g.title}</a>
+                <span className="small muted">{g.site}{g.language ? ` · ${g.language}` : ''}{g.read ? '' : ' · bare sett i søk'}</span>
+                {g.why && <span className="small">{g.why}</span>}
+                {g.paints.length > 0 && <span className="wsi-guide-paints">{g.paints.slice(0, 10).map((p) => <span key={p} className="wsi-paint">{p}</span>)}</span>}
+                <span className="wsi-video-actions">
+                  {data.savedGuides.has(g.url) ? <span className="small muted">Lagret</span>
+                    : <button type="button" className="link small" onClick={() => cmdRun((c) => c.saveGuideSource(s.id, { url: g.url, title: g.title, site: g.site }))}>Lagre</button>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {livePages.length > 0 && (
         <section className="wsi-section">
           <div className="wsi-section-head">
@@ -275,6 +352,7 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
                 <strong>{p.title}</strong>
                 <span className="small muted"> · {visible(p.candidates).length}</span>
                 {!p.search && <a className="small" href={p.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}> ↗</a>}
+                {!p.search && <TagButton state={tagState(data, p.url)} onToggle={(on) => tag({ url: p.url, title: p.title }, on)} />}
               </summary>
               {grid(p.candidates, false)}
             </details>
@@ -286,13 +364,16 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
         <section className="wsi-section">
           <div className="wsi-section-head">
             <h3>{page?.title ?? 'Leser …'}</h3>
-            <button type="button" className="link small" onClick={() => setBrowseUrl(null)}>Lukk</button>
+            <span className="wsi-head-actions">
+              <TagButton state={browseTagged ? tagState(data, browseTagged) : 'off'} onToggle={(on) => tag({ url: browseTagged ?? browseUrl, title: page?.title ?? browseUrl }, on)} />
+              <button type="button" className="link small" onClick={() => setBrowseUrl(null)}>Lukk</button>
+            </span>
           </div>
           {page && grid(page.candidates, false)}
         </section>
       )}
 
-      {!data.suggested.length && !videos.length && !anchor && !livePages.length && !browseUrl && !pasted.length && (
+      {!data.suggested.length && !videos.length && !guides.length && !identity && !livePages.length && !browseUrl && !pasted.length && (
         <div className="ws-empty">
           <p>Ingen bilder å velge mellom ennå.</p>
         </div>
@@ -300,10 +381,18 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
 
       {selected.size > 0 && (
         <div className="ws-savebar">
-          <span>{selected.size} valgt{cover ? ` · illustrasjon: ${selected.get(cover)?.caption ?? 'valgt bilde'}` : ''}</span>
+          <span>
+            {selected.size} valgt{cover ? ` · illustrasjon: ${selected.get(cover)?.caption ?? 'valgt bilde'}` : ''}
+            {review && preselected === s.id && <span className="small muted"> · Forhåndsvalgt: det agenten er sikker på. Fjern det som ikke stemmer.</span>}
+          </span>
           <span className="ws-savebar-actions">
             <Button onClick={() => { setSelected(new Map()); setCover(null); }}>Fjern valg</Button>
-            <Button variant="primary" onClick={save} disabled={busy === 'save'}>{busy === 'save' ? 'Henter og lagrer …' : `Lagre ${selected.size} ${selected.size === 1 ? 'bilde' : 'bilder'}`}</Button>
+            <Button variant={review ? undefined : 'primary'} onClick={save} disabled={busy === 'save'}>{busy === 'save' ? 'Henter og lagrer …' : `Lagre ${selected.size} ${selected.size === 1 ? 'bilde' : 'bilder'}`}</Button>
+            {review && (
+              <Button variant="primary" disabled={busy === 'save'} onClick={async () => { if (await save()) review.next(); }}>
+                {review.nextName ? `Lagre og neste: ${review.nextName} ›` : 'Lagre og avslutt'}
+              </Button>
+            )}
           </span>
         </div>
       )}
@@ -313,6 +402,43 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
 
 function hostOf(u: string): string {
   try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; }
+}
+
+function dedupeGuides(list: GuideRef[]): GuideRef[] {
+  const seen = new Set<string>();
+  return list.filter((g) => !seen.has(g.url) && !!seen.add(g.url));
+}
+
+export type TagState = 'on' | 'likely' | 'off';
+
+/** Tagged by the user, suggested by a game survey («Trolig figuren»), or neither. */
+export function tagState(d: { tagged: Set<string>; likely: Set<string> }, url: string): TagState {
+  return d.tagged.has(url) ? 'on' : d.likely.has(url) ? 'likely' : 'off';
+}
+
+/**
+ * «Viser figuren»: the user tags a page as showing the miniature; a running hunt hears about it at once.
+ * A page the game survey suggested shows «Trolig figuren»: one click confirms it, × says it does not.
+ */
+export function TagButton({ state, onToggle }: { state: TagState; onToggle: (on: boolean) => void }) {
+  const click = (on: boolean) => (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); onToggle(on); };
+  if (state === 'likely') {
+    return (
+      <span className="wsi-tag-likely">
+        <button type="button" className="wsi-tag likely" onClick={click(true)}
+          title="Kartleggingen av spillet mener at siden viser figuren. Trykk for å bekrefte.">Trolig figuren</button>
+        <button type="button" className="wsi-tag-x" onClick={click(false)} aria-label="Viser ikke figuren" title="Siden viser ikke figuren">×</button>
+      </span>
+    );
+  }
+  const on = state === 'on';
+  return (
+    <button type="button" className={`wsi-tag ${on ? 'on' : ''}`} aria-pressed={on}
+      title={on ? 'Du har merket at siden viser figuren. Trykk for å fjerne merket.' : 'Merk at siden viser figuren. Agenten åpner merkede sider først, også mens den jobber.'}
+      onClick={click(!on)}>
+      {on ? '✓ Viser figuren' : 'Viser figuren?'}
+    </button>
+  );
 }
 
 function dedupeVideos(list: VideoRef[]): VideoRef[] {
