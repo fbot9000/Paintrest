@@ -13,7 +13,7 @@ import { runs, useRuns } from '../../app/runs';
 import type { Run } from '../../app/runs';
 import { LiveSteps } from '../agent/AgentPanel';
 import { startGameSurvey, surveyRefs } from '../workspace/agentRuns';
-import { reviewQueue } from '../../domain/review';
+import { imagePool, openImages, pendingImageProposals, reviewQueue, savedImageUrls } from '../../domain/review';
 import type { ReviewItem } from '../../domain/review';
 import './miniatures.css';
 
@@ -30,14 +30,13 @@ function missingMiniatures(t: Tables, project_id: Id) {
     });
 }
 
-/** Pictures waiting in image proposals (image hunt or game survey), per miniature. */
+/** Pictures still open in image proposals (not yet on a miniature, not set aside), per miniature. */
 function pendingImages(t: Tables, project_id: Id): Map<Id, number> {
-  const open = new Set(Object.values(t.research_task).filter((x) => x.status === 'open' && t.task_scope[x.id]?.work_project_id === project_id).map((x) => x.id));
+  const saved = savedImageUrls(t, project_id);
   const out = new Map<Id, number>();
-  for (const p of Object.values(t.research_proposal)) {
-    if (p.decision !== 'pending' || p.result_type !== 'reference_selection' || !open.has(p.task_id)) continue;
+  for (const p of pendingImageProposals(t, project_id)) {
     const pl = p.payload as ReferenceSelectionPayload;
-    out.set(pl.subject_id, (out.get(pl.subject_id) ?? 0) + pl.images.length);
+    out.set(pl.subject_id, (out.get(pl.subject_id) ?? 0) + openImages(p, saved).length);
   }
   return out;
 }
@@ -54,6 +53,7 @@ export function MiniaturesPage() {
     pending: pendingImages(t, projectId),
     missing: missingMiniatures(t, projectId),
     queue: reviewQueue(t, projectId),
+    pool: imagePool(t, projectId).filter((x) => !x.placed_on.length).length,
   }), [projectId]);
   const app = useApp();
   const survey = useRuns((r) => r.get(projectId, 'game'));
@@ -95,10 +95,16 @@ export function MiniaturesPage() {
           </p>
         </div>
         <div className="page-head-actions">
+          {data.pool > 0 && !surveying && (
+            <Button variant="primary" onClick={() => navigate(`/p/${projectId}/bilder`)}
+              title="Alle bildene agenten har funnet, på ett sted. Dra dem til miniatyrene de viser.">
+              Fordel bilder ({data.pool})
+            </Button>
+          )}
           {data.queue.length > 0 && !surveying && (
-            <Button variant="primary" onClick={() => startReview()}
-              title="Gå gjennom miniatyrene som har noe som venter på deg: bildeforslag, en identifisering å bekrefte, eller sider som trolig viser figuren. Én om gangen.">
-              Gå gjennom forslag ({data.queue.length})
+            <Button onClick={() => startReview()}
+              title="Én miniatyr om gangen i verkstedet: bekreft figuren, velg bilder og gå videre.">
+              Gå gjennom én og én
             </Button>
           )}
           {data.subjects.length > 0 && (
@@ -107,11 +113,12 @@ export function MiniaturesPage() {
               {surveying ? 'Kartlegger …' : '✦ Kartlegg spillet med AI'}
             </Button>
           )}
-          <Button variant={data.queue.length > 0 && !surveying ? undefined : 'primary'} onClick={() => setEditing('new')} icon="+">Legg til miniatyr</Button>
+          <Button variant={data.pool > 0 && !surveying ? undefined : 'primary'} onClick={() => setEditing('new')} icon="+">Legg til miniatyr</Button>
         </div>
       </div>
       <ErrorNote error={error} onClose={clearError} />
-      {survey && <SurveyPanel run={survey} missing={data.missing.length} queue={data.queue.length} onReview={() => startReview()} onStop={() => runs.stop(projectId, 'game')} onClose={() => runs.dismiss(projectId, 'game')} />}
+      {survey && <SurveyPanel run={survey} missing={data.missing.length} queue={data.queue.length} pool={data.pool}
+        onDistribute={() => navigate(`/p/${projectId}/bilder`)} onReview={() => startReview()} onStop={() => runs.stop(projectId, 'game')} onClose={() => runs.dismiss(projectId, 'game')} />}
       {data.missing.length > 0 && (
         <MissingList items={data.missing} imageUrl={(u) => app.ai.imageProxyUrl(u)}
           onAdd={(id) => run(() => app.research.approveProposal(id))}
@@ -262,8 +269,8 @@ function hostOf(u: string): string {
 }
 
 /** The game survey's progress while it works, and what it found when it is done. */
-function SurveyPanel({ run, missing, queue, onReview, onStop, onClose }: {
-  run: Run; missing: number; queue: number; onReview: () => void; onStop: () => void; onClose: () => void;
+function SurveyPanel({ run, missing, queue, pool, onDistribute, onReview, onStop, onClose }: {
+  run: Run; missing: number; queue: number; pool: number; onDistribute: () => void; onReview: () => void; onStop: () => void; onClose: () => void;
 }) {
   const final = [...run.events].reverse().find((e) => e.type === 'final');
   const found = run.events.filter((e) => e.type === 'identity').length;
@@ -282,10 +289,11 @@ function SurveyPanel({ run, missing, queue, onReview, onStop, onClose }: {
               {missing > 0 ? ` · ${missing} mangler i listen (se under)` : ''}.
             </p>
           )}
-          {queue > 0 && (
+          {(pool > 0 || queue > 0) && (
             <div className="survey-next">
-              <Button variant="moss" onClick={onReview}>Gå gjennom forslagene ({queue} {queue === 1 ? 'miniatyr' : 'miniatyrer'})</Button>
-              <span className="small">Én miniatyr om gangen: bekreft figuren, velg bilder (de sikre er forhåndsvalgt) og gå videre.</span>
+              {pool > 0 && <Button variant="moss" onClick={onDistribute}>Fordel bildene ({pool} funn)</Button>}
+              {queue > 0 && <button type="button" className="link small" onClick={onReview}>eller gå gjennom én og én ({queue})</button>}
+              <span className="small">Alle funnene på ett sted: dra dem til miniatyrene de viser.</span>
             </div>
           )}
           {final && final.type === 'final' && final.warnings.filter((w) => !w.startsWith('Fjernet')).map((w, i) => <p key={i} className="small survey-warn">{w}</p>)}

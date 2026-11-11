@@ -175,6 +175,20 @@ Sider som bygges med skript (typisk kampanjesider), har ofte bildene i sidedata 
 - Alle agenter ser i `known_sources` hvilken rolle hver side har, og hvilke miniatyrer den viser.
 - Kjører du kartleggingen på nytt, åpner agenten sidene den kjenner, i stedet for å søke dem fram igjen.
 
+## Fordel bildene
+
+«Fordel bilder» i prosjektmenyen (og knappen på miniatyrlisten etter en kartlegging) samler alle bildene agenten har funnet for spillet på ett sted. Det gjelder funn fra kartleggingen, bildejakter og agentpanelet.
+- **Til venstre «Funn»:** hvert bilde én gang, med agentens gjetning og hvor sikker den er. Bildene agenten tror på, står først. «Usikre» og «Brukt» er brettet sammen. ⤢ viser bildet stort med begrunnelsen og kilden.
+- **Til høyre «Miniatyrene»:** antall bilder per miniatyr, og ✓ og ✗ for en identifisering som venter. Miniatyrene agenten tror bildet hører til, er stiplet.
+- **Slik legger du på bilder:**
+  - Dra et bilde (eller flere valgte) til en miniatyr.
+  - Trykk «→ navn» for å legge bildet der agenten tror det hører hjemme.
+  - Trykk på bilder, og velg miniatyr i linjen nederst. Det virker også på iPad.
+- **Illustrasjon:** Mangler miniatyren illustrasjon, blir første bilde illustrasjon.
+- **Forkast og angre:** × forkaster et bilde. Alt kan angres fra meldingen nederst til venstre.
+- **Gruppebilder:** Et bilde som er lagt på én miniatyr, flyttes til «Brukt». Derfra kan det dras til flere, og «→ navn» tilbyr de andre miniaturene agenten gjettet.
+- **Forslagene følger med:** Bildeforslagene lukkes ikke når du legger på ett bilde. Et forslag lukkes av seg selv når alle bildene i det er brukt eller forkastet, og det har verken videoer eller maleguider. Det samme gjelder når du lagrer i Bilder-fanen i verkstedet.
+
 ## Miniatyrverkstedet
 
 Trykk på bildet eller navnet på et miniatyrkort. Da åpnes verkstedet for miniatyren, som bruker hele skjermen:

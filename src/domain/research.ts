@@ -6,7 +6,7 @@
  *   always checked against the task's scope before anything is written.
  */
 import type { NormalisedProposal } from './agent';
-import type { CatalogSubjectPayload, PaintPlanPayload, SourceRead } from './agent';
+import type { CatalogSubjectPayload, PaintPlanPayload, ReferenceImage, SourceRead } from './agent';
 import type { PageSeen } from './ai';
 import type { Id, PaintChoice, SourceRole, SubjectFocus, SubjectIdentity } from './types';
 
@@ -60,6 +60,17 @@ export interface ResearchCommands {
   /** The user curates a plan proposal before approval: steps, paints, palette. */
   editPlanProposal(proposal_id: Id, payload: PaintPlanPayload): Promise<void>;
   approveProposal(proposal_id: Id, opts?: ApproveOptions): Promise<void>;
+  /**
+   * Puts found pictures on a miniature (fordelingstavlen and the Bilder tab). The image proposals they
+   * came from stay open for their other pictures, and close by themselves when nothing is left in them.
+   * The first picture becomes the illustration when `auto_cover` and the miniature has none.
+   * Returns the new asset id for each picture address, so it can be undone.
+   */
+  placeImages(subject_id: Id, images: ReferenceImage[], opts?: { cover_image_url?: string; auto_cover?: boolean }): Promise<Record<string, Id>>;
+  /** Sets found pictures aside in every open image proposal in the project that has them. */
+  dismissImages(project_id: Id, image_urls: string[]): Promise<void>;
+  /** Undoes dismissImages. */
+  restoreImages(project_id: Id, image_urls: string[]): Promise<void>;
   rejectProposal(proposal_id: Id): Promise<void>;
   /**
    * Open zone (user decision 10.11.2026): applies the agent's proposals directly

@@ -14,6 +14,7 @@ import { runs, useRuns } from '../../app/runs';
 import type { AgentChangeSet, Id, ResearchMessage, ResearchProposal, Tables } from '../../domain/types';
 import { ownershipOf, projectSummary } from '../../domain/views';
 import { panelTask } from '../../domain/tasks';
+import { openImages, savedImageUrls } from '../../domain/review';
 import { runAgentTurn } from '../../data/agent-runner';
 import { Badge, Button, Dialog, ErrorNote, Field, OwnershipFlag, ProductName, Segmented, Stepper, Swatch } from '../../ui/components';
 import './agent.css';
@@ -395,11 +396,17 @@ function ImageProposals({ proposals, onOpen, onReject }: { proposals: ResearchPr
     const sid = (p.payload as ReferenceSelectionPayload).subject_id;
     return [p.id, t.miniature_subject[sid]?.name ?? 'ukjent miniatyr'];
   })), [proposals]);
+  // Only what is still open: not yet on a miniature, not set aside.
+  const open = useView((t) => {
+    const pid = t.task_scope[proposals[0]?.task_id ?? '']?.work_project_id ?? '';
+    const saved = savedImageUrls(t, pid);
+    return Object.fromEntries(proposals.map((p) => [p.id, openImages(p, saved)]));
+  }, [proposals]);
   return (
     <div className="img-props">
       <span className="small img-props-head">Bildeforslag · velges i verkstedet</span>
-      {proposals.map((p) => {
-        const pl = p.payload as ReferenceSelectionPayload;
+      {proposals.filter((p) => (open[p.id] ?? []).length > 0).map((p) => {
+        const pl = { ...(p.payload as ReferenceSelectionPayload), images: open[p.id]! };
         return (
           <div key={p.id} className="img-prop">
             <button type="button" className="img-prop-open" onClick={() => onOpen(pl.subject_id)} title={`Velg bilder til ${names[p.id]} (${p.ref})`}>

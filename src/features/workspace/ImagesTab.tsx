@@ -26,7 +26,12 @@ function view(t: Tables, s: MiniatureSubject) {
     .filter((p) => p.decision === 'pending' && p.result_type === 'reference_selection' && openTasks.has(p.task_id)
       && (p.payload as ReferenceSelectionPayload).subject_id === s.id)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const suggested: Candidate[] = proposals.flatMap((p) => (p.payload as ReferenceSelectionPayload).images.map((i) => ({ ...i, proposal_id: p.id })));
+  // Pictures set aside (on the distribution board or here) are left out.
+  const suggested: Candidate[] = proposals.flatMap((p) => {
+    const pl = p.payload as ReferenceSelectionPayload;
+    const gone = new Set(pl.dismissed ?? []);
+    return pl.images.filter((i) => !gone.has(i.image_url)).map((i) => ({ ...i, proposal_id: p.id }));
+  });
   const saved = new Set(subjectReferences(t, s).map((r) => r.asset.locator).filter(Boolean) as string[]);
   const read = proposals.flatMap((p) => (p.payload as ReferenceSelectionPayload).sources_read ?? []);
   const videos = proposals.flatMap((p) => (p.payload as ReferenceSelectionPayload).videos ?? []);
@@ -97,16 +102,8 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
     setBusy('save'); setLocalError(null);
     try {
       const chosen = [...selected.values()];
-      const byProposal = new Map<Id, Candidate[]>();
-      for (const c of chosen) if (c.proposal_id) byProposal.set(c.proposal_id, [...(byProposal.get(c.proposal_id) ?? []), c]);
-      for (const [pid, imgs] of byProposal) {
-        await app.research.approveProposal(pid, {
-          image_urls: imgs.map((i) => i.image_url),
-          ...(cover && imgs.some((i) => i.image_url === cover) ? { cover_image_url: cover } : {}),
-        });
-      }
-      const direct = chosen.filter((c) => !c.proposal_id);
-      if (direct.length) await app.cmd.attachWebImages(s.id, direct, cover && direct.some((c) => c.image_url === cover) ? cover : undefined);
+      // Saved picture by picture: the proposals keep their other pictures (for other miniatures, or for later).
+      await app.research.placeImages(s.id, chosen, cover ? { cover_image_url: cover } : {});
       removePasted(s.id, chosen.map((c) => c.image_url));
       setSelected(new Map()); setCover(null);
       return true;

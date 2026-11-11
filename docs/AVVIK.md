@@ -148,6 +148,13 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
       - **Utvidelser:** Instruksen sier at bare figurer fra grunnspillet og utvidelsene i prosjektet skal foreslås. Foreslår agenten likevel en ukjent utvidelse, står det på forslaget, og miniatyren får en usikkerhet når den legges til.
     - **Testing:** Det er ikke testet mot UiB. Hele kjeden er kjørt i nettleseren mot en simulert modell, et simulert bildesøk og lokale sider. Kjeden går fra knappen, via kartlegging og lagring, til bildejakt og maleplan som bygger på resultatet.
 
+35. **BRUKERØNSKE 11. november 2026: bildeforslag brukes bilde for bilde («Fordel bildene»).**
+    - **Lagring er ikke godkjenning:** Å lagre bilder fra et bildeforslag (`reference_selection`), på tavlen eller i Bilder-fanen, er ikke lenger en godkjenning av hele forslaget. `placeImages` laster ned bildene og lenker dem til miniatyren (`visual_reference`), med agentens sammendrag av sidene. Forslaget står fortsatt og venter på de andre bildene sine. Før dette forsvant resten av bildene i et forslag når ett ble lagret.
+    - **Forkast:** Et forkastet enkeltbilde legges i `payload.dismissed` (PROTOTYPE), slik at det kan angres.
+    - **Forslaget lukker seg selv:** Når alle bildene er lagret på en miniatyr i prosjektet eller forkastet, og forslaget verken har videoer eller maleguider, får det `decision = approved` hvis noen bilder ble lagret, ellers `rejected`. Det får også `closed_by = 'images'` (PROTOTYPE). Angrer du (tar et bilde tilbake), åpnes et slikt forslag igjen. Et forslag du selv har forkastet med «Forkast», åpnes ikke igjen.
+    - **Regel for brukt:** Et bilde som er lagret på én miniatyr, regnes som brukt i alle forslag. Det havner under «Brukt» på tavlen og kan legges på flere miniatyrer derfra.
+    - **Prosjektmenyen:** «Fordel bilder» erstatter plassholderen «Kilder og bilder» (bit 6). Ruten `kilder` viser den samme siden. Resten av bit 6 (kildene for seg) finnes ikke ennå.
+
 ## Antakelser
 
 - **Klient:** React og TypeScript som webapp med hash-ruting. Det er godkjent av brukeren 9. november 2026.
