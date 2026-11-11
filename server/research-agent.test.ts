@@ -1085,3 +1085,145 @@ describe('kartlegging av hele spillet (brukerønske 11.11.2026)', () => {
     expect(c.slice(1).map((x) => x.image_url)).toEqual(['data:image/png;base64,AAA', 'data:image/png;base64,BBB', 'data:image/png;base64,eA==']);
   });
 });
+
+describe('fakta og illustrasjon for spillet (brukerønske 11.11.2026)', () => {
+  const focus = { kind: 'game_info' as const, game: 'Zombicide', year: null, publishers: [], website: null, expansions: ['Washington Z.C.'], known_pages: [] };
+  const PUB: PageResult = {
+    url: 'https://www.cmon.com/product/zombicide-2nd-edition', title: 'Zombicide: 2nd Edition – CMON', site: 'cmon.com', author: null,
+    text: 'Zombicide: 2nd Edition. Published by CMON Global Limited in 2021. Designers: …', language: 'en',
+    images: [{ url: 'https://www.cmon.com/img/zombicide-box.png', alt: 'Zombicide 2nd Edition box', caption: null, context: null },
+      { url: 'https://www.cmon.com/img/logo.png', alt: 'CMON logo', caption: null, context: null }],
+  };
+  const boxHit = { image_url: 'https://cf.geekdo-images.com/box2e.jpg', thumbnail_url: 'https://imgs.search.brave.com/b1', page_url: 'https://boardgamegeek.com/boardgame/337784', title: 'Zombicide 2nd Edition', site: 'boardgamegeek.com' };
+  const search = {
+    configured: () => true,
+    search: async () => [{ title: 'Zombicide: 2nd Edition | BoardGameGeek', url: 'https://boardgamegeek.com/boardgame/337784', snippet: 'Zombicide: 2nd Edition (2021) CMON Global Limited' }],
+    imageSearch: async () => [boxHit],
+  } as unknown as WebSearch;
+
+  function provider(replies: string[], seen: string[] = [], instr: string[] = []) {
+    let i = 0;
+    return { respond: async (input: { content: unknown }[], opts: { instructions?: string }) => {
+      seen.push(String(input.at(-1)?.content ?? ''));
+      instr.push(opts.instructions ?? '');
+      return { text: replies[i++] ?? '{"action":"final","message":"slutt","game":null}', model: 'm', usage: null, searches: [], citations: [] };
+    } } as unknown as ResponsesProvider;
+  }
+  const answer = (game: Record<string, unknown>, message = 'Fant Zombicide 2. utgave') => JSON.stringify({ action: 'final', message, game });
+
+  it('har egen instruks, søker, åpner og sjekker hver opplysning mot sidene', async () => {
+    const instr: string[] = [];
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider: provider([
+      '{"action":"search","query":"Zombicide board game publisher"}',
+      '{"action":"image_search","query":"Zombicide 2nd edition box"}',
+      '{"action":"open","url":"https://www.cmon.com/product/zombicide-2nd-edition"}',
+      answer({
+        official_name: 'Zombicide: 2nd Edition',
+        year_published: { value: 2021, source: 'https://www.cmon.com/product/zombicide-2nd-edition' },
+        publishers: { value: ['CMON'], source: 'https://boardgamegeek.com/boardgame/337784' },
+        website: { url: 'https://www.cmon.com/product/zombicide-2nd-edition', why: 'Utgiverens produktside' },
+        images: [
+          { image_url: 'https://cf.geekdo-images.com/box2e.jpg', page_url: 'https://boardgamegeek.com/boardgame/337784', kind: 'box_art', confidence: 'medium' },
+          { image_url: 'https://www.cmon.com/img/zombicide-box.png', page_url: 'https://www.cmon.com/product/zombicide-2nd-edition', kind: 'box', confidence: 'high', caption: 'Esken forfra' },
+          { image_url: 'https://www.cmon.com/img/zombicide-box.png', kind: 'box' },
+          { image_url: 'https://diktet.example/box.jpg', page_url: 'https://diktet.example', kind: 'box' },
+        ],
+        sources: [{ url: 'https://diktet.example/om' }],
+        uncertainty: null,
+      }),
+    ], [], instr), search, openPage: async () => PUB }, { context: {}, messages: [{ role: 'user', content: 'Finn fakta' }], result_types: [], focus }, (e) => events.push(e));
+
+    expect(instr[0]).toContain('OPPDRAG: FAKTA OG ILLUSTRASJON for brettspillet «Zombicide»');
+    expect(instr[0]).toContain('utvidelser i prosjektet: Washington Z.C.');
+    expect(instr[0]).toContain('"image_search"');
+    expect(events[0]).toEqual({ type: 'status', text: 'Fakta og illustrasjon for Zombicide' });
+    const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    const info = final.game_info!;
+    expect(info.official_name).toBe('Zombicide: 2nd Edition');
+    // The year is in the text of the page Paintrest opened; the publisher in the search hit's snippet.
+    expect(info.year_published).toEqual({ value: 2021, source: { url: PUB.url, title: PUB.title }, basis: 'checked' });
+    expect(info.publishers).toMatchObject({ value: ['CMON'], basis: 'checked', source: { url: 'https://boardgamegeek.com/boardgame/337784' } });
+    expect(info.website).toMatchObject({ url: PUB.url, basis: 'read', why: 'Utgiverens produktside' });
+    // From the opened page and the image search; the invented one is removed, the repeat is not counted.
+    expect(info.images.map((i) => [i.image_url, i.kind, i.confidence])).toEqual([
+      ['https://www.cmon.com/img/zombicide-box.png', 'box', 'high'],
+      ['https://cf.geekdo-images.com/box2e.jpg', 'box', 'medium'],
+    ]);
+    expect(info.images[1]).toMatchObject({ thumbnail_url: 'https://imgs.search.brave.com/b1', site: 'boardgamegeek.com' });
+    expect(final.warnings.join(' ')).toContain('Fjernet 1 bilde');
+    expect(final.warnings.join(' ')).toContain('https://diktet.example/om');
+    expect(info.sources.map((x) => [x.url, x.opened])).toEqual([[PUB.url, true], ['https://boardgamegeek.com/boardgame/337784', false]]);
+    expect(final.proposals).toEqual([]);
+  });
+
+  it('skiller mellom sjekket, fra kilde og fra modellens egen kunnskap', async () => {
+    const { verifyGameInfo } = await import('./research-agent.ts');
+    const opened = new Map([[normUrl(PUB.url), PUB]]);
+    const searched = new Map([[normUrl('https://en.wikipedia.org/wiki/Zombicide'), { title: 'Zombicide - Wikipedia', url: 'https://en.wikipedia.org/wiki/Zombicide', snippet: 'cooperative game' }]]);
+    const hosted = new Set([normUrl('https://uib.example/read')]);
+    const r = verifyGameInfo({
+      year_published: { value: '2012', source: 'https://www.cmon.com/product/zombicide-2nd-edition' },
+      publishers: { value: 'Guillotine Games', source: 'https://uib.example/read' },
+      website: 'https://en.wikipedia.org/wiki/Zombicide',
+    }, opened, searched, new Map(), hosted);
+    // The page was opened, but 2012 is not in its text: from a source, not checked.
+    expect(r.info!.year_published).toMatchObject({ value: 2012, basis: 'source' });
+    // Read by UiB: Paintrest has no text to check.
+    expect(r.info!.publishers).toMatchObject({ value: ['Guillotine Games'], basis: 'source' });
+    expect(r.info!.website).toMatchObject({ url: 'https://en.wikipedia.org/wiki/Zombicide', basis: 'found' });
+
+    const none = verifyGameInfo({ year_published: { value: 2012, source: null }, publishers: { value: ['CMON'], source: 'https://aldri.example/' },
+      website: { url: 'https://aldri.example/' }, images: [{ image_url: 'https://aldri.example/a.jpg' }] }, new Map(), new Map());
+    expect(none.info).toMatchObject({ year_published: { value: 2012, source: null, basis: 'model' }, publishers: { value: ['CMON'], source: null, basis: 'model' }, website: null, images: [] });
+    expect(none.warnings.join(' ')).toMatch(/Fjernet kilden for utgiveren.*Fjernet nettsiden https:\/\/aldri\.example\/.*Fjernet 1 bilde/);
+    expect(verifyGameInfo({ year_published: { value: 1066 } }, new Map(), new Map()).info!.year_published).toBeNull();
+    // Search snippets can carry HTML entities.
+    const amp = new Map([[normUrl('https://bgg.example/a'), { title: 'Avalon', url: 'https://bgg.example/a', snippet: 'Indie Boards &amp; Cards (2012)' }]]);
+    expect(verifyGameInfo({ publishers: { value: ['Indie Boards & Cards'], source: 'https://bgg.example/a' } }, new Map(), amp).info!.publishers!.basis).toBe('checked');
+    expect(verifyGameInfo(null, new Map(), new Map()).info).toBeNull();
+  });
+
+  it('ber agenten åpne en nettside den ikke har sett, før den godtas', async () => {
+    const seen: string[] = [];
+    const events: ResearchEvent[] = [];
+    const opened: string[] = [];
+    const site = { website: { url: 'https://www.cmon.com/product/zombicide-2nd-edition' } };
+    const bgg: PageResult = { ...PUB, url: 'https://boardgamegeek.com/boardgame/337784', title: 'BGG', site: 'boardgamegeek.com' };
+    await runResearch({ provider: provider([
+      '{"action":"open","url":"https://boardgamegeek.com/boardgame/337784"}',
+      answer(site),
+      '{"action":"open","url":"https://www.cmon.com/product/zombicide-2nd-edition"}',
+      answer(site),
+    ], seen), search, openPage: async (u) => { opened.push(u); return u.includes('cmon') ? PUB : bgg; } },
+    { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: [], focus }, (e) => events.push(e));
+    expect(seen[2]).toContain('Nettsiden https://www.cmon.com/product/zombicide-2nd-edition har du verken åpnet eller fått i et søk');
+    expect(opened).toEqual(['https://boardgamegeek.com/boardgame/337784', 'https://www.cmon.com/product/zombicide-2nd-edition']);
+    const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    expect(final.game_info!.website).toMatchObject({ basis: 'read' });
+  });
+
+  it('sender agenten tilbake én gang hvis den svarer uten å ha lest noe, og åpner kjente sider først', async () => {
+    const seen: string[] = [];
+    const instr: string[] = [];
+    await runResearch({ provider: provider([answer({ year_published: { value: 2012 } }), answer({ year_published: { value: 2012 } })], seen, instr), search, openPage: async () => PUB },
+      { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: [],
+        focus: { ...focus, website: 'https://www.cmon.com/', known_pages: [{ url: 'https://www.cmon.com/zombicide', title: 'Zombicide hos CMON' }] } }, () => {});
+    expect(seen[1]).toContain('Du har ikke åpnet noen sider ennå. Åpne utgiverens side');
+    expect(seen).toHaveLength(2);
+    expect(instr[0]).toContain('https://www.cmon.com/zombicide — Zombicide hos CMON');
+    expect(instr[0]).toContain('Brukeren har lagret https://www.cmon.com/ som nettside');
+  });
+
+  it('uten nettilgang: ingen bilder, ingenting sjekket, og det sies tydelig', async () => {
+    const instr: string[] = [];
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider: provider([answer({ year_published: { value: 2012, source: null }, website: { url: 'https://www.cmon.com/' },
+      images: [{ image_url: 'https://www.cmon.com/box.png', page_url: 'https://www.cmon.com/' }] })], [], instr), search: null, openPage: async () => PUB },
+    { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: [], focus }, (e) => events.push(e));
+    expect(instr[0]).toContain('Du har ikke nettilgang');
+    const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    expect(final.warnings[0]).toContain('Uten nettsøk');
+    expect(final.game_info).toMatchObject({ year_published: { basis: 'model' }, website: null, images: [] });
+  });
+});

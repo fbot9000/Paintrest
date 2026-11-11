@@ -157,6 +157,30 @@ Når agenten leser en side, tas bare bildene i selve innholdet med (artikkel ell
 
 Sider som bygges med skript (typisk kampanjesider), har ofte bildene i sidedata i stedet for i HTML. Har en side færre enn fire synlige bilder, leser Paintrest også bildeadresser fra kildekoden.
 
+## Spill og illustrasjon: finn bilde og fakta med AI
+
+«✦ Finn bilde og fakta med AI» på siden «Spill og illustrasjon» slår opp spillet på nettet. Agenten finner:
+- det offisielle navnet og hvilken utgave det gjelder
+- utgivelsesåret og utgiveren
+- den offisielle nettsiden (utgiverens side for spillet, ikke BoardGameGeek eller en butikk)
+- bildeforslag til illustrasjonen: forsiden av esken eller hovedillustrasjonen
+
+Fremdriften vises under illustrasjonen, med «Stopp». Kjøringen fortsetter om du går til en annen side.
+
+**Ingenting endres før du trykker «Bruk valgte».** Forslagene vises slik:
+- **Bildene** med type («Eske», «Illustrasjon» eller «Annet bilde»), hvor sikker agenten er, og en lenke til siden bildet står på. Velg ett, eller «Behold illustrasjonen».
+- **Opplysningene** med det som står der nå, og hvor godt de er sjekket:
+  - «Står i kilden»: Paintrest fant verdien i teksten på siden agenten åpnet, eller i søketreffet.
+  - «Fra kilde, ikke kontrollert»: agenten leste eller fant siden, men verdien sto ikke i teksten Paintrest har.
+  - «Ikke sjekket mot kilde»: ingen side bak, bare modellens egen kunnskap.
+  - Nettsiden er «Åpnet av agenten» eller «Funnet i søk, ikke åpnet».
+- Tomme felt er krysset av. Et felt som har en verdi, erstattes bare når du krysser av for det. Har spillet ingen illustrasjon, er det første bildet av esken valgt.
+- «Paintrest sin kontroll» viser det serveren fjernet: bilder som ikke fantes på en åpnet side eller i et bildesøk, kilder agenten ikke hadde sett, og en nettside den verken åpnet eller fant.
+
+Bildet hentes gjennom serveren (det lille bildet fra bildesøket hvis originalsiden stenger) og lagres som illustrasjon. Siden det kom fra, står under opplysningene («Illustrasjonen er fra …»). Laster du opp et eget bilde eller fjerner illustrasjonen, fjernes også kilden.
+
+**Nettsiden** står også under utgiver, og kan skrives inn for hånd («cmon.com/zombicide» får https://). Skriv «—» for å fjerne den. Agentene får nettsiden i prosjektets kontekst. Sider kartleggingen har merket som offisielle, åpner oppslaget først.
+
 ## Kartlegg spillet
 
 «✦ Kartlegg spillet med AI» på miniatyrlisten gjør jobben én gang for hele spillet, i stedet for at hver bildejakt finner de samme kildene på nytt. Kartleggingen har sin egen oppgave og forstyrrer ikke panelet eller verkstedet. Fremdriften vises øverst på listen, med «Stopp».
@@ -240,7 +264,7 @@ Alle sider agenten leser, lagres automatisk som kilder for spillet («Funnet av 
 | Bit | Innhold |
 |---|---|
 | 0 Grunnmur | Domenetyper fra skjema §6, kommandolag, lokal lagring i IndexedDB, eksempeldata og stil fra Figma |
-| 1 Prosjekter og spill | Nytt prosjekt med en gang («Nytt spill N»), endring av navn, år, utgiver og illustrasjon, utvidelser med kobling og løsning, simulert BGG-kobling, sletting og gjenoppretting |
+| 1 Prosjekter og spill | Nytt prosjekt med en gang («Nytt spill N»), endring av navn, år, utgiver, nettside og illustrasjon, «Finn bilde og fakta med AI», utvidelser med kobling og løsning, simulert BGG-kobling, sletting og gjenoppretting |
 | 2 (delvis) Miniatyrer | Galleri med planstatus og malefremdrift hver for seg, filtre, legge til, redigere og slette |
 | 5 Painting Mode | iPad liggende: referanser på 1/3 og plan på 2/3. Felles operasjoner og deler, steg, materialer med eierstatus, blandinger, «Finn fram malingene», avvik, delen ferdig, gruppeteller, «Marker ferdig» og historikk |
 | Malingssamlingen | «Malinger» i toppfeltet: samlingen med søk og filtre, legg til en og en (med «Fyll ut med AI»), rediger og skjul, fjern eksempelmalingene, og AI-assistert import av en liste eller fil med spørsmål og svar. Se «Malingssamlingen» over |

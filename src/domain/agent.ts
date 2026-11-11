@@ -614,6 +614,8 @@ export function buildAgentContext(t: Tables, task_id: Id): AgentContext {
         game: game.primary_name,
         year: game.year_published,
         publishers: game.publishers,
+        // The official website the user saved on the game page: a good first source for every run.
+        ...(game.website_url ? { website: game.website_url } : {}),
         expansions_in_project: expansions.map((e) => e.name),
       },
       miniatures: subjectData,

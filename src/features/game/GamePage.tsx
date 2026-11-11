@@ -1,11 +1,19 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
-import { useCommand, useView } from '../../app/context';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router';
+import { useApp, useCommand, useView } from '../../app/context';
+import { useAiStatus } from '../../app/ai-status';
+import type { AiStatus } from '../../app/ai-status';
+import { runs, useRuns } from '../../app/runs';
+import type { Run } from '../../app/runs';
+import type { GameFact, GameInfo, GameInfoImage } from '../../domain/ai';
 import type { BggCandidate } from '../../domain/commands';
 import { attachedExpansions, liveExpansionsOfGame, projectSummary } from '../../domain/views';
-import type { Expansion } from '../../domain/types';
+import type { Expansion, Game } from '../../domain/types';
 import { searchBgg } from '../../data/bgg-fake';
 import { Badge, Button, Card, Dialog, ErrorNote, Field, FileImage, ImagePicker, InlineText } from '../../ui/components';
+import { LiveSteps } from '../agent/AgentPanel';
+import { applyGameInfo, defaultChoice, differs, lookupResult, startGameLookup } from './gameLookup';
+import type { GameInfoChoice } from './gameLookup';
 import './game.css';
 
 export function GamePage() {
@@ -21,11 +29,15 @@ export function GamePage() {
     };
   }, [projectId]);
   const { run, error, clearError } = useCommand();
+  const app = useApp();
+  const aiStatus = useAiStatus();
+  const lookup = useRuns((r) => (data ? r.get(data.game.id, 'gameinfo') : null));
   const navigate = useNavigate();
   const [bggOpen, setBggOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   if (!data) return null;
   const { game, project } = data;
+  const looking = lookup?.status === 'running';
 
   return (
     <main className="page">
@@ -57,17 +69,47 @@ export function GamePage() {
                 />
               </dd>
             </div>
+            <div>
+              <dt>Nettside</dt>
+              <dd className="site-cell">
+                <InlineText
+                  label="Offisiell nettside"
+                  value={game.website_url ?? '—'}
+                  onSave={(v) => run((c) => c.updateGame(game.id, { website_url: v }))}
+                />
+                {game.website_url && <a className="site-link" href={game.website_url} target="_blank" rel="noreferrer" aria-label="Åpne nettsiden">↗</a>}
+              </dd>
+            </div>
           </dl>
+          {game.cover_file_id && game.cover_source && (
+            <p className="small cover-source">
+              Illustrasjonen er fra <a href={game.cover_source.page_url} target="_blank" rel="noreferrer" title={game.cover_source.page_title ?? undefined}>{hostOf(game.cover_source.page_url)} ↗</a>
+            </p>
+          )}
           <div className="hero-actions">
             <ImagePicker variant="moss" onPick={(f) => run((c) => c.setGameCover(game.id, f, f.name))}>
               {game.cover_file_id ? 'Bytt illustrasjon' : 'Last opp illustrasjon'}
             </ImagePicker>
+            <Button className="btn-on-dark" onClick={() => startGameLookup(app, project.id, game)} disabled={looking || aiStatus !== 'ready'}
+              title={aiTitle(aiStatus)}>
+              {looking ? 'Leter …' : '✦ Finn bilde og fakta med AI'}
+            </Button>
             {game.cover_file_id && (
               <button type="button" className="link on-dark" onClick={() => run((c) => c.setGameCover(game.id, null))}>Fjern</button>
             )}
           </div>
+          {(aiStatus === 'no-key' || aiStatus === 'no-server') && (
+            <p className="small hero-note">
+              {aiStatus === 'no-key'
+                ? <>AI-søket krever en nøkkel. Legg den inn under <Link to="/innstillinger">AI og nettsøk</Link>.</>
+                : 'AI-søket krever Paintrest-serveren. Start appen lokalt med «npm run dev».'}
+            </p>
+          )}
         </div>
       </section>
+
+      {lookup && <LookupPanel run={lookup} game={game} onStop={() => runs.stop(game.id, 'gameinfo')} onClose={() => runs.dismiss(game.id, 'gameinfo')}
+        imageUrl={(u) => app.ai.imageProxyUrl(u)} onApply={(info, choice) => applyGameInfo(app, game, info, choice)} />}
 
       <Card className="row-card">
         <div>
@@ -148,6 +190,186 @@ export function GamePage() {
         <p>Prosjektet skjules fra listen. Du kan gjenopprette det fra «Vis slettede prosjekter».</p>
       </Dialog>
     </main>
+  );
+}
+
+function aiTitle(status: AiStatus): string {
+  if (status === 'no-key') return 'Legg inn AI-nøkkelen under AI og nettsøk først.';
+  if (status === 'no-server') return 'Krever Paintrest-serveren (npm run dev).';
+  return 'Agenten søker opp utgivelsesår, utgiver og offisiell nettside, og foreslår bilder av esken eller hovedillustrasjonen. Hver opplysning vises med kilden. Du velger selv hva som tas i bruk.';
+}
+
+function hostOf(u: string): string {
+  try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; }
+}
+
+const KIND_LABEL: Record<GameInfoImage['kind'], string> = { box: 'Eske', cover_art: 'Illustrasjon', other: 'Annet bilde' };
+const SURE: Record<'high' | 'medium' | 'low', string> = { high: 'Sikker', medium: 'Trolig', low: 'Usikker' };
+const BASIS: Record<GameFact<unknown>['basis'], { text: string; tone: 'moss' | 'neutral' | 'warn'; hint: string }> = {
+  checked: { text: 'Står i kilden', tone: 'moss', hint: 'Paintrest fant verdien i teksten på kilden.' },
+  source: { text: 'Fra kilde, ikke kontrollert', tone: 'neutral', hint: 'Agenten leste eller fant kilden, men Paintrest kunne ikke finne verdien i teksten.' },
+  model: { text: 'Ikke sjekket mot kilde', tone: 'warn', hint: 'Agenten oppga ingen kilde den hadde lest eller søkt fram. Det bygger på modellens egen kunnskap.' },
+};
+
+/**
+ * The game lookup: what the agent does while it works, then its suggestions. Pictures for the illustration,
+ * and the year, publisher and website, each with its source and how well it is checked. Nothing changes
+ * before the user presses «Bruk valgte».
+ */
+function LookupPanel({ run, game, imageUrl, onStop, onClose, onApply }: {
+  run: Run; game: Game; imageUrl: (u: string) => string; onStop: () => void; onClose: () => void;
+  onApply: (info: GameInfo, choice: GameInfoChoice) => Promise<string[]>;
+}) {
+  const result = lookupResult(run);
+  const info = result?.info ?? null;
+  const [choice, setChoice] = useState<GameInfoChoice | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [applied, setApplied] = useState<string[] | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  // A new answer (a new run) gets a fresh choice; the user's ticks are kept while the page re-renders.
+  useEffect(() => {
+    setChoice(info ? defaultChoice(game, info) : null);
+    setApplied(null);
+    setFailed(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run.finished_at]);
+
+  if (run.status === 'running') {
+    return <section className="lookup lookup-live" aria-label="AI-søk etter fakta og illustrasjon"><LiveSteps events={run.events} onStop={onStop} /></section>;
+  }
+  const d = info ? differs(game, info) : null;
+  const any = !!choice && !!d && ((choice.year && d.year) || (choice.publishers && d.publishers) || (choice.website && d.website) || !!choice.image);
+  const head = run.status === 'done' ? 'Forslag fra AI' : run.status === 'stopped' ? 'AI-søket ble stoppet' : 'AI-søket feilet';
+  return (
+    <Card className="lookup">
+      <div className="lookup-head">
+        <div>
+          <span className="eyebrow">{head}{result?.model ? ` · ${result.model}` : ''}</span>
+          {result?.message && <p className="lookup-msg">{result.message}</p>}
+          {info?.official_name && <p className="small">Spillet agenten fant: <strong>{info.official_name}</strong></p>}
+        </div>
+        <button type="button" className="link small" onClick={onClose}>Lukk</button>
+      </div>
+      {run.error && !result && <ErrorNote error={run.error} />}
+      {applied && <p className="lookup-done" role="status">{applied.length ? `Lagt inn: ${applied.join(', ')}.` : 'Ingenting å legge inn.'}</p>}
+      {failed && <ErrorNote error={failed} onClose={() => setFailed(null)} />}
+
+      {info && choice && d && (
+        <>
+          <h3 className="lookup-sub">Bilder til illustrasjonen</h3>
+          {info.images.length === 0 ? (
+            <p className="small muted">Agenten fant ingen bilder som Paintrest kunne sjekke. Last opp et bilde selv, eller prøv igjen.</p>
+          ) : (
+            <div className="lookup-images" role="radiogroup" aria-label="Velg illustrasjon">
+              {info.images.map((img) => {
+                const on = choice.image?.image_url === img.image_url;
+                return (
+                  <label key={img.image_url} className={`lookup-img ${on ? 'on' : ''}`}>
+                    <input type="radio" name="lookup-cover" checked={on} onChange={() => setChoice({ ...choice, image: img })} />
+                    <img src={imageUrl(img.thumbnail_url ?? img.image_url)} alt={img.caption ?? ''} loading="lazy"
+                      onError={(e) => {
+                        // The search service's small copy first; then the original through the server.
+                        const el = e.currentTarget;
+                        if (img.thumbnail_url && !el.dataset.fallback) { el.dataset.fallback = '1'; el.src = imageUrl(img.image_url); } else el.classList.add('broken');
+                      }} />
+                    <span className="lookup-img-meta">
+                      <Badge tone={img.kind === 'other' ? 'neutral' : 'moss'}>{KIND_LABEL[img.kind]}</Badge>
+                      {img.confidence && <span className="small muted">{SURE[img.confidence]}</span>}
+                    </span>
+                    {img.caption && <span className="small lookup-cap">{img.caption}</span>}
+                    <a className="small" href={img.page_url} target="_blank" rel="noreferrer" title={img.page_title ?? img.page_url}>{img.site || hostOf(img.page_url)} ↗</a>
+                  </label>
+                );
+              })}
+              <label className={`lookup-img lookup-none ${choice.image ? '' : 'on'}`}>
+                <input type="radio" name="lookup-cover" checked={!choice.image} onChange={() => setChoice({ ...choice, image: null })} />
+                <span className="small">{game.cover_file_id ? 'Behold illustrasjonen' : 'Ingen av disse'}</span>
+              </label>
+            </div>
+          )}
+
+          <h3 className="lookup-sub">Opplysninger</h3>
+          {!info.year_published && !info.publishers && !info.website ? (
+            <p className="small muted">Agenten fant ingen opplysninger om spillet.</p>
+          ) : (
+            <ul className="lookup-facts">
+              {info.year_published && (
+                <FactRow label="Utgitt" value={String(info.year_published.value)} now={game.year_published ? String(game.year_published) : null}
+                  differs={d.year} checked={choice.year} onCheck={(v) => setChoice({ ...choice, year: v })}
+                  badge={BASIS[info.year_published.basis]} source={info.year_published.source} />
+              )}
+              {info.publishers && (
+                <FactRow label="Utgiver" value={info.publishers.value.join(', ')} now={game.publishers.join(', ') || null}
+                  differs={d.publishers} checked={choice.publishers} onCheck={(v) => setChoice({ ...choice, publishers: v })}
+                  badge={BASIS[info.publishers.basis]} source={info.publishers.source} />
+              )}
+              {info.website && (
+                <FactRow label="Offisiell nettside" value={info.website.url} link now={game.website_url ?? null}
+                  differs={d.website} checked={choice.website} onCheck={(v) => setChoice({ ...choice, website: v })}
+                  badge={info.website.basis === 'read'
+                    ? { text: 'Åpnet av agenten', tone: 'moss', hint: 'Agenten åpnet siden.' }
+                    : { text: 'Funnet i søk, ikke åpnet', tone: 'neutral', hint: 'Siden kom opp i et søk, men agenten åpnet den ikke.' }}
+                  source={null} note={info.website.why} />
+              )}
+            </ul>
+          )}
+          {info.uncertainty && <p className="small lookup-warn">Usikkert: {info.uncertainty}</p>}
+          {result!.warnings.length > 0 && (
+            <details className="small lookup-checks">
+              <summary>Paintrest sin kontroll ({result!.warnings.length})</summary>
+              <ul>{result!.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+            </details>
+          )}
+          {info.sources.length > 0 && (
+            <p className="small lookup-sources">
+              Kilder: {info.sources.map((x) => <a key={x.url} href={x.url} target="_blank" rel="noreferrer" title={x.title}>{hostOf(x.url)}{x.opened ? '' : ' (søk)'} ↗</a>)}
+            </p>
+          )}
+          <div className="lookup-actions">
+            <Button variant="primary" disabled={!any || busy} onClick={async () => {
+              setBusy(true);
+              setFailed(null);
+              try {
+                setApplied(await onApply(info, choice));
+                setChoice({ year: false, publishers: false, website: false, image: null });
+              } catch (e) {
+                setFailed(e instanceof Error ? e.message : String(e));
+              } finally {
+                setBusy(false);
+              }
+            }}>{busy ? 'Legger inn …' : 'Bruk valgte'}</Button>
+            <span className="small muted">Felt som er tomme, er krysset av. Kryss av for å erstatte det som står der nå.</span>
+          </div>
+        </>
+      )}
+      {!info && run.status === 'done' && result && result.warnings.length > 0 && (
+        <ul className="small lookup-warn">{result.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+      )}
+    </Card>
+  );
+}
+
+function FactRow({ label, value, now, differs, checked, onCheck, badge, source, link, note }: {
+  label: string; value: string; now: string | null; differs: boolean; checked: boolean; onCheck: (v: boolean) => void;
+  badge: { text: string; tone: 'moss' | 'neutral' | 'warn'; hint: string }; source: { url: string; title: string } | null; link?: boolean; note?: string | null;
+}) {
+  return (
+    <li className={differs && checked ? 'on' : ''}>
+      <label className="check">
+        <input type="checkbox" checked={differs && checked} disabled={!differs} onChange={(e) => onCheck(e.target.checked)} />
+        <span className="sr-only">Bruk {label.toLowerCase()}</span>
+      </label>
+      <div className="lookup-fact">
+        <span className="small muted">{label}</span>
+        <span className="lookup-value">{link ? <a href={value} target="_blank" rel="noreferrer">{value} ↗</a> : <strong>{value}</strong>}</span>
+        <span className="small muted">{differs ? `Nå: ${now ?? '—'}` : 'Samme som nå'}</span>
+        {note && <span className="small muted">{note}</span>}
+      </div>
+      <div className="lookup-basis">
+        <span title={badge.hint}><Badge tone={badge.tone}>{badge.text}</Badge></span>
+        {source && <a className="small" href={source.url} target="_blank" rel="noreferrer" title={source.title}>{hostOf(source.url)} ↗</a>}
+      </div>
+    </li>
   );
 }
 

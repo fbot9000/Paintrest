@@ -171,6 +171,14 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
     - **Regel for brukt:** Et bilde som er lagret på én miniatyr, regnes som brukt i alle forslag. Det havner under «Brukt» på tavlen og kan legges på flere miniatyrer derfra.
     - **Prosjektmenyen:** «Fordel bilder» erstatter plassholderen «Kilder og bilder» (bit 6). Ruten `kilder` viser den samme siden. Resten av bit 6 (kildene for seg) finnes ikke ennå.
 
+37. **BRUKERØNSKE 11. november 2026: bilde og fakta for spillet med AI.** «Finn bilde og fakta med AI» på siden «Spill og illustrasjon».
+    - **Nye felt på `game`, ikke i skjemaet:** `website_url` (offisiell nettside) og `cover_source` (`image_url`, `page_url`, `page_title`: hvor illustrasjonen kom fra). Begge er valgfrie, så eldre data trenger ingen migrering. `cover_source` settes bare når illustrasjonen tas fra nettet, og fjernes når du laster opp et eget bilde eller fjerner illustrasjonen. Skjemaet har ingen kilde for `game.cover_file_id`; dette følger regelen om at kilden lagres sammen med bildet.
+    - **Eget oppdrag uten oppgave:** Oppslaget bruker samme agentløkke som researchen (`POST /api/agent/run` med `focus.kind = 'game_info'`), med egen instruks og høyst 10 verktøysteg. Det lager ingen `research_task`, ingen meldinger og ingen forslag i dataene. Svaret ligger i kjøringen i nettleseren til du bruker det eller lukker panelet. Derfor lagres heller ikke sidene agenten leser som kilder for spillet, slik andre kjøringer gjør (avvik 24).
+    - **Brukeren bestemmer:** Ingenting skrives før «Bruk valgte». Fakta skrives med `updateGame` og illustrasjonen med `setGameCover`, med `change_record` og `initiated_by = user`. Felt med en verdi fra før er ikke krysset av.
+    - **Serveren sjekker svaret** (`verifyGameInfo`): Hver opplysning (år, utgiver) beholder kilden bare når agenten har åpnet siden eller fått den i et søk i samme kjøring. Den merkes «sjekket» når verdien står i sidens tekst, eller i søketreffets tittel og utdrag. Et oppgitt år utenfor 1800 til to år frem i tid avvises. Nettsiden må være åpnet eller funnet med eksakt adresse, ellers fjernes den. Før det får agenten én beskjed om å åpne den. Bilder sjekkes som i bildejakten (avvik 31). Svarer agenten uten å ha åpnet noen side, sendes den tilbake én gang.
+    - **Agentene får nettsiden:** `website` er lagt til i prosjektets kontekst (`project.website`) når den finnes.
+    - **Testing:** Det er ikke testet mot UiB eller ekte søketjenester. Hele kjeden er kjørt i nettleseren mot en simulert modell, et simulert Brave-søk og en lokal utgiverside: knappen, fremdriften, forslagene, «Bruk valgte», nedlastingen av bildet og lagringen i datamappen.
+
 ## Antakelser
 
 - **Klient:** React og TypeScript som webapp med hash-ruting. Det er godkjent av brukeren 9. november 2026.

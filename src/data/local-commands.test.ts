@@ -222,3 +222,39 @@ describe('palett for miniatyren', () => {
     expect(store.getTables().project[s.project_id]!.content_revision).toBe(before + 3);
   });
 });
+
+describe('offisiell nettside og kilden til illustrasjonen (avvik 37)', () => {
+  it('lagrer nettsiden som en nettadresse, og tom eller strek fjerner den', async () => {
+    const { store, cmd } = emptyStore();
+    const { game_id } = await cmd.createProject({ name: 'Zombicide' });
+    await cmd.updateGame(game_id, { website_url: 'cmon.com/zombicide' });
+    expect(store.getTables().game[game_id]!.website_url).toBe('https://cmon.com/zombicide');
+    await cmd.updateGame(game_id, { website_url: 'https://www.cmon.com/product/zombicide' });
+    expect(store.getTables().game[game_id]!.website_url).toBe('https://www.cmon.com/product/zombicide');
+    for (const bad of ['javascript:alert(1)', 'ftp://cmon.com', 'ikke en adresse']) {
+      await expect(cmd.updateGame(game_id, { website_url: bad })).rejects.toThrow(/gyldig nettadresse/);
+    }
+    expect(store.getTables().game[game_id]!.website_url).toBe('https://www.cmon.com/product/zombicide');
+    await cmd.updateGame(game_id, { website_url: '—' });
+    expect(store.getTables().game[game_id]!.website_url).toBeNull();
+  });
+
+  it('en illustrasjon fra nettet får kilden med seg; en opplastet eller fjernet illustrasjon har ingen', async () => {
+    const { store, cmd } = emptyStore();
+    const { game_id } = await cmd.createProject({ name: 'Zombicide' });
+    const png = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' });
+    const source = { image_url: 'https://www.cmon.com/img/box.png', page_url: 'https://www.cmon.com/zombicide', page_title: 'Zombicide' };
+    await cmd.setGameCover(game_id, png, 'box.png', source);
+    let g = store.getTables().game[game_id]!;
+    expect(g.cover_file_id).toBeTruthy();
+    expect(g.cover_source).toEqual(source);
+    await cmd.setGameCover(game_id, png, 'egen.png');
+    g = store.getTables().game[game_id]!;
+    expect(g.cover_source).toBeNull();
+    await cmd.setGameCover(game_id, png, 'box.png', source);
+    await cmd.setGameCover(game_id, null);
+    g = store.getTables().game[game_id]!;
+    expect([g.cover_file_id, g.cover_source]).toEqual([null, null]);
+    await expect(cmd.setGameCover(game_id, png, 'x.png', { ...source, page_url: 'javascript:x' })).rejects.toThrow(/nettadresse/);
+  });
+});

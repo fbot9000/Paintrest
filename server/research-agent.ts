@@ -41,7 +41,9 @@ export type ResearchEvent =
       /** Game survey: who each miniature is, by ref (M1, M2 …). */
       identities?: { subject_ref: string; identity: SubjectIdentity }[];
       /** Game survey: the sources for the whole game, with what they are good for and which miniatures they show. */
-      game_sources?: GameSource[] }
+      game_sources?: GameSource[];
+      /** Game lookup from the game page: facts and picture suggestions, checked against the pages of this run. */
+      game_info?: GameInfo | null }
   | { type: 'error'; error: string };
 
 /** A page the agent opened in this turn; the client stores it as a draft source. */
@@ -94,7 +96,62 @@ export interface RejectedIdentity {
   image_urls: string[];
 }
 
-export type AnyFocus = ImageFocus | PlanFocus | KnowledgeFocus | GameFocus;
+export type AnyFocus = ImageFocus | PlanFocus | KnowledgeFocus | GameFocus | GameInfoFocus;
+
+/**
+ * Facts and illustration for the game, from the game page (brukerønske 11.11.2026):
+ * picture suggestions for the game's illustration, the year, the publisher and the official website.
+ * Nothing is stored here; the user chooses what to use.
+ */
+export interface GameInfoFocus {
+  kind: 'game_info';
+  game: string;
+  /** What the game page holds now, so the agent can confirm or correct it. */
+  year: number | null;
+  publishers: string[];
+  website: string | null;
+  expansions: string[];
+  /** Official pages a game survey already found for this game; opened first. */
+  known_pages: TaggedSource[];
+}
+
+/**
+ * One fact about the game and the page it builds on.
+ * checked: Paintrest found the value in the text of the page (opened page, or the search hit's title and snippet);
+ * source: the page was read or found, but the value could not be checked in its text;
+ * model: no page behind it, from the model's own knowledge.
+ */
+export interface GameFact<T> {
+  value: T;
+  source: { url: string; title: string } | null;
+  basis: 'checked' | 'source' | 'model';
+}
+
+/** A picture suggested as the game's illustration, checked against an opened page or an image search. */
+export interface GameInfoImage {
+  image_url: string;
+  thumbnail_url: string | null;
+  page_url: string;
+  page_title: string | null;
+  site: string;
+  /** box: the front of the box; cover_art: the main illustration (key art) without the box. */
+  kind: 'box' | 'cover_art' | 'other';
+  caption: string | null;
+  confidence: 'high' | 'medium' | 'low' | null;
+}
+
+/** What the game lookup found, after the server's checks. */
+export interface GameInfo {
+  /** The game's name as the sources write it, so the user can see that it is the right game. */
+  official_name: string | null;
+  year_published: GameFact<number> | null;
+  publishers: GameFact<string[]> | null;
+  /** read: the page was opened (by Paintrest or UiB); found: it came up in a search but was not opened. */
+  website: { url: string; title: string | null; basis: 'read' | 'found'; why: string | null } | null;
+  images: GameInfoImage[];
+  sources: { url: string; title: string; opened: boolean }[];
+  uncertainty: string | null;
+}
 
 /**
  * Game survey (brukerønske 11.11.2026): one run for the whole game, started from the miniature list.
@@ -286,6 +343,9 @@ export const MAX_GAME_SOURCES = 40;
 const MAX_COMPARE = 4;
 export const MAX_PLAN_STEPS = 16;
 export const MAX_KNOWLEDGE_STEPS = 16;
+/** Game lookup: a handful of searches and pages is enough for year, publisher, website and the box. */
+export const MAX_GAME_INFO_STEPS = 10;
+const MAX_GAME_IMAGES = 8;
 
 /**
  * Which paints to use is the user's choice, never a hidden preference
@@ -312,6 +372,7 @@ const MAX_MESSAGES = 30;
 
 export function researchInstructions(context: unknown, resultTypes: string[], mode: WebMode, anyFocus: AnyFocus | null = null, vision = false, imagesAttached = false, direct = false, hunt0: HuntState | null = null, imageSearch = false, survey0: SurveyState | null = null): string {
   if (anyFocus?.kind === 'knowledge') return knowledgeInstructions(context, resultTypes, mode, anyFocus, imageSearch && mode !== 'none', imagesAttached ? (anyFocus.reference_images ?? []).slice(0, 4).length : 0);
+  if (anyFocus?.kind === 'game_info') return gameInfoInstructions(anyFocus, mode, vision && mode !== 'none', imageSearch && mode !== 'none');
   const img = imageSearch && mode !== 'none';
   const focus = anyFocus?.kind === 'images' ? anyFocus : null;
   const plan = anyFocus?.kind === 'plan' ? anyFocus : null;
@@ -533,6 +594,69 @@ ${shape}
 
 Kontekst (det du kan lese; endres bare av brukeren):
 ${JSON.stringify(context)}`;
+}
+
+/**
+ * Game lookup from the game page: the official name, year, publisher, official website and
+ * pictures for the game's illustration. The user picks what to use; nothing is stored by the agent.
+ */
+export function gameInfoInstructions(focus: GameInfoFocus, mode: WebMode, look = false, img = false): string {
+  const now = [
+    `utgitt: ${focus.year ?? 'ukjent'}`,
+    `utgiver: ${focus.publishers.length ? focus.publishers.join(', ') : 'ukjent'}`,
+    `offisiell nettside: ${focus.website ?? 'ukjent'}`,
+    ...(focus.expansions.length ? [`utvidelser i prosjektet: ${focus.expansions.slice(0, 12).join(', ')}`] : []),
+  ].join('; ');
+  const known = focus.known_pages.slice(0, 8);
+  const tools = mode === 'hosted'
+    ? `Du har et innebygd nettsøk-verktøy (web_search) som du bruker direkte. I tillegg kan Paintrest åpne sider for deg. Hvert svar fra deg er ETT JSON-objekt:
+  {"action": "open", "url": "https://…", "why": "kort grunn"} – Paintrest leser siden og gir deg teksten og bildelisten`
+    : mode === 'search'
+      ? `Du har nettilgang gjennom verktøy. Hvert svar fra deg er ETT JSON-objekt:
+  {"action": "search", "query": "…", "why": "kort grunn"}   – nettsøk (bruk gjerne engelske søkeord)
+  {"action": "open", "url": "https://…", "why": "kort grunn"} – les én side og få tekst og bildeliste`
+      : '';
+  const extra = mode === 'none' ? '' : `${img ? `
+  {"action": "image_search", "query": "…", "why": "kort grunn"} – bildesøk, gir bilde-URL-er med siden de kommer fra` : ''}${look ? `
+  {"action": "look", "image_urls": ["https://…"], "question": "…", "why": "kort grunn"} – Paintrest viser deg bildene (høyst ${MAX_LOOK}, fra en åpnet side${img ? ' eller et bildesøk' : ''})` : ''}
+  {"action": "final", "message": "…", "game": { … }}           – ferdig svar til brukeren`;
+  return `Du er researchagenten i Paintrest, et personlig arbeidsverktøy for miniatyrmaling.
+Brukeren setter opp brettspillet «${focus.game}» i Paintrest og vil ha fakta om spillet og et bilde til spillets illustrasjon. Brukeren velger selv hva som tas i bruk.
+Svar alltid på norsk bokmål.
+
+OPPDRAG: FAKTA OG ILLUSTRASJON for brettspillet «${focus.game}».
+Paintrest har nå: ${now}.
+Finn:
+1. Hvilket spill det er, med det offisielle navnet slik utgiveren skriver det. Finnes det flere utgaver (for eksempel 2. utgave eller en nyutgivelse), velg den som passer navnet og utvidelsene, og si i meldingen hvilken du valgte.
+2. Utgivelsesåret for denne utgaven.
+3. Utgiveren: forlaget som gir ut spillet. Ikke distributører eller oversettere, med mindre det er alt som finnes.
+4. Den offisielle nettsiden: utgiverens side for spillet, eller spillets egen side. Ikke BoardGameGeek, Wikipedia, nettbutikker eller kampanjesider, med mindre det ikke finnes noe annet; si det da i "why".
+5. Bildeforslag til illustrasjonen, høyst ${MAX_GAME_IMAGES}: forsiden av esken ("box") eller hovedillustrasjonen uten eske ("cover_art"), helst store bilder. Ikke logoer alene, komponenter, spillbrett eller malte miniatyrer. Ta bare med bilder av akkurat dette spillet og denne utgaven.
+
+${mode === 'none' ? `Du har ikke nettilgang i dette oppsettet. Svar direkte med final. Alt bygger da på det du vet fra før: sett "source": null på hver opplysning, ta ikke med bilder, og si tydelig i meldingen at ingenting er sjekket mot kilder.` : `${tools}${extra}
+Du har høyst ${MAX_GAME_INFO_STEPS} verktøysteg.
+
+Arbeid slik:
+${known.length ? `- Kartleggingen av spillet fant disse offisielle sidene. Åpne de som passer, før du søker:\n${known.map((k) => `  - ${k.url} — ${k.title}`).join('\n')}\n` : ''}${focus.website ? `- Brukeren har lagret ${focus.website} som nettside. Åpne den og sjekk at den er riktig.\n` : ''}- Søk etter spillet og utgiveren. Åpne utgiverens side for spillet, og gjerne BoardGameGeek eller Wikipedia for år og utgiver.
+- ${img ? `Bruk bildesøk for esken (for eksempel «${focus.game} board game box»). ` : ''}Bilder kan også komme fra bildelisten på sidene du åpner (produktsiden har ofte esken).
+${look ? '- Bruk «look» når du er usikker på om et bilde viser esken eller illustrasjonen til riktig spill og utgave.\n' : ''}
+Kildekrav:
+- Oppgi siden hver opplysning bygger på i "source" (eksakt URL til en side du har åpnet eller fått i et søk). Paintrest sjekker at verdien står på siden.
+- Står ikke opplysningen i en kilde, sett "source": null. Da vises den som ikke sjekket.
+- Nettsiden må være en side du har åpnet eller fått i et søk, med eksakt adresse. Gjett ikke adresser.
+- Bilder: eksakt bilde-URL og side-URL fra bildelisten på en side du har åpnet${img ? ' eller fra et bildesøk' : ''}. Lag ikke bilde-URL-er.
+- Søk med korte søk (3–6 ord) uten anførselstegn.`}
+
+Avslutt med ett JSON-objekt:
+{"action": "final", "message": "kort norsk oppsummering: hvilket spill og hvilken utgave du fant, og hva du er usikker på",
+ "game": {"official_name": "…",
+  "year_published": {"value": 2019, "source": "https://…"},
+  "publishers": {"value": ["…"], "source": "https://…"},
+  "website": {"url": "https://…", "why": "hvorfor dette er den offisielle siden"},
+  "images": [{"image_url": "https://…", "page_url": "https://…", "kind": "box|cover_art|other", "caption": "hva bildet viser", "confidence": "high|medium|low"}],
+  "sources": [{"url": "https://…", "title": "…"}],
+  "uncertainty": "kort norsk om det du er usikker på, eller null"}}
+Det du ikke fant, setter du til null (bilder: tom liste).`;
 }
 
 /** A short, readable account of who the figure is, for the instructions. */
@@ -760,7 +884,9 @@ type Action =
   | { action: 'image_search'; query: string; why: string | null }
   | IdentifyAction
   | { action: 'next_phase'; why: string | null }
-  | { action: 'final'; message: string; proposals: unknown[]; game_sources: unknown[] };
+  | { action: 'final'; message: string; proposals: unknown[]; game_sources: unknown[];
+      /** Game lookup: the facts and pictures, checked by verifyGameInfo. */
+      game: unknown };
 
 /** Phase 1's answer, before it is checked against the pages and searches of this run. */
 export interface IdentifyAction {
@@ -827,7 +953,7 @@ export function parseAction(text: string): Action | null {
     if (v.action === 'next_phase') return { action: 'next_phase', why };
     if (v.action === 'final' || 'message' in v || 'proposals' in v) {
       return { action: 'final', message: typeof v.message === 'string' ? v.message : '', proposals: Array.isArray(v.proposals) ? v.proposals : [],
-        game_sources: Array.isArray(v.game_sources) ? v.game_sources : [] };
+        game_sources: Array.isArray(v.game_sources) ? v.game_sources : [], game: v.game ?? null };
     }
   }
   return null;
@@ -844,13 +970,14 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   const plan = input.focus?.kind === 'plan' ? input.focus : null;
   const knowledge = input.focus?.kind === 'knowledge' ? input.focus : null;
   const game = input.focus?.kind === 'game' ? input.focus : null;
+  const gameInfo = input.focus?.kind === 'game_info' ? input.focus : null;
   // Library research has no use for looking at images.
   let vision = !!deps.lookAtImages && !knowledge;
   // The plan request carries the chosen pictures as input_image; dropped if the model refuses images.
   // «Fra bilde» research carries the user's pictures the same way as a plan.
   const pictures = (plan?.reference_images ?? knowledge?.reference_images ?? []).slice(0, 4);
   let imagesAttached = pictures.length > 0;
-  const maxSteps = focus ? MAX_IMAGE_STEPS : plan ? MAX_PLAN_STEPS : knowledge ? MAX_KNOWLEDGE_STEPS : game ? MAX_GAME_STEPS : MAX_TOOL_STEPS;
+  const maxSteps = focus ? MAX_IMAGE_STEPS : plan ? MAX_PLAN_STEPS : knowledge ? MAX_KNOWLEDGE_STEPS : game ? MAX_GAME_STEPS : gameInfo ? MAX_GAME_INFO_STEPS : MAX_TOOL_STEPS;
   // Game survey: phase 1 finds the sources for the whole game, phase 2 works out who is who.
   const survey: SurveyState | null = game ? { phase: 'sources', identities: new Map() } : null;
   const gameRefs = new Map((game?.miniatures ?? []).map((m) => [m.ref, m]));
@@ -891,7 +1018,9 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
     }
   }
   for (const s of [...(given?.sources ?? []), ...(focus?.tagged_sources ?? []), ...(focus?.suggested_sources ?? []), ...(plan?.tagged_sources ?? []), ...(plan?.guides ?? []), ...(plan?.game_guides ?? []),
-    ...(game?.miniatures ?? []).flatMap((m) => m.identity?.sources ?? [])]) {
+    ...(game?.miniatures ?? []).flatMap((m) => m.identity?.sources ?? []),
+    // Game lookup: the official pages a survey found, and the website the user saved, count as found.
+    ...(gameInfo?.known_pages ?? []), ...(gameInfo?.website ? [{ url: gameInfo.website, title: gameInfo.website }] : [])]) {
     if (/^https?:\/\//.test(s.url)) searched.set(normUrl(s.url), { title: s.title, url: s.url, snippet: '' });
   }
   // Tagged while the agent works: the instructions are rebuilt with the new list.
@@ -913,6 +1042,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   let steps = 0;
   let nudged = false;
   let readNudged = false;
+  let websiteNudged = false;
   let model = input.model ?? '';
 
   /** Tells the agent something new, in the same turn as the last tool result when there is one. */
@@ -956,7 +1086,13 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
     tell(`${note} Fase 3 starter nå: maleguider og videoer. Du har ${Math.max(0, maxSteps - steps)} verktøysteg igjen. Avslutt med final, med alt fra jakten i forslaget.`);
   };
   /** Checks the answer and sends it as the final event. An image hunt also gets what it found along the way. */
-  const finish = async (message: string, proposals: unknown[], gameSources: unknown[] = []) => {
+  const finish = async (message: string, proposals: unknown[], gameSources: unknown[] = [], gameRaw: unknown = null) => {
+    if (gameInfo) {
+      const checked = verifyGameInfo(gameRaw, opened, searched, imageHits, hostedOpened);
+      if (mode === 'none') checked.warnings.unshift('Uten nettsøk: forslagene bygger bare på det modellen vet fra før, og ingenting er sjekket mot kilder. Slå på nettsøk under «AI og nettsøk».');
+      emit({ ...finalEvent(message, [], model, checked.warnings, trace, opened) as Extract<ResearchEvent, { type: 'final' }>, game_info: checked.info });
+      return;
+    }
     if (survey && game) {
       const raw = mergeSurvey(proposals, held?.proposals ?? []);
       const checked = verifyProposals(raw, opened, searched, imageHits, hostedOpened);
@@ -1026,7 +1162,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   };
   if (confirmedId) await loadIdentityRef(confirmedId);
   instructions = build();
-  emit({ type: 'status', text: knowledge ? (knowledge.revision ? `Forbedring av ${knowledge.revision.name}` : knowledge.target === 'image' ? `Research fra bilde${imagesAttached ? ` · ${pictures.length} ${pictures.length === 1 ? 'bilde' : 'bilder'}` : ''}` : knowledge.target === 'technique' ? 'Research: teknikk' : 'Research: oppskrift') : plan ? `Maleplan for ${plan.subject_name}${imagesAttached ? ` · ${plan.reference_images.length} bilder` : ''}` : focus ? `Bildejakt for ${focus.subject_name}` : mode === 'hosted' ? 'Agenten søker via UiB' : mode === 'search' ? 'Agenten planlegger søket' : 'Agenten svarer uten nettilgang' });
+  emit({ type: 'status', text: gameInfo ? `Fakta og illustrasjon for ${gameInfo.game}` : knowledge ? (knowledge.revision ? `Forbedring av ${knowledge.revision.name}` : knowledge.target === 'image' ? `Research fra bilde${imagesAttached ? ` · ${pictures.length} ${pictures.length === 1 ? 'bilde' : 'bilder'}` : ''}` : knowledge.target === 'technique' ? 'Research: teknikk' : 'Research: oppskrift') : plan ? `Maleplan for ${plan.subject_name}${imagesAttached ? ` · ${plan.reference_images.length} bilder` : ''}` : focus ? `Bildejakt for ${focus.subject_name}` : mode === 'hosted' ? 'Agenten søker via UiB' : mode === 'search' ? 'Agenten planlegger søket' : 'Agenten svarer uten nettilgang' });
 
   for (let round = 0; round < maxSteps + (hunt || survey ? 14 : 4); round++) {
     if (deps.signal?.aborted) throw new UserError('Avbrutt');
@@ -1175,17 +1311,29 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       startGuides('Forslaget ditt er tatt vare på.');
       continue;
     }
-    // Library research must read something before it finishes, when it can (once).
-    if (action.action === 'final' && knowledge && mode !== 'none' && !readNudged && opened.size === 0 && hostedOpened.size === 0
-      && action.proposals.length > 0 && steps < maxSteps) {
+    // Library research and the game lookup must read something before they finish, when they can (once).
+    if (action.action === 'final' && (knowledge && action.proposals.length > 0 || gameInfo && !!action.game) && mode !== 'none' && !readNudged
+      && opened.size === 0 && hostedOpened.size === 0 && steps < maxSteps) {
       readNudged = true;
-      work.push({ role: 'user', content: 'Du har ikke åpnet noen sider ennå. Åpne minst to relevante sider med {"action": "open", …}'
+      work.push({ role: 'user', content: gameInfo
+        ? 'Du har ikke åpnet noen sider ennå. Åpne utgiverens side for spillet, og gjerne en side med år og utgiver, med {"action": "open", …} før du svarer med final. Da kan Paintrest sjekke opplysningene.'
+        : 'Du har ikke åpnet noen sider ennå. Åpne minst to relevante sider med {"action": "open", …}'
         + (imageSearchOn ? ', og gjerne et bildesøk med {"action": "image_search", …} for eksempelbilder,' : '')
         + ' før du svarer med final. Bruk kildene du faktisk leser.' });
       continue;
     }
+    // Game lookup: a website the agent has neither opened nor found in a search would be dropped; it gets one chance to open it.
+    if (action.action === 'final' && gameInfo && mode !== 'none' && !websiteNudged && steps < maxSteps) {
+      const site = websiteUrlOf(action.game);
+      const key = site ? normUrl(site) : '';
+      if (site && /^https?:\/\//i.test(site) && !opened.has(key) && !hostedOpened.has(key) && !searched.has(key)) {
+        websiteNudged = true;
+        tell(`Nettsiden ${site} har du verken åpnet eller fått i et søk, så Paintrest kan ikke godta den. Åpne den med {"action": "open", …}, eller bruk eksakt adresse fra et søketreff. Svar så med final igjen.`);
+        continue;
+      }
+    }
     if (action.action === 'final') {
-      await finish(action.message || held?.message || '', action.proposals, action.game_sources);
+      await finish(action.message || held?.message || '', action.proposals, action.game_sources, action.game);
       return;
     }
     const allowed = action.action === 'look'
@@ -1244,7 +1392,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
           const id = survey!.identities.get(ref) ?? gameRefs.get(ref)!.identity;
           if (image) references.push({ label: `${ref} «${id?.official_name ?? gameRefs.get(ref)!.name}»`, image });
         }
-        const verdict = await deps.lookAtImages!(fetchable, action.question || `Viser bildene ${focus?.subject_name ?? 'figuren'}?`,
+        const verdict = await deps.lookAtImages!(fetchable, action.question || (gameInfo ? `Viser bildene esken eller illustrasjonen til ${gameInfo.game}?` : `Viser bildene ${focus?.subject_name ?? 'figuren'}?`),
           focus?.reference_image ?? identityRef ?? plan?.reference_images[0] ?? null, references.length ? references : undefined);
         emit({ type: 'look_done', summary: verdict.slice(0, 300) });
         trace.push({ action: 'look', target: `${urls.length} bilder`, result: verdict.slice(0, 160) });
@@ -1511,6 +1659,149 @@ export function verifyProposals(proposals: unknown[], opened: Map<string, PageRe
     out.push(p);
   }
   return { proposals: out, warnings };
+}
+
+/** The website in a game lookup's answer: {"url": …} or a plain string. */
+function websiteUrlOf(game: unknown): string | null {
+  if (!game || typeof game !== 'object') return null;
+  const w = (game as Record<string, unknown>).website;
+  const u = typeof w === 'string' ? w : w && typeof w === 'object' ? (w as Record<string, unknown>).url : null;
+  return typeof u === 'string' && u.trim() ? u.trim() : null;
+}
+
+/** Lower case, without accents and punctuation, so «Asmodée» is found in «ASMODEE Group» (and «&amp;» in a snippet is «&»). */
+function plain(s: string): string {
+  return ` ${s.replace(/&(amp|#38|#0?39|apos|quot|#34|nbsp);/gi, ' ').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()} `;
+}
+
+const GAME_IMAGE_KIND: Record<string, GameInfoImage['kind']> = {
+  box: 'box', box_art: 'box', boxart: 'box', cover: 'box', esken: 'box',
+  cover_art: 'cover_art', key_art: 'cover_art', keyart: 'cover_art', illustration: 'cover_art', concept_art: 'cover_art', art: 'cover_art',
+};
+
+/**
+ * Checks a game lookup's answer against this run, like verifyProposals does for drafts:
+ * - each fact keeps its page only when the agent opened it or got it in a search, and is «checked» when the value
+ *   stands in the page's text (or the search hit's title and snippet); a page the agent never saw is removed;
+ * - the website must be a page the agent opened or found, with its exact address;
+ * - pictures must be on the image list of an opened page or come from an image search.
+ * Everything removed is listed in the warnings.
+ */
+export function verifyGameInfo(raw: unknown, opened: Map<string, PageResult>, searched: Map<string, SearchHit>,
+  imageHits: Map<string, ImageHit> = new Map(), hostedOpened: Set<string> = new Set()): { info: GameInfo | null; warnings: string[] } {
+  const warnings: string[] = [];
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { info: null, warnings };
+  const o = raw as Record<string, unknown>;
+  const text = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
+  const used = new Map<string, { url: string; title: string; opened: boolean }>();
+
+  /** The page behind a fact, and the text Paintrest has of it (none for pages only UiB read). */
+  const pageOf = (u: unknown): { url: string; title: string; opened: boolean; text: string | null } | 'unseen' | null => {
+    const url = text(u, 2000);
+    if (!url) return null;
+    if (!/^https?:\/\//i.test(url)) return 'unseen';
+    const key = normUrl(url);
+    const page = opened.get(key);
+    if (page) return { url: page.url, title: page.title, opened: true, text: `${page.title}\n${page.text}` };
+    const hit = searched.get(key);
+    if (hostedOpened.has(key)) return { url: hit?.url ?? url, title: hit?.title || url, opened: true, text: null };
+    if (hit) return { url: hit.url, title: hit.title || hit.url, opened: false, text: hit.snippet ? `${hit.title}\n${hit.snippet}` : null };
+    return 'unseen';
+  };
+  const fact = <T>(label: string, v: unknown, read: (x: unknown) => T | null, inText: (value: T, hay: string) => boolean): GameFact<T> | null => {
+    const f = (v && typeof v === 'object' && !Array.isArray(v) ? v : { value: v }) as Record<string, unknown>;
+    const value = read(f.value);
+    if (value === null) return null;
+    const page = pageOf(f.source ?? f.source_url ?? f.url);
+    if (page === 'unseen') {
+      warnings.push(`Fjernet kilden for ${label} (${String(f.source ?? f.source_url ?? f.url).slice(0, 200)}): agenten hadde verken søkt den fram eller åpnet den. Opplysningen vises som ikke sjekket.`);
+      return { value, source: null, basis: 'model' };
+    }
+    if (!page) return { value, source: null, basis: 'model' };
+    used.set(normUrl(page.url), { url: page.url, title: page.title, opened: page.opened });
+    return { value, source: { url: page.url, title: page.title }, basis: page.text && inText(value, page.text) ? 'checked' : 'source' };
+  };
+
+  const thisYear = new Date().getFullYear();
+  const year_published = fact('utgivelsesåret', o.year_published ?? o.year, (x) => {
+    const n = typeof x === 'number' ? x : typeof x === 'string' ? Number.parseInt(x, 10) : Number.NaN;
+    return Number.isInteger(n) && n >= 1800 && n <= thisYear + 2 ? n : null;
+  }, (n, hay) => new RegExp(`(^|\\D)${n}(\\D|$)`).test(hay));
+  const publishers = fact('utgiveren', o.publishers ?? o.publisher, (x) => {
+    const list = (Array.isArray(x) ? x : typeof x === 'string' ? [x] : []).flatMap((p) => (typeof p === 'string' && p.trim() ? [p.trim().slice(0, 120)] : []));
+    return list.length ? [...new Set(list)].slice(0, 5) : null;
+  }, (list, hay) => list.every((p) => plain(hay).includes(plain(p))));
+
+  let website: GameInfo['website'] = null;
+  const site = websiteUrlOf(o);
+  if (site) {
+    const key = normUrl(site);
+    const page = opened.get(key);
+    const hit = searched.get(key);
+    const why = o.website && typeof o.website === 'object' ? text((o.website as Record<string, unknown>).why, 400) : null;
+    if (!/^https?:\/\//i.test(site)) warnings.push(`Fjernet nettsiden «${site.slice(0, 200)}»: det er ikke en nettadresse.`);
+    else if (page) website = { url: page.url, title: page.title, basis: 'read', why };
+    else if (hostedOpened.has(key)) website = { url: hit?.url ?? site, title: hit?.title ?? null, basis: 'read', why };
+    else if (hit) website = { url: hit.url, title: hit.title || null, basis: 'found', why };
+    else warnings.push(`Fjernet nettsiden ${site.slice(0, 200)}: agenten hadde verken åpnet den eller fått den i et søk.`);
+    if (website) used.set(normUrl(website.url), { url: website.url, title: website.title ?? website.url, opened: website.basis === 'read' });
+  }
+
+  const rawImages = Array.isArray(o.images) ? o.images : [];
+  const seen = new Set<string>();
+  const images = rawImages.flatMap((i): GameInfoImage[] => {
+    const x = (i && typeof i === 'object' ? i : {}) as Record<string, unknown>;
+    const imageUrl = typeof x.image_url === 'string' ? normUrl(x.image_url) : '';
+    if (!imageUrl || seen.has(imageUrl)) return [];
+    let page = typeof x.page_url === 'string' ? opened.get(normUrl(x.page_url)) : undefined;
+    if (!page || !page.images.some((p) => normUrl(p.url) === imageUrl)) page = [...opened.values()].find((pg) => pg.images.some((p) => normUrl(p.url) === imageUrl));
+    const hit = imageHits.get(imageUrl);
+    const kind = GAME_IMAGE_KIND[String(x.kind ?? '').toLowerCase()] ?? 'other';
+    const confidence = x.confidence === 'high' || x.confidence === 'medium' || x.confidence === 'low' ? x.confidence : null;
+    const caption = text(x.caption, 300);
+    if (page) {
+      seen.add(imageUrl);
+      const img = page.images.find((p) => normUrl(p.url) === imageUrl)!;
+      return [{ image_url: img.url, thumbnail_url: hit?.thumbnail_url ?? null, page_url: page.url, page_title: page.title, site: page.site,
+        kind, caption: caption ?? img.caption ?? (img.alt || null), confidence }];
+    }
+    if (hit) {
+      seen.add(imageUrl);
+      return [{ image_url: hit.image_url, thumbnail_url: hit.thumbnail_url, page_url: hit.page_url, page_title: hit.title || hit.site, site: hit.site,
+        kind, caption: caption ?? (hit.title || null), confidence }];
+    }
+    return [];
+  });
+  // Repeats of the same picture are not counted as removed.
+  const offered = new Set(rawImages.flatMap((i) => {
+    const u = i && typeof i === 'object' ? (i as Record<string, unknown>).image_url : null;
+    return typeof u === 'string' && u ? [normUrl(u)] : [];
+  }));
+  const dropped = offered.size - images.length;
+  if (dropped > 0) warnings.push(`Fjernet ${dropped} bilde(r) som ikke fantes på en side agenten åpnet eller i et bildesøk.`);
+  const order = { high: 0, medium: 1, low: 2 } as Record<string, number>;
+  // Box and cover art before other pictures, then by how sure the agent is.
+  images.sort((a, b) => Number(a.kind === 'other') - Number(b.kind === 'other') || (order[a.confidence ?? ''] ?? 3) - (order[b.confidence ?? ''] ?? 3));
+
+  const removed: string[] = [];
+  for (const sx of Array.isArray(o.sources) ? o.sources : []) {
+    const u = typeof sx === 'string' ? sx : sx && typeof sx === 'object' ? (sx as Record<string, unknown>).url : null;
+    const page = pageOf(u);
+    if (page === 'unseen') removed.push(String(u).slice(0, 200));
+    else if (page && !used.has(normUrl(page.url))) used.set(normUrl(page.url), { url: page.url, title: page.title, opened: page.opened });
+  }
+  if (removed.length) warnings.push(`Fjernet ${removed.length} kilde(r) som agenten ikke hadde søkt fram eller åpnet: ${removed.slice(0, 5).join(' · ')}${removed.length > 5 ? ' …' : ''}`);
+
+  return {
+    info: {
+      official_name: text(o.official_name ?? o.name, 200),
+      year_published, publishers, website,
+      images: images.slice(0, MAX_GAME_IMAGES),
+      sources: [...used.values()].slice(0, 12),
+      uncertainty: text(o.uncertainty, 600),
+    },
+    warnings,
+  };
 }
 
 /** A query without quotation marks; exact phrases are the usual reason a search finds nothing. */

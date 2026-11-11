@@ -276,3 +276,16 @@ describe('beskjed til agenten mens den jobber', () => {
     }
   });
 });
+
+describe('fakta og illustrasjon: det klienten sender (brukerønske 11.11.2026)', () => {
+  it('tar med det spillsiden har, og bare nettadresser', () => {
+    expect(parseFocus({
+      kind: 'game_info', game: '  Zombicide ', year: 2012, publishers: ['CMON', 7, ''], website: 'javascript:alert(1)',
+      expansions: ['Washington Z.C.'], known_pages: [{ url: 'https://www.cmon.com/zombicide', title: 'CMON' }, { url: 'file:///etc/passwd', title: 'x' }],
+    })).toEqual({
+      kind: 'game_info', game: 'Zombicide', year: 2012, publishers: ['CMON'], website: null, expansions: ['Washington Z.C.'],
+      known_pages: [{ url: 'https://www.cmon.com/zombicide', title: 'CMON' }],
+    });
+    expect(parseFocus({ kind: 'game_info', year: 'snart', website: 'https://www.cmon.com/' })).toMatchObject({ game: 'ukjent spill', year: null, website: 'https://www.cmon.com/' });
+  });
+});

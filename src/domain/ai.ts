@@ -81,7 +81,45 @@ export interface AgentTurnInput {
     | { kind: 'knowledge'; target: 'technique' | 'recipe' | 'image'; revision?: { name: string } | null; paints?: 'both' | 'owned' | 'best' | null;
         /** «Fra bilde»: the user's pictures as data URLs, sent to the model with the request. */
         reference_images?: string[] }
+    /** Game page: facts (year, publisher, official website) and pictures for the game's illustration. */
+    | { kind: 'game_info'; game: string; year: number | null; publishers: string[]; website: string | null; expansions: string[];
+        /** Official pages a game survey found for the game. */
+        known_pages: TaggedSourceRef[] }
     | null;
+}
+
+/**
+ * One fact the game lookup found, with the page it builds on (server/research-agent.ts, verifyGameInfo).
+ * checked: Paintrest found the value in the page's text; source: the page was read or found, but the value
+ * could not be checked there; model: no page behind it.
+ */
+export interface GameFact<T> {
+  value: T;
+  source: { url: string; title: string } | null;
+  basis: 'checked' | 'source' | 'model';
+}
+
+export interface GameInfoImage {
+  image_url: string;
+  thumbnail_url: string | null;
+  page_url: string;
+  page_title: string | null;
+  site: string;
+  kind: 'box' | 'cover_art' | 'other';
+  caption: string | null;
+  confidence: 'high' | 'medium' | 'low' | null;
+}
+
+/** What the game lookup found, after the server's checks. */
+export interface GameInfo {
+  official_name: string | null;
+  year_published: GameFact<number> | null;
+  publishers: GameFact<string[]> | null;
+  /** read: the agent opened the page; found: it came up in a search. */
+  website: { url: string; title: string | null; basis: 'read' | 'found'; why: string | null } | null;
+  images: GameInfoImage[];
+  sources: { url: string; title: string; opened: boolean }[];
+  uncertainty: string | null;
 }
 
 /** A page the user tagged or saved for the miniature, as the agent gets it. */
@@ -136,7 +174,9 @@ export type ResearchEvent =
       /** Game survey: who each miniature is, by ref. */
       identities?: { subject_ref: string; identity: SubjectIdentity }[];
       /** Game survey: sources for the whole game, with role and which miniatures they show. */
-      game_sources?: GameSourceIn[] }
+      game_sources?: GameSourceIn[];
+      /** Game lookup (game page): facts and picture suggestions. */
+      game_info?: GameInfo | null }
   | { type: 'error'; error: string };
 
 import type { SubjectIdentity, SubjectIdentityRecord } from './types';
