@@ -300,12 +300,6 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
 
       <ErrorNote error={error} onClose={() => setError(null)} />
       <ErrorNote error={run?.status === 'error' ? run.error ?? 'Agenten feilet.' : null} onClose={() => runs.dismiss(projectId, 'project')} />
-      {run?.status === 'stopped' && (
-        <div className="error-note" role="status">
-          <span>Agenten ble stoppet. Send en ny melding for å fortsette.</span>
-          <button type="button" className="link" onClick={() => runs.dismiss(projectId, 'project')}>Lukk</button>
-        </div>
-      )}
 
       <form className="agent-input" onSubmit={(e) => { e.preventDefault(); send(ctl.draft); }}>
         {ai === 'ready' && !busy && !view?.messages.length && (

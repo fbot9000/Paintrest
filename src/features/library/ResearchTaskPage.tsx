@@ -56,12 +56,6 @@ export function ResearchTaskPage() {
       </div>
       <AiStatusNote status={status} />
       <ErrorNote error={run?.status === 'error' ? run.error ?? 'Agenten feilet.' : null} onClose={() => runs.dismiss(taskId, 'knowledge')} />
-      {run?.status === 'stopped' && (
-        <div className="error-note" role="status">
-          <span>Agenten ble stoppet. Send en ny melding for å fortsette.</span>
-          <button type="button" className="link" onClick={() => runs.dismiss(taskId, 'knowledge')}>Lukk</button>
-        </div>
-      )}
 
       {pending.map((p) => <DraftCard key={p.id} p={p} messages={view.messages} revisionOf={view.revision_of?.id ?? null} />)}
 
