@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { extract } from './fetch-page.ts';
 import type { PageResult } from './fetch-page.ts';
 import { isPrivateAddress } from './net-guard.ts';
-import { isRefusal, parseAction, runResearch } from './research-agent.ts';
+import { MAX_IMAGE_STEPS, OFFICIAL_STEPS, isRefusal, parseAction, runResearch } from './research-agent.ts';
 import type { ResearchEvent } from './research-agent.ts';
 import { HostedToolError, hostedSearchOf, parseResponse } from './provider.ts';
 import type { ResponsesProvider } from './provider.ts';
@@ -203,6 +203,7 @@ describe('bildejakt', () => {
       provider: provider([
         '{"action":"open","url":"https://example.com/gallery"}',
         '{"action":"look","image_urls":["https://example.com/img/merlin-front.jpg","https://elsewhere.example/x.jpg"],"question":"Er dette Balor?"}',
+        '{"action":"anchor","image_url":null,"description":"Stor demon med pisk","why":"Fant ikke utgiverens bilde"}',
         JSON.stringify({ action: 'final', message: 'Fant ett bilde', proposals: [{ type: 'reference_selection', payload: { subject: 'M1',
           images: [{ image_url: 'https://example.com/img/merlin-front.jpg', page_url: 'https://example.com/gallery', confidence: 'medium', reason: 'Teksten sier «Balor ferdig malt».', original_text: '발로르 도색 완료' }],
           sources_read: [{ url: 'https://example.com/gallery', language: 'ko', summary: 'Koreansk maleblogg om Avalon.', original_excerpt: '아발론' }, { url: 'https://never-opened.example' }] } }] }),
@@ -236,11 +237,79 @@ describe('bildejakt', () => {
     expect(events.filter((e) => e.type === 'tool_error' && e.action === 'look')).toHaveLength(1);
   });
 
-  it('gir bildejakt flere steg enn vanlig research', async () => {
+  it('gir fase 1 egne steg og bildejakten flere steg enn vanlig research', async () => {
     const events: ResearchEvent[] = [];
-    await runResearch({ provider: provider(Array(30).fill('{"action":"search","query":"q"}')), search: fakeSearch, openPage: async () => PAGE },
+    await runResearch({ provider: provider(Array(60).fill('{"action":"search","query":"q"}')), search: fakeSearch, openPage: async () => PAGE },
       { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: [], focus }, (e) => events.push(e));
-    expect(events.filter((e) => e.type === 'search')).toHaveLength(24);
+    const phases = events.flatMap((e) => (e.type === 'phase' ? [e.phase] : []));
+    expect(phases).toEqual(['official', 'broad']);
+    const firstBroad = events.findIndex((e) => e.type === 'phase' && e.phase === 'broad');
+    expect(events.slice(0, firstBroad).filter((e) => e.type === 'search')).toHaveLength(OFFICIAL_STEPS);
+    expect(events.filter((e) => e.type === 'search')).toHaveLength(MAX_IMAGE_STEPS);
+    expect(events.find((e) => e.type === 'anchor')).toMatchObject({ anchor: { image_url: null } });
+  });
+
+  const OFFICIAL: PageResult = {
+    url: 'https://publisher.example/avalon/balor', title: 'Balor – Avalon add-on', site: 'publisher.example', author: 'Publisher', language: 'en',
+    text: 'Balor, the demon of the mist. Miniatures painted by Studio Nine.',
+    images: [{ url: 'https://publisher.example/img/balor-painted.jpg', alt: 'Balor painted', caption: 'Painted by Studio Nine', context: null }],
+  };
+  const pages = async (url: string) => (url.includes('publisher') ? OFFICIAL : PAGE);
+
+  it('finner et kontrollert anker i fase 1 og bruker det som referanse i fase 2', async () => {
+    const noRef = { ...focus, reference_image: null };
+    const looks: (string | null)[] = [];
+    const events: ResearchEvent[] = [];
+    let instructionsSeen: string[] = [];
+    const replies = [
+      '{"action":"open","url":"https://publisher.example/avalon/balor"}',
+      '{"action":"final","message":"for tidlig","proposals":[]}',
+      '{"action":"anchor","image_url":"https://elsewhere.example/fake.jpg","page_url":"https://publisher.example/avalon/balor"}',
+      '{"action":"anchor","image_url":"https://publisher.example/img/balor-painted.jpg","page_url":"https://publisher.example/avalon/balor","kind":"official","painter":"Studio Nine","description":"Bevinget demon med pisk","why":"Utgiverens produktside"}',
+      '{"action":"open","url":"https://example.com/gallery"}',
+      '{"action":"look","image_urls":["https://example.com/img/merlin-front.jpg"]}',
+      JSON.stringify({ action: 'final', message: 'ferdig', proposals: [{ type: 'reference_selection', payload: { subject: 'M1',
+        images: [{ image_url: 'https://example.com/img/merlin-front.jpg', page_url: 'https://example.com/gallery', kind: 'painted', confidence: 'low' }],
+        videos: [{ url: 'https://youtu.be/abcdefghijk', why: 'Malevideo' }, { url: 'https://www.youtube.com/watch?v=zzzzzzzzzzz' }, { url: 'https://vimeo.com/1' }] } }] }),
+    ];
+    let i = 0;
+    const prov = { respond: async (_m: unknown, o: { instructions: string }) => { instructionsSeen.push(o.instructions); return { text: replies[i++] ?? '{"action":"final","message":"slutt","proposals":[]}', model: 'm', usage: null, searches: [], citations: [] }; } } as unknown as ResponsesProvider;
+    await runResearch({
+      provider: prov, search: fakeSearch, openPage: pages,
+      lookAtImages: async (_u, _q, ref) => { looks.push(ref); return 'ja'; },
+      imageAsDataUrl: async (u) => `data:image/jpeg;base64,${Buffer.from(u).toString('base64')}`,
+      videoInfo: async (u) => {
+        if (!u.includes('abcdefghijk')) throw new Error('ukjent');
+        return { url: 'https://www.youtube.com/watch?v=abcdefghijk', video_id: 'abcdefghijk', title: 'Painting Balor', channel: 'Mini Channel', channel_url: null, thumbnail_url: 'https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg' };
+      },
+    }, { context: {}, messages: [{ role: 'user', content: 'Finn Balor' }], result_types: ['reference_selection'], focus: noRef }, (e) => events.push(e));
+
+    expect(instructionsSeen[0]).toContain('FASE 1 AV 2');
+    expect(instructionsSeen.at(-1)).toContain('FASE 2 AV 2');
+    expect(instructionsSeen.at(-1)).toContain('Studio Nine');
+    expect(looks).toEqual([`data:image/jpeg;base64,${Buffer.from('https://publisher.example/img/balor-painted.jpg').toString('base64')}`]);
+    const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    const payload = (final.proposals[0] as { payload: { images: Record<string, unknown>[]; anchor: Record<string, unknown>; videos: Record<string, unknown>[] } }).payload;
+    expect(payload.anchor).toMatchObject({ image_url: 'https://publisher.example/img/balor-painted.jpg', painter: 'Studio Nine', kind: 'official' });
+    expect(payload.images.map((x) => x.image_url)).toEqual(['https://publisher.example/img/balor-painted.jpg', 'https://example.com/img/merlin-front.jpg']);
+    expect(payload.images[0]).toMatchObject({ confidence: 'high', kind: 'official' });
+    expect(payload.videos).toEqual([{ url: 'https://www.youtube.com/watch?v=abcdefghijk', video_id: 'abcdefghijk', title: 'Painting Balor', channel: 'Mini Channel', thumbnail_url: 'https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg', why: 'Malevideo' }]);
+    expect(final.warnings.join(' ')).toContain('Fjernet 2 video');
+  });
+
+  it('lager et bildeforslag med ankeret selv om agenten ikke foreslår noe', async () => {
+    const events: ResearchEvent[] = [];
+    await runResearch({
+      provider: provider([
+        '{"action":"open","url":"https://publisher.example/avalon/balor"}',
+        '{"action":"anchor","image_url":"https://publisher.example/img/balor-painted.jpg","page_url":"https://publisher.example/avalon/balor"}',
+        '{"action":"final","message":"Fant ingen malte","proposals":[]}',
+      ]),
+      search: fakeSearch, openPage: pages,
+    }, { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: ['reference_selection'], focus }, (e) => events.push(e));
+    const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    expect(final.proposals).toHaveLength(1);
+    expect(final.proposals[0]).toMatchObject({ type: 'reference_selection', payload: { subject: 'M1', images: [{ image_url: 'https://publisher.example/img/balor-painted.jpg' }], videos: [] } });
   });
 });
 
@@ -372,3 +441,134 @@ describe('research til biblioteket (bit 7.4)', () => {
   });
 });
 
+describe('videoer og sidedata', () => {
+  it('kjenner igjen YouTube-adresser', async () => {
+    const { youtubeId } = await import('./fetch-page.ts');
+    expect(youtubeId('https://www.youtube.com/watch?v=abcdefghijk&t=10')).toBe('abcdefghijk');
+    expect(youtubeId('https://youtu.be/abcdefghijk')).toBe('abcdefghijk');
+    expect(youtubeId('https://m.youtube.com/shorts/abcdefghijk')).toBe('abcdefghijk');
+    expect(youtubeId('https://www.youtube.com/channel/abc')).toBeNull();
+    expect(youtubeId('https://notyoutube.com/watch?v=abcdefghijk')).toBeNull();
+  });
+
+  it('leser en YouTube-side gjennom oEmbed', async () => {
+    const { fetchPage } = await import('./fetch-page.ts');
+    const seen: string[] = [];
+    const fetchImpl = (async (u: string) => {
+      seen.push(String(u));
+      return new Response(JSON.stringify({ title: 'Painting Balor', author_name: 'Mini Channel', thumbnail_url: 'https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg' }), { headers: { 'content-type': 'application/json' } });
+    }) as unknown as typeof fetch;
+    const page = await fetchPage('https://youtu.be/abcdefghijk', { fetchImpl, allowLocal: true, oembedBase: 'http://127.0.0.1:1/oembed' });
+    expect(seen[0]).toBe('http://127.0.0.1:1/oembed?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabcdefghijk&format=json');
+    expect(page).toMatchObject({ url: 'https://www.youtube.com/watch?v=abcdefghijk', title: 'Painting Balor', author: 'Mini Channel', site: 'youtube.com',
+      images: [{ url: 'https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg' }], video: { video_id: 'abcdefghijk' } });
+  });
+
+  it('henter bilder fra sidedata når siden bygges med skript (kampanjesider)', () => {
+    const html = `<html><head><title>Avalon – Gamefound</title></head><body><div id="app"></div>
+      <script>window.__STATE__ = {"images":["https:\\/\\/cdn.gamefound.example\\/balor-painted.jpg","https://cdn.gamefound.example/icon-small.png"],"x":"https://cdn.gamefound.example/stretch.webp?w=800"}</script></body></html>`;
+    const r = extract('https://gamefound.example/projects/avalon', html);
+    expect(r.images.map((i) => i.url)).toEqual(['https://cdn.gamefound.example/balor-painted.jpg', 'https://cdn.gamefound.example/stretch.webp?w=800']);
+    expect(r.images[0]!.context).toContain('sidens data');
+  });
+});
+
+describe('bilder i nettbutikker', () => {
+  it('fyller ut størrelsesmaler og viser hvert bilde én gang, i største størrelse', () => {
+    const html = `<html><head><title>Deluxe Upgrade Pack</title><meta property="og:image" content="https://cdn.shop.example/files/pack.jpg?v=17"></head><body>
+      <img src="https://cdn.shop.example/files/pack_300x.jpg?v=17" alt="Load image into Gallery viewer">
+      <img data-src="//cdn.shop.example/files/agents_{width}x.jpg?v=3" data-widths="[180,360]" alt="Load image into Gallery viewer">
+      <img src="https://cdn.shop.example/files/agents_360x.jpg?v=3">
+      <img src="https://img.example/get?id=1"><img src="https://img.example/get?id=2">
+      <img data-src="https://cdn.shop.example/files/x_{size}.jpg"></body></html>`;
+    const r = extract('https://shop.example/products/pack', html);
+    expect(r.images.map((i) => i.url)).toEqual([
+      'https://cdn.shop.example/files/pack.jpg?v=17',
+      'https://cdn.shop.example/files/agents_1200x.jpg?v=3',
+      'https://img.example/get?id=1',
+      'https://img.example/get?id=2',
+    ]);
+  });
+});
+
+describe('innhold, ikke anbefalinger', () => {
+  it('tar bare bildene i selve innholdet, og bare hovedbildet på videosider', () => {
+    const page = `<html><head><title>Galleri</title></head><body><nav><img src="https://a.example/menu-photo.jpg"></nav>
+      <article><p>Malte agenter</p><img src="https://a.example/agents.jpg"></article>
+      <aside><img src="https://a.example/other-game.jpg"></aside></body></html>`;
+    expect(extract('https://a.example/post', page).images.map((i) => i.url)).toEqual(['https://a.example/agents.jpg']);
+    const video = `<html><head><meta property="og:image" content="https://i0.hdslb.example/cover.jpg"><title>视频</title></head><body>
+      <img src="https://i0.hdslb.example/rec1.jpg"><img src="https://i0.hdslb.example/rec2.jpg"></body></html>`;
+    expect(extract('https://www.bilibili.com/video/BV1x', video).images.map((i) => i.url)).toEqual(['https://i0.hdslb.example/cover.jpg']);
+  });
+});
+
+describe('bildesøk', () => {
+  const focus = { kind: 'images' as const, subject_ref: 'M1', subject_name: 'Agenter', game: 'Dune Imperium', reference_image: null };
+  it('leser Brave- og Tavily-svar', async () => {
+    const { parseBraveImages, parseTavilyImages } = await import('./search.ts');
+    expect(parseBraveImages({ results: [{ title: 'Painted agents', url: 'https://www.reddit.com/r/x/1', source: 'reddit.com',
+      thumbnail: { src: 'https://imgs.search.brave.com/abc' }, properties: { url: 'https://i.redd.it/a.jpg' } }, { title: 'x' }] }))
+      .toEqual([{ image_url: 'https://i.redd.it/a.jpg', thumbnail_url: 'https://imgs.search.brave.com/abc', page_url: 'https://www.reddit.com/r/x/1', title: 'Painted agents', site: 'reddit.com' }]);
+    expect(parseTavilyImages({ results: [{ url: 'https://bgg.example/t', title: 'Thread', images: ['https://cf.bgg.example/1.jpg', { url: 'https://cf.bgg.example/2.jpg', description: 'Agents' }] }] }).map((i) => [i.image_url, i.title]))
+      .toEqual([['https://cf.bgg.example/1.jpg', 'Thread'], ['https://cf.bgg.example/2.jpg', 'Agents']]);
+  });
+
+  it('søker bilder, ser på miniatyrbildet og foreslår uten å åpne siden', async () => {
+    const hit = { image_url: 'https://i.redd.it/agents.jpg', thumbnail_url: 'https://imgs.search.brave.com/t1', page_url: 'https://www.reddit.com/r/dune/1', title: 'Painted my Dune Imperium agents', site: 'reddit.com' };
+    const queries: string[] = [];
+    const looked: string[][] = [];
+    const search = {
+      configured: () => true,
+      search: async () => [],
+      imageSearch: async (q: string) => { queries.push(q); return q.includes('"') ? [] : [hit]; },
+    } as unknown as WebSearch;
+    const replies = [
+      '{"action":"image_search","query":"\\"Dune Imperium\\" agents"}',
+      '{"action":"anchor","image_url":"https://i.redd.it/agents.jpg","page_url":"https://www.reddit.com/r/dune/1","kind":"official"}',
+      '{"action":"look","image_urls":["https://i.redd.it/agents.jpg"]}',
+      JSON.stringify({ action: 'final', message: 'ok', proposals: [{ type: 'reference_selection', payload: { subject: 'M1',
+        images: [{ image_url: 'https://i.redd.it/agents.jpg', page_url: 'https://www.reddit.com/r/dune/1', kind: 'painted', confidence: 'high', reason: 'Malt' }] } }] }),
+    ];
+    let i = 0;
+    const prov = { respond: async () => ({ text: replies[i++] ?? '{"action":"final","message":"slutt","proposals":[]}', model: 'm', usage: null, searches: [], citations: [] }) } as unknown as ResponsesProvider;
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider: prov, search, openPage: async () => { throw new Error('skal ikke åpnes'); },
+      lookAtImages: async (urls) => { looked.push(urls); return '1 – ja'; } },
+    { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: ['reference_selection'], focus }, (e) => events.push(e));
+    expect(queries).toEqual(['"Dune Imperium" agents', 'Dune Imperium agents']);
+    expect(looked).toEqual([['https://imgs.search.brave.com/t1']]);
+    const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    const images = (final.proposals[0] as { payload: { images: Record<string, unknown>[] } }).payload.images;
+    expect(images).toHaveLength(1);
+    expect(images[0]).toMatchObject({ image_url: 'https://i.redd.it/agents.jpg', thumbnail_url: 'https://imgs.search.brave.com/t1', page_url: 'https://www.reddit.com/r/dune/1', site: 'reddit.com' });
+    expect(events.some((e) => e.type === 'image_search_done')).toBe(true);
+  });
+});
+
+describe('brukerens egne bilder', () => {
+  it('gir agenten bildene som spor, lar den se på dem, og foreslår dem ikke på nytt', async () => {
+    const mine = { image_url: 'https://i.redd.it/mine.jpg', page_url: 'https://www.reddit.com/r/dune/9', title: 'Painted agents by u/brush' };
+    const focus = { kind: 'images' as const, subject_ref: 'M1', subject_name: 'Agenter', game: 'Dune Imperium', reference_image: null, user_images: [mine] };
+    const seen: string[] = [];
+    const looked: string[][] = [];
+    const replies = [
+      '{"action":"look","image_urls":["https://i.redd.it/mine.jpg"]}',
+      '{"action":"anchor","image_url":"https://i.redd.it/mine.jpg","page_url":"https://www.reddit.com/r/dune/9"}',
+      JSON.stringify({ action: 'final', message: 'ok', proposals: [{ type: 'reference_selection', payload: { subject: 'M1',
+        images: [{ image_url: 'https://i.redd.it/mine.jpg', page_url: 'https://www.reddit.com/r/dune/9' }] } }] }),
+    ];
+    let i = 0;
+    const prov = { respond: async (_m: unknown, o: { instructions: string }) => { seen.push(o.instructions); return { text: replies[i++] ?? '{"action":"final","message":"slutt","proposals":[]}', model: 'm', usage: null, searches: [], citations: [] }; } } as unknown as ResponsesProvider;
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider: prov, search: fakeSearch, openPage: async () => PAGE, lookAtImages: async (urls) => { looked.push(urls); return 'ja'; } },
+      { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: ['reference_selection'], focus }, (e) => events.push(e));
+    expect(seen[0]).toContain('Brukeren har allerede funnet dette bildet');
+    expect(seen[0]).toContain('https://www.reddit.com/r/dune/9');
+    expect(looked).toEqual([['https://i.redd.it/mine.jpg']]);
+    expect(events.find((e) => e.type === 'anchor')).toMatchObject({ anchor: { image_url: 'https://i.redd.it/mine.jpg' } });
+    const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    const images = (final.proposals[0] as { payload: { images: unknown[] } } | undefined)?.payload.images ?? [];
+    expect(images).toEqual([]);
+  });
+});

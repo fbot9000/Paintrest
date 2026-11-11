@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-`npm run dev` starter både Paintrest-serveren (port 8787, bare localhost) og Vite. Åpne adressen Vite skriver ut. Slik åpner du appen på iPad på samme nett:
+`npm run dev` starter både Paintrest-serveren (port 8787, bare localhost) og Vite på fast port: http://localhost:5173. Slik åpner du appen på iPad på samme nett:
 
 ```bash
 npm run dev -- --host
@@ -24,14 +24,35 @@ npm test          # kommandolaget: versjoner, avvik, ferdigstilling, BGG-kobling
 npm run build     # typesjekk og produksjonsbygg til dist/
 ```
 
-Ved første start får appen eksempeldata: prosjektet Avalon med fire figurer og ferdige maleplaner for Merlin og Druid Champions. «⋯ → Tilbakestill eksempeldata» setter dataene tilbake.
+Ved første start får appen eksempeldata: prosjektet Avalon med fire figurer og ferdige maleplaner for Merlin og Druid Champions. «⋯ → Tilbakestill eksempeldata» setter dataene tilbake. Du må skrive «tilbakestill» for å bekrefte, og serveren tar en sikkerhetskopi først.
+
+## Lagring: datamappen ~/Paintrest
+
+Paintrest-serveren eier dataene. De ligger i en fast mappe på maskinen, ikke i nettleseren. Derfor ser du de samme dataene uansett port, nettleser eller fane.
+
+```
+~/Paintrest/
+  data.json        prosjektene, med revisjonsnummer
+  files/           bildene (files/trash/ for bilder som er fjernet; ingenting slettes)
+  backups/         sikkerhetskopier av data.json, de 30 siste beholdes
+  master.key, ai_credential.json, search_credential.json   krypterte nøkler
+```
+
+- Mappen kan flyttes med `PAINTREST_DATA_DIR=/annen/mappe npm run dev`.
+- Første gang serveren finner en tom datamappe og nettleseren har data fra før, tilbyr appen å flytte dem. Kopien i nettleseren blir liggende urørt.
+- Nøkler fra den gamle mappen `.paintrest-data/` i prosjektet kopieres til datamappen ved oppstart.
+- Øverst til høyre står det hvor dataene er lagret og når. Feiler en lagring, står det der, og appen prøver igjen hvert 5. sekund.
+- Hver lagring sier hvilken revisjon den bygger på. Har en annen fane lagret i mellomtiden, avviser serveren lagringen, og appen ber deg laste inn på nytt. Ingenting overskrives i stillhet.
+- Sikkerhetskopi tas ved oppstart, omtrent hvert 10. minutt med endringer, før tilbakestilling og når du trykker «Ta sikkerhetskopi nå» under «⋯ → Innstillinger».
+- **Gjenoppretting:** stopp appen, kopier ønsket fil fra `backups/` til `data.json`, og start på nytt.
+- Uten server (for eksempel den publiserte forhåndsvisningen) lagrer appen i nettleseren (IndexedDB) og sier det i toppfeltet.
 
 ## AI-nøkkel (UiB)
 
-Appen virker fullt ut uten AI. Nøkkelen legges inn under «⋯ → AI-nøkkel». Adressen er fylt ut med UiB sin: `https://models.api.uib.no/v1`.
+Appen virker fullt ut uten AI. Nøkkelen legges inn under «⋯ → Innstillinger: AI, nettsøk og data». Adressen er fylt ut med UiB sin: `https://models.api.uib.no/v1`.
 
-- Nøkkelen sendes én gang fra nettleseren til Paintrest-serveren (`server/`). Serveren krypterer den med AES-256-GCM og lagrer den i `.paintrest-data/ai_credential.json`.
-- Hovednøkkelen ligger i `.paintrest-data/master.key`, eller i miljøvariabelen `PAINTREST_MASTER_KEY` (64 heksadesimale tegn). Begge filene har tilgang bare for eieren, og mappen er utelatt fra git.
+- Nøkkelen sendes én gang fra nettleseren til Paintrest-serveren (`server/`). Serveren krypterer den med AES-256-GCM og lagrer den i `~/Paintrest/ai_credential.json`.
+- Hovednøkkelen ligger i `~/Paintrest/master.key`, eller i miljøvariabelen `PAINTREST_MASTER_KEY` (64 heksadesimale tegn). Begge filene har tilgang bare for eieren. Datamappen ligger utenfor prosjektet og kommer aldri med i git.
 - Nettleseren får aldri nøkkelen tilbake, bare de fire siste tegnene.
 - Bare `server/provider.ts` bruker den dekrypterte nøkkelen, i ett kall om gangen (`GET /models` og `POST /responses`, `Authorization: Bearer …`).
 - Den publiserte forhåndsvisningen på claude.ai har ingen server. Der står det at nøkkelen må legges inn i en lokal kjøring.
@@ -42,7 +63,7 @@ npm test   # også serveren: kryptering, at nøkkelen ikke lekker, feilmeldinger
 
 ## Researchagent
 
-Panelet til høyre i hvert prosjekt. Det bruker nøkkelen og standardmodellen fra «AI-nøkkel».
+Panelet til høyre i hvert prosjekt. Det bruker nøkkelen og standardmodellen fra innstillingene.
 
 - Agenten leser prosjektet, miniatyrene, maleplanene og malingene dine. Den lager **utkast**: nye miniatyrer (`catalog_subject`) og maleplaner (`paint_plan`).
 - En godkjent plan kan agenten bare foreslå ny versjon av når du har trykket «Revider planen med agenten» på miniatyren. Det åpner planen som revisjonsmål (`plan_revision`).
@@ -72,27 +93,60 @@ Agenten bruker først **nettsøket som er bygget inn i UiB sitt API** (OpenAIs `
 
 Panelet viser hvert søk og hver side mens agenten jobber, og du kan stoppe den. Under svaret kan du se hvordan agenten fant det. Serveren fjerner bilder og kilder agenten ikke faktisk har åpnet, og sier fra i panelet.
 
-## Bilder på miniatyrene
+## Bildejakt i to faser
 
-Trykk på bildet på et miniatyrkort. Da åpnes «Bilder for …»:
+«Let etter bilder med AI» i verkstedet går i to faser. Paintrest styrer overgangen, og fasen vises mens agenten jobber.
 
-- **Lagret på miniatyren:** her velger du hvilket bilde som er illustrasjonen, fjerner bilder eller åpner kilden.
-- **Let med AI (bildejakt):** agenten finner først ut hvordan figuren ser ut og hva den heter på andre språk. Så søker den bredt, også på koreanske, japanske og kinesiske malerblogger, og bruker opptil 24 steg. Den kan se på bildene og sammenligne dem med miniatyrens nåværende illustrasjon. Hver kandidat får sikkerhet («Trolig riktig», «Mulig», «Usikker»), en norsk begrunnelse og originalteksten. «Kilder agenten leste» viser et norsk sammendrag av hver side. Du ser hvert steg mens agenten jobber.
-- **Fra lagrede kilder:** du åpner en side som er lagret for spillet, og velger bilder direkte, uten AI. Samme kilde kan gi bilder til mange miniatyrer.
-- **Last opp:** ditt eget bilde.
+1. **Offisielt anker (høyst 10 steg).** Agenten leter hos utgiveren (nettside og nettbutikk), på Kickstarter- eller Gamefound-kampanjen (også oppdateringer og tillegg) og på BoardGameGeek. Den velger det beste offisielle bildet av figuren: helst offisielt malt, ellers render, ellers konseptkunst. Den noterer også maleren kampanjen oppgir. Serveren sjekker at bildet finnes på en side agenten har åpnet. Finner agenten ikke noe, går jakten videre uten anker og sier det.
+2. **Bredt søk (resten av de 30 stegene).** Agenten leter etter malte versjoner: maleren fra kampanjen, blogger og forum på flere språk, Reddit og BGG. Når den bruker «look», viser Paintrest ankeret først som referanse, slik at kandidatene sammenlignes med det (form og positur, ikke farger). Har miniatyren allerede en illustrasjon, brukes den som referanse i stedet.
+3. **Malevideoer.** Agenten foreslår YouTube-videoer, men kan ikke se dem. Paintrest henter tittel, kanal og miniatyrbilde fra YouTube (oEmbed). Videoer som verken YouTube eller søket bekrefter, fjernes. «Lagre som kilde» lagrer en lenke på miniatyren, uten å laste ned noe.
 
-Kryss av for bildene du vil beholde, velg ett som «Illustrasjon» og trykk «Lagre». Bildene lastes ned og lagres med kilde. En kilde eller et bilde som er lagret fra før, gjenbrukes.
+Bilder-fanen viser ankeret øverst, deretter forslagene delt i «Offisielle bilder og konseptkunst» og «Malt av andre», og så videoene.
 
-## Maleplan og palett per miniatyr
+**Lim inn fra Google Bilder.** Feltet øverst i Bilder-fanen tar imot det du kopierer fra Google Bilder eller andre steder. Du kan også lime inn hvor som helst i fanen.
+- **Kopiert bilde** («Kopier bilde» i nettleseren): lagres med en gang. Det virker også for bilder fra Instagram og Facebook, der Paintrest ikke kan hente bildet selv.
+- **Lenke fra Google Bilder** (lenken til et treff, `google.com/imgres?…`): Paintrest leser ut bildet og siden det står på. Bildet legges under «Limt inn», allerede valgt. Trykk «Lagre».
+- **Bildelenke** («Kopier bildeadresse»): som over, uten side.
+- **Lenke til en side:** åpner sidens bilder, slik som en kilde.
+- **Agenten bygger på det du har funnet.** Bildene du har lagret eller limt inn, sendes med når du trykker «Let etter flere». Agenten ser på dem for å vite hvordan figuren ser ut, bruker sidene og titlene som spor for å finne flere, og foreslår dem ikke på nytt.
 
-Når bildene er på plass, trykker du «Neste: maleplan →» i bildevisningen, eller «✦ Lag maleplan og palett med AI» på miniatyrkortet.
+**Bildesøk.** Med en nøkkel for Brave Search (eller Tavily) under «⋯ → Innstillinger» får agenten et bildesøk, slik du bruker Google Bilder. Det virker også når UiB-søket brukes til vanlig nettsøk.
+- Agenten søker bredt og kort («dune imperium painted minis»), ser på bildene i bunker og foreslår dem som viser figuren, uten å åpne sidene. Mange av de beste kildene (Reddit, BoardGameGeek, Etsy, Instagram) stenger Paintrest ute, men bildene deres finnes i bildesøket.
+- Brave gir et lite bilde fra sin egen server ved siden av originalen. Stenger originalsiden, vises og lagres det lille bildet.
+- Søk med anførselstegn som gir null treff, prøves på nytt uten.
+- Brave anbefales: det har et eget bildesøk. Tavily gir bare bildene fra sidene det fant med et vanlig søk.
 
-1. Velg opptil 4 av miniatyrens bilder. Agenten ser på dem.
-2. «Lag maleplan med AI»: agenten analyserer fargesoner og uttrykk og leter etter maleguider. Kildene du allerede har funnet for spillet, leses først. Den foreslår arbeidsmåte, felles operasjoner og deler med steg og eksakte malinger, og en palett for miniatyren. Malinger du eier, foretrekkes.
-3. Rediger fritt: arbeidsmåte, delnavn og rekkefølge, instruksjoner, malinger og roller. Du kan legge til eller fjerne steg, deler og palettrader. Malinger som ikke finnes i katalogen, kobler du til et produkt eller oppretter som ubekreftet, også alle på én gang.
-4. «Godkjenn maleplanen» skriver planen (eller en ny versjon av den) og paletten. Painting Mode viser arbeidsmåte og palett øverst.
+Når agenten leser en side, tas bare bildene i selve innholdet med (artikkel eller hovedinnhold). På videosider som bilibili tas bare videoens eget bilde med, ikke anbefalte videoer.
 
-Alle sider agenten leser, lagres automatisk som kilder for spillet («Funnet av agenten»). Da slipper agenten å finne dem på nytt, og du kan hente bilder fra dem under «Fra lagrede kilder».
+Sider som bygges med skript (typisk kampanjesider), har ofte bildene i sidedata i stedet for i HTML. Har en side færre enn fire synlige bilder, leser Paintrest også bildeadresser fra kildekoden.
+
+## Miniatyrverkstedet
+
+Trykk på bildet eller navnet på et miniatyrkort. Da åpnes verkstedet for miniatyren, som bruker hele skjermen:
+
+- **Venstre: bildene av miniatyren.** Bildet du har valgt vises stort, og du kan zoome. Her gjør du et bilde til illustrasjon, fjerner bilder, åpner kilden og krysser av for hvilke bilder (høyst 4) maleplanen skal bygge på.
+- **Midten: faner.**
+  - **Bilder:**
+    - «Let etter bilder med AI» starter en bildejakt på flere språk.
+    - Bilder fra sidene agenten leser, dukker opp underveis, og du kan velge med en gang.
+    - Agentens forslag kommer med sikkerhet, norsk begrunnelse og originaltekst.
+    - Du kan også velge en kilde i høyre kolonne og hente bilder fra den uten AI, eller laste opp et bilde.
+    - Kryss av, velg én illustrasjon og trykk «Lagre».
+  - **Maleplan:**
+    - «Lag maleplan med AI» bruker bildene du har krysset av. Agenten foreslår arbeidsmåte, deler og steg med eksakte malinger, og en palett.
+    - Planen leses som tekst: sammendrag, en rad med fargene i paletten, en oversikt over delene (trykk for å hoppe) og stegene med malingene som små merker. Eierskap vises bare når noe mangler.
+    - Et forslag har en statuslinje øverst med «Godkjenn», «Rediger alt» og «Forkast». For en ny versjon står det hva som er endret, nye og endrede steg er markert, og du kan bytte til den gjeldende versjonen.
+    - Du redigerer ett steg om gangen med «Rediger» (vises når du holder over steget), eller alt med «Rediger alt». Navn, flytting og sletting av deler ligger i «⋯»-menyen.
+    - Paletten fra forslaget legges i Palett-fanen når du godkjenner, og redigeres der.
+    - Uten forslag vises den gjeldende planen.
+  - **Palett:** malingene miniatyren males med, gruppert per del. Du kan legge til malinger, endre rolle og del, og fjerne rader.
+- **Bildekolonnen kan skjules** med ‹ øverst. Da står bare små bilder igjen, og valget huskes. «I planen» vises bare i Maleplan-fanen.
+- **Høyre: agenten og kildene.** I Maleplan-fanen vises kildene kort, og de planen bygger på står først. Her ser du hva agenten gjør akkurat nå, med «Stopp», og resultatet når den er ferdig. Under ligger alle kildene for spillet, både lagrede og funnet av agenten, med språk og norsk sammendrag. Trykk på en kilde for å hente bilder fra den.
+- **Forrige og neste** øverst flytter deg mellom miniatyrene i prosjektet og beholder fanen du står på.
+- **Agenten fortsetter mens du gjør noe annet.** Du kan bytte fane eller gå tilbake til galleriet. Miniatyrkortet viser «Agenten jobber …». Kjøringen lever i nettleserfanen, så laster du siden på nytt, stopper den.
+- **På iPad** ligger agent og kilder bak knappen «Agent og kilder».
+
+Alle sider agenten leser, lagres automatisk som kilder for spillet («Funnet av agenten»). Da slipper agenten å finne dem på nytt.
 
 ## Dette er med
 

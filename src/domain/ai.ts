@@ -53,7 +53,9 @@ export interface AgentTurnInput {
   direct_apply?: boolean;
   /** Image hunt for one miniature (own strategy, more steps, may look at images). */
   focus?:
-    | { kind: 'images'; subject_ref: string; subject_name: string; game: string; reference_image?: string | null }
+    | { kind: 'images'; subject_ref: string; subject_name: string; game: string; reference_image?: string | null;
+        /** Pictures the user found themselves (for example from Google Images), with their pages. */
+        user_images?: { image_url: string; page_url: string; title: string }[] }
     | { kind: 'plan'; subject_ref: string; subject_name: string; game: string; reference_images: string[]; revision: boolean }
     /** Library research (bit 7.4): a technique or recipe for the user's own library. */
     | { kind: 'knowledge'; target: 'technique' | 'recipe'; revision?: { name: string } | null }
@@ -70,7 +72,7 @@ export interface PageSeen {
 }
 
 export interface TraceStep {
-  action: 'search' | 'open' | 'look';
+  action: 'search' | 'open' | 'look' | 'anchor' | 'image_search';
   target: string;
   result: string;
 }
@@ -81,12 +83,28 @@ export type ResearchEvent =
   | { type: 'search'; query: string; why: string | null }
   | { type: 'search_done'; query: string; hits: { title: string; url: string }[] }
   | { type: 'open'; url: string; why: string | null }
-  | { type: 'open_done'; url: string; title: string; image_count: number }
+  | { type: 'open_done'; url: string; title: string; image_count: number; site?: string; author?: string | null; language?: string | null;
+      images?: { url: string; alt: string; caption: string | null; context: string | null }[] }
+  | { type: 'image_search'; query: string; why: string | null }
+  | { type: 'image_search_done'; query: string; images: ImageHit[] }
   | { type: 'look'; count: number; why: string | null }
   | { type: 'look_done'; summary: string }
+  | { type: 'phase'; phase: 'official' | 'broad'; text: string }
+  | { type: 'anchor'; anchor: HuntAnchor }
   | { type: 'tool_error'; action: string; target: string; error: string }
   | { type: 'final'; message: string; proposals: unknown[]; model: string; warnings: string[]; trace: TraceStep[]; pages?: PageSeen[] }
   | { type: 'error'; error: string };
+
+import type { HuntAnchor } from './agent';
+
+/** One picture from an image search, with the page it was found on. */
+export interface ImageHit {
+  image_url: string;
+  thumbnail_url: string | null;
+  page_url: string;
+  title: string;
+  site: string;
+}
 
 export type FinalEvent = Extract<ResearchEvent, { type: 'final' }>;
 

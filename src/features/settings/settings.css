@@ -9,3 +9,6 @@
 .test-result { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
 .search-settings { display: grid; gap: 16px; }
 .search-settings h3 { margin-right: auto; }
+.data-facts { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; font-size: 14px; }
+.data-facts dt { color: var(--muted); }
+.data-facts dd { margin: 0; overflow-wrap: anywhere; }

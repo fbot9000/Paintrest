@@ -16,8 +16,10 @@ import { ResearchPage } from '../features/library/ResearchPage';
 import { ResearchTaskPage } from '../features/library/ResearchTaskPage';
 import { RecipesPage } from '../features/library/RecipesPage';
 import { RecipePage } from '../features/library/RecipePage';
+import { Workspace } from '../features/workspace/Workspace';
 import { Button, Dialog } from '../ui/components';
 import { useCommand } from './context';
+import { useSaveStatus } from './saveStatus';
 import { Logo } from '../ui/Logo';
 import './shell.css';
 
@@ -29,6 +31,8 @@ const routes = [
     children: [
       { index: true, element: <ProjectsPage /> },
       { path: 'innstillinger', element: <AiSettingsPage /> },
+      { path: 'p/:projectId/m/:subjectId', element: <Workspace /> },
+      { path: 'p/:projectId/m/:subjectId/:tab', element: <Workspace /> },
       {
         path: 'bibliotek',
         element: <LibraryLayout />,
@@ -78,6 +82,7 @@ function Shell() {
 function TopBar() {
   const [menu, setMenu] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const [typed, setTyped] = useState('');
   const { run } = useCommand();
   const navigate = useNavigate();
   const inProject = useMatch('/p/*');
@@ -91,7 +96,7 @@ function TopBar() {
         <NavLink to="/" end className={({ isActive }) => (isActive || inProject ? 'active' : '')}>Prosjekter</NavLink>
         <NavLink to="/bibliotek">Bibliotek</NavLink>
       </nav>
-      <span className="topbar-proto">Prototype · data lagres bare på denne enheten</span>
+      <SaveIndicator />
       <div className="topbar-menu">
         <button type="button" className="avatar" aria-expanded={menu} aria-haspopup="menu" onClick={() => setMenu((m) => !m)}>
           ⋯
@@ -99,7 +104,7 @@ function TopBar() {
         {menu && (
           <div className="menu" role="menu">
             <button role="menuitem" type="button" onClick={() => { setMenu(false); navigate('/innstillinger'); }}>
-              AI og nettsøk
+              Innstillinger: AI, nettsøk og data
             </button>
             <button role="menuitem" type="button" onClick={() => { setMenu(false); setConfirm(true); }}>
               Tilbakestill eksempeldata
@@ -113,15 +118,42 @@ function TopBar() {
         title="Tilbakestill eksempeldata?"
         footer={<>
           <Button onClick={() => setConfirm(false)}>Avbryt</Button>
-          <Button variant="primary" onClick={async () => {
+          <Button variant="danger" disabled={typed.trim().toLowerCase() !== 'tilbakestill'} onClick={async () => {
             await run((c) => c.resetToSampleData());
             setConfirm(false);
+            setTyped('');
             navigate('/');
           }}>Tilbakestill</Button>
         </>}
       >
-        <p>Alt du har lagt inn på denne enheten erstattes av eksempelprosjektet. Dette kan ikke angres.</p>
+        <p>Alt du har lagt inn erstattes av eksempelprosjektet: prosjekter, miniatyrer, planer, kilder og historikk.</p>
+        <p className="small muted">Det tas en sikkerhetskopi først når dataene ligger i datamappen. Skriv «tilbakestill» for å bekrefte.</p>
+        <input aria-label="Skriv tilbakestill" className="reset-input" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="tilbakestill" />
       </Dialog>
     </header>
   );
+}
+
+/** Where data is saved, and whether the last change got there. Never silent about a failed save. */
+function SaveIndicator() {
+  const st = useSaveStatus();
+  const where = st.where === 'server' ? (st.data_dir ? shortPath(st.data_dir) : 'datamappen') : st.where === 'browser' ? 'denne nettleseren' : 'minnet (lagres ikke)';
+  const time = st.saved_at ? new Date(st.saved_at).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }) : null;
+  if (st.state === 'conflict' || st.state === 'error') {
+    return (
+      <span className={`save-ind ${st.state}`} role="alert">
+        {st.message}
+        {st.state === 'conflict' && <button type="button" onClick={() => window.location.reload()}>Last inn på nytt</button>}
+      </span>
+    );
+  }
+  return (
+    <span className={`save-ind ${st.where}`} title={st.data_dir ?? undefined}>
+      {st.state === 'saving' ? 'Lagrer …' : `Lagret i ${where}${time ? ` · ${time}` : ''}`}
+    </span>
+  );
+}
+
+function shortPath(p: string): string {
+  return p.replace(/^\/(Users|home)\/[^/]+/, '~');
 }

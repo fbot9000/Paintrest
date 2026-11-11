@@ -49,6 +49,8 @@ export interface ReferenceImage {
   reason?: string | null;
   original_text?: string | null;
   page_language?: string | null;
+  /** Image search: a small copy from the search service, used when the original site blocks other servers. */
+  thumbnail_url?: string | null;
 }
 
 /** A page the agent read during an image hunt, with a Norwegian summary. */
@@ -61,11 +63,36 @@ export interface SourceRead {
   original_excerpt: string | null;
 }
 
+/** Image hunt, phase 1: the best official picture, checked by the agent, that the rest is compared with. */
+export interface HuntAnchor {
+  image_url: string | null;
+  page_url: string | null;
+  page_title: string | null;
+  site: string | null;
+  kind: 'official' | 'concept_art' | 'painted' | null;
+  /** The painter the publisher or campaign credits, when named. */
+  painter: string | null;
+  description: string | null;
+  why: string | null;
+}
+
+/** A YouTube video found in an image hunt. Confirmed by YouTube or the search; nobody has watched it. */
+export interface VideoRef {
+  url: string;
+  video_id: string;
+  title: string;
+  channel: string | null;
+  thumbnail_url: string | null;
+  why: string | null;
+}
+
 export interface ReferenceSelectionPayload {
   subject_id: Id;
   note: string | null;
   images: ReferenceImage[];
   sources_read?: SourceRead[];
+  anchor?: HuntAnchor | null;
+  videos?: VideoRef[];
 }
 
 export interface CatalogSubjectPayload {
@@ -433,11 +460,14 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
         reason: str(io.reason).trim() || null,
         original_text: str(io.original_text).trim() || null,
         page_language: str(io.page_language).trim() || null,
+        thumbnail_url: /^https?:\/\//.test(str(io.thumbnail_url)) ? str(io.thumbnail_url) : null,
       }];
     });
-    if (!images.length) return { ok: false, reason: 'Bildeutvalget har ingen gyldige bilder' };
+    const videos = videoRefs(o.videos);
+    const anchor = huntAnchor(o.anchor);
+    if (!images.length && !videos.length) return { ok: false, reason: 'Bildeutvalget har ingen gyldige bilder' };
     const sources_read = sourcesRead(o.sources_read);
-    return { ok: true, value: { ...common, result_type: 'reference_selection', payload: { subject_id, images, note: str(o.note).trim() || null, sources_read } } };
+    return { ok: true, value: { ...common, result_type: 'reference_selection', payload: { subject_id, images, note: str(o.note).trim() || null, sources_read, anchor, videos } } };
   }
 
   return { ok: false, reason: `Ukjent forslagstype (${String(raw.type)})` };
@@ -720,6 +750,31 @@ function fullName(p: PaintProduct): string {
 }
 
 // ---------- små hjelpere ----------
+
+function huntAnchor(v: unknown): HuntAnchor | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = obj(v);
+  const s = (x: unknown) => str(x).trim() || null;
+  const url = (x: unknown) => (/^https?:\/\//.test(str(x)) ? str(x) : null);
+  const image_url = url(o.image_url);
+  return {
+    image_url, page_url: image_url ? url(o.page_url) : null, page_title: s(o.page_title), site: s(o.site),
+    kind: (['official', 'concept_art', 'painted'] as const).find((k) => k === o.kind) ?? null,
+    painter: s(o.painter), description: s(o.description), why: s(o.why),
+  };
+}
+
+function videoRefs(v: unknown): VideoRef[] {
+  return arr(v).flatMap((x) => {
+    const o = obj(x);
+    const url = str(o.url).trim();
+    const video_id = str(o.video_id).trim();
+    const title = str(o.title).trim();
+    if (!/^https:\/\/(www\.)?youtube\.com\/watch\?v=[A-Za-z0-9_-]{11}$/.test(url) || !video_id || !title) return [];
+    const thumb = str(o.thumbnail_url).trim();
+    return [{ url, video_id, title, channel: str(o.channel).trim() || null, thumbnail_url: /^https?:\/\//.test(thumb) ? thumb : null, why: str(o.why).trim() || null }];
+  }).slice(0, 8);
+}
 
 function obj(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};

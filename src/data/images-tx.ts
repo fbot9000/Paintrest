@@ -25,7 +25,7 @@ export function storedAsset(t: Tables, image_url: string) {
  * transaction stays synchronous. A failed download stops everything and names
  * the image, so the user can deselect it.
  */
-export async function downloadImages(store: Store, fetchImage: ((url: string) => Promise<Blob>) | undefined, images: { image_url: string; caption: string | null }[]): Promise<Downloaded> {
+export async function downloadImages(store: Store, fetchImage: ((url: string) => Promise<Blob>) | undefined, images: { image_url: string; caption: string | null; thumbnail_url?: string | null }[]): Promise<Downloaded> {
   const t = store.getTables();
   const todo = images.filter((i) => !storedAsset(t, i.image_url));
   if (todo.length && !fetchImage) throw new CommandError('Bildene kan ikke hentes uten Paintrest-serveren');
@@ -33,7 +33,11 @@ export async function downloadImages(store: Store, fetchImage: ((url: string) =>
   const failed: string[] = [];
   for (const img of todo) {
     try {
-      const blob = await fetchImage!(img.image_url);
+      // The original site may refuse; the image search's small copy is better than nothing.
+      const blob = await fetchImage!(img.image_url).catch((err) => {
+        if (img.thumbnail_url) return fetchImage!(img.thumbnail_url);
+        throw err;
+      });
       const file_id = newId();
       await store.persistence.putBlob(file_id, blob);
       out[img.image_url] = { file_id, media_type: blob.type, byte_size: blob.size };
@@ -49,7 +53,7 @@ export async function downloadImages(store: Store, fetchImage: ((url: string) =>
 }
 
 /** Reuses a source with the same URL (and keeps it), otherwise creates one with retention kept. */
-export function sourceFor(t: Tables, ws: Id, ref: { url: string; title: string; creator: string | null; kind: 'gallery' | 'article' }, task_id: Id | null, log: Log): Id {
+export function sourceFor(t: Tables, ws: Id, ref: { url: string; title: string; creator: string | null; kind: 'gallery' | 'article' | 'video' }, task_id: Id | null, log: Log): Id {
   const existing = Object.values(t.source).find((x) => !x.deleted_at && x.url === ref.url);
   if (existing) {
     existing.retention = 'kept';

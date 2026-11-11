@@ -38,6 +38,13 @@ describe('normalisering av modellsvar', () => {
   it('tolker miniatyr og maleplan, og avviser ukjent miniatyr', () => {
     const c = normaliseProposal({ type: 'catalog_subject', payload: { name: 'Ulv', grouping: 'group', physical_count: '4' } }, {});
     expect(c.ok && c.value.payload).toMatchObject({ name: 'Ulv', physical_count: 4 });
+    const hunt = normaliseProposal({ type: 'reference_selection', payload: { subject: 'M1', images: [],
+      anchor: { image_url: 'https://pub.example/b.jpg', page_url: 'https://pub.example/', kind: 'official', painter: 'Studio Nine', description: 'Demon', why: 'Utgiver' },
+      videos: [{ url: 'https://www.youtube.com/watch?v=abcdefghijk', video_id: 'abcdefghijk', title: 'Painting Balor', channel: null, thumbnail_url: 'javascript:x', why: 'Video' },
+        { url: 'https://evil.example/watch?v=abcdefghijk', video_id: 'x', title: 'x' }] } }, { M1: 'a' });
+    expect(hunt.ok && hunt.value.payload).toMatchObject({ images: [], anchor: { painter: 'Studio Nine', kind: 'official' },
+      videos: [{ video_id: 'abcdefghijk', thumbnail_url: null }] });
+    expect(hunt.ok && (hunt.value.payload as { videos: unknown[] }).videos).toHaveLength(1);
     const bad = normaliseProposal({ type: 'paint_plan', payload: { subject: 'M9', elements: [{ name: 'x', steps: [] }] } }, { M1: 'a' });
     expect(bad.ok).toBe(false);
     const ok = normaliseProposal({ type: 'paint_plan', payload: { subject: 'M1', elements: [{ name: 'Hud', steps: [{ instruction: 'x', materials: [{ product: 'Nuln Oil', role: 'wash' }] }] }] } }, { M1: 'a' });

@@ -558,7 +558,7 @@ export interface ResearchMessage {
   /** PROTOTYPE: which model answered (skjema stores provider/model on proposals only). */
   model_id?: string | null;
   /** PROTOTYPE: the searches and pages behind an answer, shown as «Slik fant agenten dette». */
-  trace?: { action: 'search' | 'open' | 'look'; target: string; result: string }[];
+  trace?: { action: 'search' | 'open' | 'look' | 'anchor' | 'image_search'; target: string; result: string }[];
 }
 
 export type Evidence = 'documented' | 'synthesized' | 'unresolved';

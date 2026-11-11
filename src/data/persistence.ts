@@ -7,6 +7,7 @@ const STATE_KEY = 'state';
 export function indexedDbPersistence(dbName = 'paintrest'): Persistence {
   const kv = createStore(dbName, 'kv');
   return {
+    kind: 'browser',
     load: () => get<DbState>(STATE_KEY, kv),
     save: (state) => set(STATE_KEY, state, kv),
     putBlob: (key, blob) => set(`blob:${key}`, blob, kv),
@@ -20,6 +21,7 @@ export function memoryPersistence(): Persistence {
   let saved: DbState | undefined;
   const blobs = new Map<string, Blob>();
   return {
+    kind: 'memory',
     load: async () => saved,
     save: async (s) => {
       saved = structuredClone(s);

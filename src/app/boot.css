@@ -1,0 +1,5 @@
+.boot { min-height: 100%; display: grid; place-items: center; padding: 24px max(16px, env(safe-area-inset-left, 0px)); background: var(--paper); }
+.boot-card { max-width: 620px; display: grid; gap: 14px; padding: 28px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow); }
+.boot-card code { font-family: var(--font-mono); font-size: 13px; background: var(--panel); padding: 1px 6px; border-radius: 4px; }
+.boot-actions { display: flex; gap: 10px; flex-wrap: wrap; padding-top: 6px; }
+.boot-error { padding: 10px 12px; border-radius: var(--r-sm); background: var(--warn-soft); color: var(--warn); font-weight: 500; }

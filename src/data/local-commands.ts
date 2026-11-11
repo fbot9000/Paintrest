@@ -8,7 +8,7 @@ import type {
 import { currentPlanVersion, liveExpansionsOfGame } from '../domain/views';
 import type { Store } from './store';
 import { buildSampleData } from './seed';
-import { attachImages, downloadImages, setCover } from './images-tx';
+import { attachImages, downloadImages, setCover, sourceFor } from './images-tx';
 import { must, record } from './tx-helpers';
 import { createKnowledgeCommands } from './knowledge-commands';
 
@@ -324,6 +324,35 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
       });
     },
 
+    async addSubjectImages(subject_id, files) {
+      if (!files.length) return;
+      const ws = store.snapshot.workspace_id;
+      const stored: (typeof files[number] & { sf: Awaited<ReturnType<typeof storeFile>> })[] = [];
+      for (const f of files) stored.push({ ...f, sf: await storeFile(ws, 'source_asset', f.blob) });
+      tx((t) => {
+        const s = must(t.miniature_subject[subject_id], 'Miniatyren');
+        if (s.deleted_at) throw new CommandError('Miniatyren er slettet');
+        for (const f of stored) {
+          const taken = Object.values(t.source).filter((x) => !x.deleted_at).map((x) => x.title);
+          const source_id = newId();
+          const asset_id = newId();
+          const link_id = newId();
+          t.stored_file[f.sf.id] = f.sf;
+          t.source[source_id] = {
+            id: source_id, workspace_id: ws, kind: 'image', title: f.title?.trim() || nextAutoName(AUTO.image, taken),
+            creator: null, url: f.page_url ?? null, locator: null, analysis_state: 'stored', retention: 'kept',
+            created_by_task_id: null, created_at: now(), deleted_at: null,
+          };
+          t.source_asset[asset_id] = { id: asset_id, source_id, position: 0, locator: null, caption: null, file_id: f.sf.id, deleted_at: null };
+          t.source_link[link_id] = { id: link_id, source_id, target_type: 'subject', target_id: subject_id, use: 'visual_reference', layer_id: null, deleted_at: null };
+          if (!s.official_asset_id) s.official_asset_id = asset_id;
+          record(t, ws, { target_type: 'source', target_id: source_id, action: 'create' });
+          record(t, ws, { target_type: 'source_link', target_id: link_id, action: 'attach' });
+        }
+        record(t, ws, { target_type: 'miniature_subject', target_id: subject_id, action: 'update' });
+      });
+    },
+
     async attachWebImages(subject_id, images, cover_image_url) {
       if (!images.length) throw new CommandError('Velg minst ett bilde');
       const files = await downloadImages(store, deps.fetchImage, images);
@@ -333,6 +362,22 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
           setCover(t, subject_id, assets[cover_image_url]!, (tt, id, a) => record(t, ws, { target_type: tt, target_id: id, action: a }));
           record(t, ws, { target_type: 'miniature_subject', target_id: subject_id, action: 'update' });
         }
+      });
+    },
+
+    async saveVideoSource(subject_id, video) {
+      if (!/^https:\/\/(www\.)?youtube\.com\/watch\?v=/.test(video.url)) throw new CommandError('Bare YouTube-videoer kan lagres her');
+      tx((t, ws) => {
+        const s = must(t.miniature_subject[subject_id], 'Miniatyren');
+        if (s.deleted_at) throw new CommandError('Miniatyren er slettet');
+        const log = (tt: Parameters<typeof record>[2]['target_type'], id: Id, a: Parameters<typeof record>[2]['action']) => record(t, ws, { target_type: tt, target_id: id, action: a });
+        const source_id = sourceFor(t, ws, { url: video.url, title: video.title, creator: video.channel, kind: 'video' }, null, log);
+        t.source[source_id]!.kind = 'video';
+        const linked = Object.values(t.source_link).some((l) => !l.deleted_at && l.source_id === source_id && l.target_type === 'subject' && l.target_id === subject_id);
+        if (linked) return;
+        const id = newId();
+        t.source_link[id] = { id, source_id, target_type: 'subject', target_id: subject_id, use: 'method', layer_id: null, deleted_at: null };
+        log('source_link', id, 'attach');
       });
     },
 
@@ -361,6 +406,45 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
           s.official_asset_id = null;
           record(t, ws, { target_type: 'miniature_subject', target_id: subject_id, action: 'update' });
         }
+      });
+    },
+
+    // ---------- Palett ----------
+    async addPaletteEntry(subject_id, product_id, input) {
+      return tx((t, ws) => {
+        const s = must(t.miniature_subject[subject_id], 'Miniatyren');
+        must(t.paint_product[product_id], 'Malingen');
+        const id = newId();
+        t.palette_entry[id] = {
+          id, project_id: s.project_id, product_id, role_label: input?.role_label?.trim() || null, note: input?.part?.trim() || null,
+          scope_kind: 'subjects', expansion_id: null, category_label: null, deleted_at: null,
+        };
+        t.palette_entry_subject.push({ palette_entry_id: id, subject_id });
+        const p = t.project[s.project_id];
+        if (p) p.content_revision++;
+        record(t, ws, { target_type: 'palette_entry', target_id: id, action: 'create' });
+        return id;
+      });
+    },
+
+    async updatePaletteEntry(entry_id, patch) {
+      tx((t, ws) => {
+        const e = must(t.palette_entry[entry_id], 'Palettraden');
+        if (patch.role_label !== undefined) e.role_label = patch.role_label?.trim() || null;
+        if (patch.part !== undefined) e.note = patch.part?.trim() || null;
+        const p = t.project[e.project_id];
+        if (p) p.content_revision++;
+        record(t, ws, { target_type: 'palette_entry', target_id: entry_id, action: 'update' });
+      });
+    },
+
+    async removePaletteEntry(entry_id) {
+      tx((t, ws) => {
+        const e = must(t.palette_entry[entry_id], 'Palettraden');
+        e.deleted_at = now();
+        const p = t.project[e.project_id];
+        if (p) p.content_revision++;
+        record(t, ws, { target_type: 'palette_entry', target_id: entry_id, action: 'delete' });
       });
     },
 
@@ -542,6 +626,8 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
     },
 
     async resetToSampleData() {
+      // Snapshot of the data folder first, so even this can be undone from backups/.
+      await blobs.backup?.('before-reset');
       const state = await buildSampleData(blobs);
       urlCache.forEach((u) => URL.revokeObjectURL(u));
       urlCache.clear();

@@ -147,10 +147,21 @@ export interface Commands extends KnowledgeCommands {
   setSubjectImage(subject_id: Id, file: Blob | null, filename?: string): Promise<void>;
   /** The user picks images from a web page directly (no agent). Downloads, stores and links them. */
   attachWebImages(subject_id: Id, images: ReferenceImage[], cover_image_url?: string): Promise<void>;
+  /** Pictures the user pasted or dropped (not links): stored as kept sources and linked as references. The first becomes the illustration if there is none. */
+  addSubjectImages(subject_id: Id, files: { blob: Blob; title?: string | null; page_url?: string | null }[]): Promise<void>;
   /** Chooses which stored image is the miniature's illustration (null clears it). */
   setSubjectCover(subject_id: Id, asset_id: Id | null): Promise<void>;
   /** Removes an image from the miniature. The source and the file stay, as history. */
   detachSubjectImage(subject_id: Id, asset_id: Id): Promise<void>;
+  /** Keeps a video (from an image hunt) as a source for the miniature: a link, nothing is downloaded. */
+  saveVideoSource(subject_id: Id, video: { url: string; title: string; channel: string | null }): Promise<void>;
+
+  // Palett (datamodell v3 §8)
+  /** Adds a paint to one miniature's palette. */
+  addPaletteEntry(subject_id: Id, product_id: Id, input?: { role_label?: string | null; part?: string | null }): Promise<Id>;
+  updatePaletteEntry(entry_id: Id, patch: { role_label?: string | null; part?: string | null }): Promise<void>;
+  /** Hides the entry (restorable); plans that use the paint are not changed. */
+  removePaletteEntry(entry_id: Id): Promise<void>;
 
   // Katalog
   createProduct(input?: ProductInput): Promise<Id>;

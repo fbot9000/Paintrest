@@ -167,6 +167,20 @@ describe('bilder på miniatyren (brukerens egne valg)', () => {
     expect(paintingView(t, b)!.references.map((r) => r.asset.locator)).toEqual(['https://site.example/front.jpg']);
   });
 
+  it('lagrer en video som kilde for miniatyren uten å laste ned noe', async () => {
+    const { store, cmd, a, downloads } = await setup();
+    const v = { url: 'https://www.youtube.com/watch?v=abcdefghijk', title: 'Painting Balor', channel: 'Mini Channel' };
+    await cmd.saveVideoSource(a, v);
+    await cmd.saveVideoSource(a, v);
+    const t = store.getTables();
+    const src = Object.values(t.source).filter((x) => x.url === v.url);
+    expect(src).toHaveLength(1);
+    expect(src[0]).toMatchObject({ kind: 'video', title: 'Painting Balor', creator: 'Mini Channel', retention: 'kept' });
+    expect(Object.values(t.source_link).filter((l) => l.source_id === src[0]!.id && l.target_id === a && l.use === 'method')).toHaveLength(1);
+    expect(downloads()).toBe(0);
+    await expect(cmd.saveVideoSource(a, { ...v, url: 'https://vimeo.com/1' })).rejects.toThrow('YouTube');
+  });
+
   it('ny illustrasjon beholder den gamle som referansebilde', async () => {
     const { store, cmd, a } = await setup();
     await cmd.setSubjectImage(a, new Blob(['eget'], { type: 'image/png' }), 'eget.png');
@@ -186,5 +200,25 @@ describe('bilder på miniatyren (brukerens egne valg)', () => {
     expect(t.miniature_subject[a]!.official_asset_id).toBeNull();
     expect(Object.values(t.source_link).every((l) => l.deleted_at)).toBe(true);
     expect(t.source_asset[asset]!.deleted_at).toBeNull();
+  });
+});
+
+describe('palett for miniatyren', () => {
+  it('legger til, endrer og fjerner rader, og øker innholdsrevisjonen', async () => {
+    const p = memoryPersistence();
+    const store = new Store(await buildSampleData(p), p);
+    const cmd = createLocalCommands(store);
+    const t0 = store.getTables();
+    const s = Object.values(t0.miniature_subject).find((x) => x.name === 'Merlin')!;
+    const product = Object.values(t0.paint_product).find((x) => x.name === 'Caliban Green')!;
+    const before = t0.project[s.project_id]!.content_revision;
+    const id = await cmd.addPaletteEntry(s.id, product.id, { part: 'Kappe', role_label: 'base' });
+    await cmd.updatePaletteEntry(id, { role_label: 'skygge' });
+    let pal = paintingView(store.getTables(), s.id)!.palette.filter((x) => !x.project_wide);
+    expect(pal.map((x) => [x.product.name, x.entry.note, x.entry.role_label])).toEqual([['Caliban Green', 'Kappe', 'skygge']]);
+    await cmd.removePaletteEntry(id);
+    pal = paintingView(store.getTables(), s.id)!.palette;
+    expect(pal).toHaveLength(0);
+    expect(store.getTables().project[s.project_id]!.content_revision).toBe(before + 3);
   });
 });

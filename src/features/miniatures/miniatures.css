@@ -28,3 +28,7 @@
 .push-left { margin-right: auto; }
 .mini-agent { justify-self: start; align-self: flex-start; border: 0; background: none; padding: 4px 0; min-height: 32px; color: var(--fore); font-size: 13px; font-weight: 500; cursor: pointer; text-align: left; }
 .mini-agent:hover { text-decoration: underline; }
+.mini-working { position: absolute; right: 10px; top: 10px; padding: 4px 8px; border-radius: 4px; background: var(--moss); color: var(--pine); font: 500 11px var(--font-mono); animation: agent-pulse 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .mini-working { animation: none; } }
+.mini-name { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.mini-name:hover { text-decoration: underline; }
