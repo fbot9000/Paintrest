@@ -7,7 +7,8 @@
  * the call sites.
  */
 import type {
-  DeviationKind, DeviationPayload, Grouping, Id, Ownership, ProductKind,
+  DeviationKind, DeviationPayload, Evidence, ExperienceOutcome, Grouping, Id, KnowledgeStatus,
+  MaterialRole, Ownership, ProductKind, StepBasis, Uncertainty,
 } from './types';
 import type { ReferenceImage } from './agent';
 
@@ -47,7 +48,82 @@ export interface ProductInput {
   owns?: boolean;
 }
 
-export interface Commands {
+// ---------- Bibliotek (bit 7) ----------
+
+export interface TechniquePatch {
+  name?: string;
+  tags?: string[];
+  desired_result?: string | null;
+  use_area?: string | null;
+  materials?: string[];
+  variants?: string | null;
+  risk_note?: string | null;
+  evidence?: Evidence | null;
+  uncertainty?: Uncertainty[];
+}
+
+/** One step when the whole step list is saved. Give `id` to keep an existing step. */
+export interface TechniqueStepInput {
+  id?: Id;
+  title?: string;
+  instruction?: string;
+  basis?: StepBasis | null;
+}
+
+export interface ExperienceInput {
+  outcome: ExperienceOutcome;
+  note?: string | null;
+  subject_id?: Id | null;
+}
+
+export interface RecipePatch {
+  name?: string;
+  tags?: string[];
+  effect?: string | null;
+  note?: string | null;
+  evidence?: Evidence | null;
+  uncertainty?: Uncertainty[];
+}
+
+/** One paint in the colour sequence. Give `id` to keep an existing row (steps refer to it). */
+export interface RecipePaintInput {
+  id?: Id;
+  product_id: Id;
+  role?: MaterialRole | null;
+  note?: string | null;
+}
+
+export interface RecipeStepInput {
+  id?: Id;
+  instruction?: string;
+  /** recipe_paint ids from the same recipe. */
+  paint_ids?: Id[];
+  technique_id?: Id | null;
+}
+
+export interface KnowledgeCommands {
+  createTechnique(input?: TechniquePatch): Promise<Id>;
+  updateTechnique(technique_id: Id, patch: TechniquePatch): Promise<void>;
+  setTechniqueStatus(technique_id: Id, status: KnowledgeStatus): Promise<void>;
+  /** Replaces the step list in the given order. Steps left out are removed. */
+  setTechniqueSteps(technique_id: Id, steps: TechniqueStepInput[]): Promise<void>;
+  deleteTechnique(technique_id: Id): Promise<void>;
+  restoreTechnique(technique_id: Id): Promise<void>;
+  recordExperience(technique_id: Id, input: ExperienceInput): Promise<Id>;
+  deleteExperience(experience_id: Id): Promise<void>;
+
+  createRecipe(input?: RecipePatch): Promise<Id>;
+  updateRecipe(recipe_id: Id, patch: RecipePatch): Promise<void>;
+  setRecipeStatus(recipe_id: Id, status: KnowledgeStatus): Promise<void>;
+  /** Replaces the colour sequence in the given order. Removed paints are also removed from the steps. */
+  setRecipePaints(recipe_id: Id, paints: RecipePaintInput[]): Promise<void>;
+  /** Replaces the method in the given order. An empty list makes it a plain colour sequence. */
+  setRecipeSteps(recipe_id: Id, steps: RecipeStepInput[]): Promise<void>;
+  deleteRecipe(recipe_id: Id): Promise<void>;
+  restoreRecipe(recipe_id: Id): Promise<void>;
+}
+
+export interface Commands extends KnowledgeCommands {
   // Prosjekt
   createProject(input?: { name?: string }): Promise<{ project_id: Id; game_id: Id }>;
   deleteProject(project_id: Id): Promise<void>;

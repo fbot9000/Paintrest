@@ -28,4 +28,6 @@ export const AUTO = {
   product: 'Ny maling',
   part: 'Ny del',
   image: 'Nytt bilde',
+  technique: 'Ny teknikk',
+  recipe: 'Ny oppskrift',
 } as const;

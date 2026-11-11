@@ -1,6 +1,6 @@
 # Bit 7 Kunnskap: datamodell og byggeplan (utkast)
 
-Status: **forslag**, revidert 11. november 2026 etter tilbakemelding. Ingenting her er bygget ennå.
+Status: revidert 11. november 2026 etter tilbakemelding. **7.0 er bygget**: typer, migrering til v5, kommandoer (`src/data/knowledge-commands.ts`), lesefunksjoner (`src/domain/library.ts`) og tester. Resten er forslag.
 
 ## Grunnlag
 
@@ -67,7 +67,7 @@ export interface Technique {
   materials: string[];                // «Dette trenger du»: «Finporet svamp», «Oljemaling» …
   variants: string | null;            // fritekst: «A · Svamp for tekstur …  B · Svamp for overganger …»
   risk_note: string | null;           // «Verifiser tørking, håndtering og rengjøring …»
-  evidence: Evidence;                 // egenskapen «kildegrunnlag»
+  evidence: Evidence | null;          // egenskapen «kildegrunnlag». null = ikke vurdert
   uncertainty: Uncertainty[];
   created_at: Timestamp;
   updated_at: Timestamp;
@@ -80,7 +80,7 @@ export interface TechniqueStep {
   position: number;
   title: string;                      // «Prøv svampen»
   instruction: string;                // «Ta lite maling og test ønsket avtrykk.»
-  basis: 'documented' | 'synthesized';// kilden viser det, eller agenten foreslår det
+  basis: StepBasis | null;            // 'documented' | 'synthesized'. null = ikke vurdert
 }
 ```
 
@@ -119,7 +119,7 @@ export interface Recipe {
   status: KnowledgeStatus;
   effect: string | null;              // hva oppskriften gir. Tom for en ren fargerekke
   note: string | null;
-  evidence: Evidence;
+  evidence: Evidence | null;
   uncertainty: Uncertainty[];
   created_at: Timestamp;
   updated_at: Timestamp;
@@ -175,7 +175,7 @@ Agenten skriver ikke direkte i biblioteket (AVVIK punkt 28, sonen *Globalt*). De
 
 | Bit | Innhold | Skisse | Avhenger av |
 |---|---|---|---|
-| **7.0 Grunnmur** | Typene over, migrering v4→v5, kommandoer (opprett, endre, slett og gjenopprett teknikk og oppskrift, sett status, registrer erfaring) og lesefunksjoner (bibliotekliste, detalj, de tre egenskapene). Tester. Ingen skjerm | – | – |
+| **7.0 Grunnmur** ✓ | Typene over, migrering v4→v5, kommandoer (`createTechnique`, `updateTechnique`, `setTechniqueStatus`, `setTechniqueSteps`, `deleteTechnique`/`restoreTechnique`, `recordExperience`/`deleteExperience`, og det samme for oppskrifter med `setRecipePaints` og `setRecipeSteps`) og lesefunksjoner (`libraryTechniques`, `libraryRecipes`, `libraryTags`, `techniqueDetail`, `recipeDetail`, `practicalExperience`). Tester i `knowledge-commands.test.ts`. Ingen skjerm | – | – |
 | **7.1 Bibliotek: teknikker** | Ny rute `/bibliotek/teknikker` med søk, merkelapper og kort med de tre egenskapene. Ny teknikk og redigering direkte. Ett eksempel i `seed.ts`, merket som eksempel | 01, 04 | 7.0 |
 | **7.2 Bibliotek: oppskrifter** | `/bibliotek/oppskrifter`: fargerekke med malinger fra katalogen og valgfrie steg | ingen skisse. Enkel første versjon | 7.0 |
 | **7.3 Guide og erfaring** | Teknikkartikkel, kort verkstedguide for iPad og valgfri erfaring | 05, 06, 07 | 7.1 |

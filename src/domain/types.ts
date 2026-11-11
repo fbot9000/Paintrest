@@ -186,7 +186,9 @@ export interface PlanStep {
   element_id: Id;
   position: number;
   instruction: string;
+  /** PROTOTYPE (bit 7): points to technique.id while the library has no versions. */
   technique_version_id: Id | null;
+  /** PROTOTYPE (bit 7): points to recipe.id while the library has no versions. */
   recipe_version_id: Id | null;
 }
 
@@ -328,6 +330,94 @@ export interface SourceLinkAsset {
   source_asset_id: Id;
 }
 
+// ---------- Bibliotek: teknikker og oppskrifter (bit 7, PROTOTYPE, brukerbeslutning 11.11.2026) ----------
+// No version tables: the user edits rows directly, and change_record keeps the history.
+// See docs/BIT7-KUNNSKAP.md and docs/AVVIK.md.
+
+/** The «godkjenning» dimension. A label, not a lock: an approved row can still be edited. */
+export type KnowledgeStatus = 'draft' | 'approved';
+/** documented = a source shows it; synthesized = the agent's own suggestion. */
+export type StepBasis = 'documented' | 'synthesized';
+
+export interface Technique {
+  id: Id;
+  workspace_id: Id;
+  name: string;
+  /** Free tags, trimmed and unique (case-insensitive). */
+  tags: string[];
+  status: KnowledgeStatus;
+  desired_result: string | null;
+  use_area: string | null;
+  /** «Dette trenger du»: general materials, not paint products. */
+  materials: string[];
+  /** Free text describing alternative ways of doing it. */
+  variants: string | null;
+  risk_note: string | null;
+  /** The «kildegrunnlag» dimension. null = not assessed (the user's own knowledge). */
+  evidence: Evidence | null;
+  uncertainty: Uncertainty[];
+  created_at: Timestamp;
+  updated_at: Timestamp;
+  deleted_at: Timestamp | null;
+}
+
+export interface TechniqueStep {
+  id: Id;
+  technique_id: Id;
+  position: number;
+  title: string;
+  instruction: string;
+  basis: StepBasis | null;
+}
+
+export type ExperienceOutcome = 'worked' | 'needs_adjustment';
+
+export interface TechniqueExperience {
+  id: Id;
+  technique_id: Id;
+  outcome: ExperienceOutcome;
+  note: string | null;
+  subject_id: Id | null;
+  created_at: Timestamp;
+  deleted_at: Timestamp | null;
+}
+
+/** A colour sequence (recipe_paint), optionally with a method (recipe_step) for a certain effect. */
+export interface Recipe {
+  id: Id;
+  workspace_id: Id;
+  name: string;
+  tags: string[];
+  status: KnowledgeStatus;
+  /** What the recipe achieves. Empty for a plain colour sequence. */
+  effect: string | null;
+  note: string | null;
+  evidence: Evidence | null;
+  uncertainty: Uncertainty[];
+  created_at: Timestamp;
+  updated_at: Timestamp;
+  deleted_at: Timestamp | null;
+}
+
+export interface RecipePaint {
+  id: Id;
+  recipe_id: Id;
+  position: number;
+  product_id: Id;
+  role: MaterialRole | null;
+  note: string | null;
+}
+
+export interface RecipeStep {
+  id: Id;
+  recipe_id: Id;
+  position: number;
+  instruction: string;
+  /** recipe_paint ids from the same recipe. */
+  paint_ids: Id[];
+  technique_id: Id | null;
+}
+
 // ---------- Historikk ----------
 
 export type ChangeAction =
@@ -386,6 +476,12 @@ export interface Tables {
   research_proposal: Record<Id, ResearchProposal>;
   context_ref: Record<Id, ContextRef>;
   agent_change_set: Record<Id, AgentChangeSet>;
+  technique: Record<Id, Technique>;
+  technique_step: Record<Id, TechniqueStep>;
+  technique_experience: Record<Id, TechniqueExperience>;
+  recipe: Record<Id, Recipe>;
+  recipe_paint: Record<Id, RecipePaint>;
+  recipe_step: Record<Id, RecipeStep>;
 }
 
 // ---------- Agentens direkte endringer (PROTOTYPE, brukerbeslutning 10.11.2026) ----------
@@ -501,4 +597,4 @@ export interface ContextRef {
   captured_at: Timestamp;
 }
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;

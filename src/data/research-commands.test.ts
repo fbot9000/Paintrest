@@ -7,6 +7,7 @@ import { createLocalCommands } from './local-commands';
 import { buildSampleData } from './seed';
 import { Store, migrate } from './store';
 import { paintingView } from '../domain/views';
+import { SCHEMA_VERSION } from '../domain/types';
 
 async function setup() {
   const p = memoryPersistence();
@@ -330,8 +331,10 @@ describe('kontekst og migrering', () => {
     const v1 = { ...s, schema_version: 1, tables: { ...s.tables } } as typeof s;
     delete (v1.tables as Partial<typeof s.tables>).research_task;
     const m = migrate(v1)!;
-    expect(m.schema_version).toBe(4);
+    expect(m.schema_version).toBe(SCHEMA_VERSION);
     expect(m.tables.agent_change_set).toEqual({});
+    expect(m.tables.technique).toEqual({});
+    expect(m.tables.recipe_step).toEqual({});
     expect(m.tables.source_layer).toEqual({});
     expect(Object.keys(m.tables.project).length).toBe(Object.keys(s.tables.project).length);
     expect(m.tables.research_task).toEqual({});

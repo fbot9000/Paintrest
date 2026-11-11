@@ -67,6 +67,16 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
     
     Dette avviker fra datamodell v3 §3, §12 og §13, og fra skjema §2 og §8, der agenten aldri skriver kanoniske data uten godkjenning. Dokumentene bør oppdateres.
 
+29. **BRUKERBESLUTNING 11. november 2026: biblioteket er ikke låst (bit 7.0).** Teknikker og oppskrifter har ingen versjonstabeller. Brukeren endrer dem direkte, og `change_record` tar vare på historikken. Om de skal låses, vurderes senere. Plan og begrunnelse står i [BIT7-KUNNSKAP.md](BIT7-KUNNSKAP.md).
+    - **Nye tabeller i v5:** `technique`, `technique_step`, `technique_experience`, `recipe`, `recipe_paint` og `recipe_step`.
+    - **«Godkjent» er et merke** (`status: draft | approved`), ikke en lås. En godkjent teknikk eller oppskrift kan fortsatt endres.
+    - **En oppskrift er en fargerekke** (`recipe_paint`). Den kan i tillegg ha en fremgangsmåte (`recipe_step`), der hvert steg kan bruke malinger fra fargerekken og peke på en teknikk.
+    - **Merkelapper er fritekst** (`tags`), uten faste kategorier.
+    - **Kildegrunnlaget kan være tomt** (`evidence: null`). Det betyr ikke vurdert, for eksempel brukerens egen kunnskap. Det samme gjelder `basis` på teknikkens steg.
+    - **Praktisk erfaring lagres ikke.** Den regnes ut fra `technique_experience`: ingen erfaringer gir uprøvd, minst én gir prøvd, og minst én «fungerte» gir vellykket.
+    - **`plan_step.technique_version_id` og `recipe_version_id` peker på `technique.id` og `recipe.id`** så lenge det ikke finnes versjoner. Kolonnenavnene er beholdt, slik at versjoner kan innføres senere.
+    - **Dokumentene bør oppdateres:** datamodell v3 og skjema §6 om teknikk og oppskrift. Dokumentene er ikke lest, så det er ikke kjent hvor mye dette avviker fra dem.
+
 ## Antakelser
 
 - **Klient:** React og TypeScript som webapp med hash-ruting. Det er godkjent av brukeren 9. november 2026.
@@ -89,5 +99,6 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 ## Ikke bygget ennå
 
 - Redigering av maleplanen (bit 4). «Lag maleplan» lager bare en tom versjon 1.
-- Palett, kilder og kunnskap. Agenten kan foreløpig ikke foreslå referanser, teknikker eller oppskrifter.
+- Palett og kilder. Agenten kan foreløpig ikke foreslå referanser, teknikker eller oppskrifter.
+- Skjermer for biblioteket (bit 7.1 og videre). Datamodell, kommandoer og lesefunksjoner er på plass (7.0).
 - Ny planversjon ved redigering. Det kommer i bit 4, og der blir problemet med fremdrift og avvik på tvers av versjoner synlig.

@@ -3,42 +3,14 @@ import { CommandError } from '../domain/commands';
 import { newId, now } from '../domain/ids';
 import { AUTO, isAutoName, nextAutoName } from '../domain/naming';
 import type {
-  ChangeAction, Id, LocalDeviation, MiniatureSubject, Tables,
+  Id, LocalDeviation, MiniatureSubject,
 } from '../domain/types';
 import { currentPlanVersion, liveExpansionsOfGame } from '../domain/views';
 import type { Store } from './store';
 import { buildSampleData } from './seed';
 import { attachImages, downloadImages, setCover } from './images-tx';
-
-type Rec = {
-  target_type: string;
-  target_id: Id;
-  action: ChangeAction;
-  from_version_id?: Id | null;
-  to_version_id?: Id | null;
-};
-
-function record(t: Tables, ws: Id, r: Rec): void {
-  const id = newId();
-  t.change_record[id] = {
-    id,
-    workspace_id: ws,
-    target_type: r.target_type,
-    target_id: r.target_id,
-    from_version_id: r.from_version_id ?? null,
-    to_version_id: r.to_version_id ?? null,
-    action: r.action,
-    initiated_by: 'user',
-    task_id: null,
-    proposal_id: null,
-    created_at: now(),
-  };
-}
-
-function must<T>(row: T | undefined, what: string): T {
-  if (!row) throw new CommandError(`${what} finnes ikke`);
-  return row;
-}
+import { must, record } from './tx-helpers';
+import { createKnowledgeCommands } from './knowledge-commands';
 
 function normaliseSubject(s: MiniatureSubject): void {
   if (!Number.isInteger(s.physical_count) || s.physical_count < 1) {
@@ -70,6 +42,8 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
   }
 
   const commands: Commands = {
+    ...createKnowledgeCommands(store),
+
     // ---------- Prosjekt ----------
     async createProject(input) {
       return tx((t, ws) => {

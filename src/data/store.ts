@@ -61,6 +61,12 @@ export function emptyTables(): Tables {
     research_proposal: {},
     context_ref: {},
     agent_change_set: {},
+    technique: {},
+    technique_step: {},
+    technique_experience: {},
+    recipe: {},
+    recipe_paint: {},
+    recipe_step: {},
   };
 }
 
@@ -82,6 +88,10 @@ export function migrate(s: DbState | undefined): DbState | undefined {
   if (state.schema_version === 3) {
     // v4: agent_change_set (direct agent changes with undo).
     state = { ...state, schema_version: 4, tables: { ...emptyTables(), ...state.tables } };
+  }
+  if (state.schema_version === 4) {
+    // v5: the library (technique, recipe and their rows). New tables start empty.
+    state = { ...state, schema_version: 5, tables: { ...emptyTables(), ...state.tables } };
   }
   return state.schema_version === SCHEMA_VERSION ? state : undefined;
 }
