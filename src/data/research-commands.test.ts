@@ -8,6 +8,7 @@ import { buildSampleData } from './seed';
 import { Store, migrate } from './store';
 import { paintingView } from '../domain/views';
 import { SCHEMA_VERSION } from '../domain/types';
+import { panelTask, subjectTask } from '../domain/tasks';
 
 async function setup() {
   const p = memoryPersistence();
@@ -347,5 +348,36 @@ describe('kontekst og migrering', () => {
     expect(m.tables.source_layer).toEqual({});
     expect(Object.keys(m.tables.project).length).toBe(Object.keys(s.tables.project).length);
     expect(m.tables.research_task).toEqual({});
+  });
+});
+
+describe('egne oppgaver for verkstedet', () => {
+  it('panelet og hver miniatyr og type får hver sin samtale', async () => {
+    const { store, research, project, subject, task } = await setup();
+    const s = subject(Object.values(store.getTables().miniature_subject).find((x) => x.project_id === project.id)!.name);
+    const images = await research.startTask(project.id, { subject_id: s.id, kind: 'images' });
+    const planTask = await research.startTask(project.id, { subject_id: s.id, kind: 'plan' });
+    const t = store.getTables();
+    expect(t.task_scope[images]).toMatchObject({ work_project_id: project.id, subject_focus: { subject_id: s.id, kind: 'images' } });
+    expect(t.task_scope[task]!.subject_focus).toBeUndefined();
+    // The panel keeps its own task even though the workspace tasks are newer.
+    expect(panelTask(t, project.id)?.id).toBe(task);
+    expect(subjectTask(t, { subject_id: s.id, kind: 'images' })?.id).toBe(images);
+    expect(subjectTask(t, { subject_id: s.id, kind: 'plan' })?.id).toBe(planTask);
+    // Messages stay in their own conversation.
+    await research.addUserMessage(images, 'Finn bilder');
+    await research.addUserMessage(task, 'Hei fra panelet');
+    const bodies = (id: string) => Object.values(store.getTables().research_message).filter((m) => m.task_id === id).map((m) => m.body);
+    expect(bodies(task)).toEqual(['Hei fra panelet']);
+    expect(bodies(images)).toEqual(['Finn bilder']);
+    // Closing the panel's task leaves the workspace's tasks open.
+    await research.closeTask(task);
+    expect(panelTask(store.getTables(), project.id)).toBeUndefined();
+    expect(subjectTask(store.getTables(), { subject_id: s.id, kind: 'images' })?.id).toBe(images);
+  });
+
+  it('avviser en miniatyr som ikke hører til prosjektet', async () => {
+    const { research, project } = await setup();
+    await expect(research.startTask(project.id, { subject_id: 'finnes-ikke', kind: 'images' })).rejects.toThrow('et annet prosjekt');
   });
 });

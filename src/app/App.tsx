@@ -1,5 +1,5 @@
 import { createHashRouter, createMemoryRouter, Link, Navigate, NavLink, Outlet, RouterProvider, useMatch, useNavigate } from 'react-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ProjectsPage } from '../features/projects/ProjectsPage';
 import { ProjectLayout } from '../features/projects/ProjectLayout';
 import { GamePage } from '../features/game/GamePage';
@@ -20,6 +20,7 @@ import { Workspace } from '../features/workspace/Workspace';
 import { Button, Dialog } from '../ui/components';
 import { useCommand } from './context';
 import { useSaveStatus } from './saveStatus';
+import { useRuns } from './runs';
 import { Logo } from '../ui/Logo';
 import './shell.css';
 
@@ -96,6 +97,7 @@ function TopBar() {
         <NavLink to="/" end className={({ isActive }) => (isActive || inProject ? 'active' : '')}>Prosjekter</NavLink>
         <NavLink to="/bibliotek">Bibliotek</NavLink>
       </nav>
+      <RunIndicator />
       <SaveIndicator />
       <div className="topbar-menu">
         <button type="button" className="avatar" aria-expanded={menu} aria-haspopup="menu" onClick={() => setMenu((m) => !m)}>
@@ -131,6 +133,37 @@ function TopBar() {
         <input aria-label="Skriv tilbakestill" className="reset-input" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="tilbakestill" />
       </Dialog>
     </header>
+  );
+}
+
+/** Shows that an agent is working somewhere, and leads to it. Nothing happens out of sight. */
+function RunIndicator() {
+  const active = useRuns((r) => r.active());
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+  if (!active.length) return null;
+  const text = active.length === 1 ? 'Agenten arbeider' : `${active.length} agentkjøringer`;
+  return (
+    <div className="run-ind" ref={ref}>
+      <button type="button" aria-expanded={open} aria-haspopup="menu" aria-label={text} title={text} onClick={() => setOpen((o) => !o)}>
+        <span className="run-dot" aria-hidden />
+        <span className="run-ind-text" aria-hidden>{text}</span>
+        {active.length > 1 && <span className="run-ind-count" aria-hidden>{active.length}</span>}
+      </button>
+      {open && (
+        <div className="menu" role="menu">
+          {active.map((r) => r.href
+            ? <Link key={r.key} role="menuitem" to={r.href} onClick={() => setOpen(false)}>{r.label ?? 'Agentkjøring'}</Link>
+            : <span key={r.key} role="menuitem" className="menu-plain">{r.label ?? 'Agentkjøring'}</span>)}
+        </div>
+      )}
+    </div>
   );
 }
 

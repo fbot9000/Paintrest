@@ -24,7 +24,7 @@ export function MiniaturesPage() {
   const [filter, setFilter] = useState<Filter>('all');
   const [onlyActive, setOnlyActive] = useState(false);
   const [editing, setEditing] = useState<MiniatureSubject | 'new' | null>(null);
-  const working = useRuns((r) => new Set(r.active().map((x) => x.subject_id)));
+  const working = useRuns((r) => new Set(r.active('images', 'plan').map((x) => x.id)));
 
   const shown = data.subjects.filter(({ s, status }) => {
     if (onlyActive && status !== 'in_progress') return false;

@@ -10,8 +10,10 @@ import { useApp, useView } from '../../app/context';
 import { describeOps, matchProduct, planProductRefs, productKey, proposalTitle } from '../../domain/agent';
 import type { CatalogChangePayload, CatalogSubjectPayload, PaintPlanPayload, ReferenceSelectionPayload, SourceRef } from '../../domain/agent';
 import type { ResearchEvent } from '../../domain/ai';
+import { runs, useRuns } from '../../app/runs';
 import type { AgentChangeSet, Id, ResearchMessage, ResearchProposal, Tables } from '../../domain/types';
-import { ownershipOf } from '../../domain/views';
+import { ownershipOf, projectSummary } from '../../domain/views';
+import { panelTask } from '../../domain/tasks';
 import { runAgentTurn } from '../../data/agent-runner';
 import { Badge, Button, Dialog, ErrorNote, Field, OwnershipFlag, ProductName, Segmented, Stepper, Swatch } from '../../ui/components';
 import './agent.css';
@@ -75,9 +77,8 @@ export function useAgentActions(projectId: Id) {
 // ---------- Read model ----------
 
 function researchView(t: Tables, project_id: Id) {
-  const task = Object.values(t.research_task)
-    .filter((x) => x.status === 'open' && t.task_scope[x.id]?.work_project_id === project_id)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  // Only the panel's own task: the workspace's image hunts and plans have their own.
+  const task = panelTask(t, project_id);
   if (!task) return null;
   const messages = Object.values(t.research_message).filter((m) => m.task_id === task.id).sort((a, b) => a.created_at.localeCompare(b.created_at));
   const proposals = Object.values(t.research_proposal).filter((p) => p.task_id === task.id).sort((a, b) => a.created_at.localeCompare(b.created_at));
@@ -117,9 +118,10 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
   const [ai, setAi] = useState<AiState>('checking');
   const [model, setModel] = useState<string | null>(null);
   const [web, setWeb] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [live, setLive] = useState<ResearchEvent[]>([]);
-  const abortRef = useRef<AbortController | null>(null);
+  // The turn lives in the shared run registry, so it survives leaving the project.
+  const run = useRuns((r) => r.get(projectId, 'project'));
+  const busy = run?.status === 'running';
+  const live = run?.events ?? [];
   const [error, setError] = useState<string | null>(null);
   const [review, setReview] = useState<ResearchProposal | null>(null);
   const [showDone, setShowDone] = useState(false);
@@ -149,25 +151,17 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
     if (ctl.open && ctl.draft) inputRef.current?.focus();
   }, [ctl.open, ctl.draft]);
 
-  const send = async (text: string) => {
-    if (!text.trim() || busy) return;
-    setBusy(true);
+  const send = (text: string) => {
+    const msg = text.trim();
+    if (!msg || busy) return;
     setError(null);
-    setLive([]);
-    const ac = new AbortController();
-    abortRef.current = ac;
-    try {
-      const task = view?.task.id ?? await app.research.startTask(projectId);
-      ctl.setDraft('');
-      await runAgentTurn({ store: app.store, research: app.research, agent: app.agent, ai: app.ai }, task, text.trim(),
-        (e) => setLive((cur) => [...cur, e]), ac.signal);
-    } catch (e) {
-      if (!(e instanceof Error && e.name === 'AbortError')) setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-      setLive([]);
-      abortRef.current = null;
-    }
+    ctl.setDraft('');
+    const existing = view?.task.id ?? null;
+    const game = projectSummary(app.store.getTables(), projectId)?.game.primary_name ?? 'prosjektet';
+    runs.start(projectId, 'project', async (onEvent, signal) => {
+      const task = existing ?? await app.research.startTask(projectId);
+      await runAgentTurn({ store: app.store, research: app.research, agent: app.agent, ai: app.ai }, task, msg, onEvent, signal);
+    }, { label: `Researchagent: ${game}`, href: `/p/${projectId}` });
   };
 
   const act = async (fn: () => Promise<unknown>) => {
@@ -181,6 +175,7 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
         <button type="button" className="agent-rail-btn" onClick={() => ctl.setOpen(true)} aria-label="Åpne researchagenten">
           <span aria-hidden>✦</span>
           <span className="agent-rail-label">Researchagent</span>
+          {busy && <span className="run-dot" aria-label="agenten jobber" />}
           {!!view?.proposals.filter((p) => p.decision === 'pending').length && (
             <span className="agent-rail-count">{view.proposals.filter((p) => p.decision === 'pending').length}</span>
           )}
@@ -265,7 +260,7 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
         {view?.timeline.map((x) => x.kind === 'message'
           ? <Message key={x.m.id} m={x.m} />
           : <ChangeSetCard key={x.c.id} c={x.c} onUndo={() => act(() => app.research.undoChangeSet(x.c.id))} />)}
-        {busy && <LiveSteps events={live} onStop={() => abortRef.current?.abort()} />}
+        {busy && <LiveSteps events={live} onStop={() => runs.stop(projectId, 'project')} />}
 
         {pending.length > 0 && (
           <section className="agent-proposals">
@@ -304,6 +299,8 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
       </div>
 
       <ErrorNote error={error} onClose={() => setError(null)} />
+      {/* Errors the agent wrote into the conversation are not shown twice; only those that happened before it got that far. */}
+      <ErrorNote error={run?.status === 'error' && !run.error_reported ? run.error ?? 'Agenten feilet.' : null} onClose={() => runs.dismiss(projectId, 'project')} />
 
       <form className="agent-input" onSubmit={(e) => { e.preventDefault(); send(ctl.draft); }}>
         {ai === 'ready' && !busy && !view?.messages.length && (

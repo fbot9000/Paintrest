@@ -208,14 +208,15 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
   const tx = store.transaction.bind(store);
 
   return {
-    async startTask(project_id) {
+    async startTask(project_id, focus) {
       return tx((t, ws) => {
         const p = must(t.project[project_id], 'Prosjektet');
         if (p.deleted_at) throw new CommandError('Prosjektet er slettet');
+        if (focus && t.miniature_subject[focus.subject_id]?.project_id !== project_id) throw new CommandError('Miniatyren hører til et annet prosjekt');
         const id = newId();
         t.research_task[id] = { id, workspace_id: ws, status: 'open', created_at: now() };
         // System sets scope and result types in the same transaction (skjema §7).
-        t.task_scope[id] = { task_id: id, area_kind: 'new_project', work_project_id: project_id, allow_new_knowledge: false };
+        t.task_scope[id] = { task_id: id, area_kind: 'new_project', work_project_id: project_id, allow_new_knowledge: false, ...(focus ? { subject_focus: { ...focus } } : {}) };
         for (const result_type of IMPLEMENTED_TYPES) t.task_result_type.push({ task_id: id, result_type });
         record(t, ws, 'research_task', id, 'create', { initiated_by: 'user', task_id: id });
         return id;

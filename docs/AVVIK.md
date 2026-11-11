@@ -75,6 +75,8 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 
 31. **Bildesøk og bilder uten åpnet side.** Agenten har handlingen `image_search` (Brave Image Search, eller bilder per resultat fra Tavily). Et bilde fra bildesøket kan foreslås og lagres uten at siden er åpnet. Kilden blir siden bildet kom fra, slik søketjenesten oppga den. Det er en oppmykning av kildekravet fra avvik 23: før måtte bildet stå på en side agenten hadde lest. Serveren sjekker fortsatt at hvert bilde faktisk kom fra et søk eller en åpnet side i samme runde. Forslaget kan ha `thumbnail_url` (søketjenestens lille kopi), som brukes når originalen ikke kan hentes.
 
+32. **BRUKERBESLUTNING 11. november 2026: egne oppgaver for verkstedet.** Bildejakt og maleplan får hver sin `research_task` per miniatyr, merket med `task_scope.subject_focus` (`{ subject_id, kind: 'images' | 'plan' }`). Agentpanelet bruker bare oppgaver uten merke. Da deler en tur i panelet aldri samtale med en kjøring i verkstedet, og de kan gå samtidig uten å blande historikken. Skjemaet har ikke feltet. Feltet er valgfritt, så eldre data trenger ingen migrering. En åpen oppgave fra før blir panelets.
+
 29. **BRUKERBESLUTNING 11. november 2026: biblioteket er ikke låst (bit 7.0).** Teknikker og oppskrifter har ingen versjonstabeller. Brukeren endrer dem direkte, og `change_record` tar vare på historikken. Om de skal låses, vurderes senere. Plan og begrunnelse står i [BIT7-KUNNSKAP.md](BIT7-KUNNSKAP.md).
     - **Nye tabeller i v5:** `technique`, `technique_step`, `technique_experience`, `recipe`, `recipe_paint` og `recipe_step`.
     - **«Godkjent» er et merke** (`status: draft | approved`), ikke en lås. En godkjent teknikk eller oppskrift kan fortsatt endres.
