@@ -10,9 +10,18 @@ import type { Id } from '../domain/types';
 
 /**
  * 'images' and 'plan' run for a miniature (id = subject id);
- * 'knowledge' runs a library research turn (id = research task id).
+ * 'knowledge' runs a library research turn (id = research task id);
+ * 'project' runs a turn from the project's agent panel (id = project id,
+ * since the panel may open its task inside the run).
+ * Runs of different kinds never block each other, even on the same task.
  */
-export type RunKind = 'images' | 'plan' | 'knowledge';
+export type RunKind = 'images' | 'plan' | 'knowledge' | 'project';
+
+/** What the global indicator shows for a run, and where it leads. */
+export interface RunMeta {
+  label: string;
+  href: string;
+}
 
 export interface LivePage {
   url: string;
@@ -32,6 +41,9 @@ export interface Run {
   /** The miniature for 'images'/'plan', the research task for 'knowledge'. */
   id: Id;
   kind: RunKind;
+  /** For the global indicator; null when the starter gave none. */
+  label: string | null;
+  href: string | null;
   status: 'running' | 'done' | 'stopped' | 'error';
   events: ResearchEvent[];
   /** Pages read in this run, with their images, as they arrive. */
@@ -70,12 +82,12 @@ class RunRegistry {
   }
 
   /** Starts a run; a run of the same kind for the same id must finish or be stopped first. */
-  start(id: Id, kind: RunKind, work: (onEvent: (e: ResearchEvent) => void, signal: AbortSignal) => Promise<void>): void {
+  start(id: Id, kind: RunKind, work: (onEvent: (e: ResearchEvent) => void, signal: AbortSignal) => Promise<void>, meta?: RunMeta): void {
     const key = keyOf(id, kind);
     if (this.runs.get(key)?.status === 'running') return;
     const ac = new AbortController();
     this.controllers.set(key, ac);
-    this.set({ key, id, kind, status: 'running', events: [], pages: [], error: null, started_at: new Date().toISOString(), finished_at: null });
+    this.set({ key, id, kind, label: meta?.label ?? null, href: meta?.href ?? null, status: 'running', events: [], pages: [], error: null, started_at: new Date().toISOString(), finished_at: null });
     const onEvent = (e: ResearchEvent) => {
       const cur = this.runs.get(key)!;
       const pages = e.type === 'open_done'

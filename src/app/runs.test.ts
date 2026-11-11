@@ -82,4 +82,22 @@ describe('kjøringer som overlever navigasjon', () => {
       await new Promise((r) => setTimeout(r, 0));
     });
   });
+
+  it("kjører prosjektpanelet ved siden av verkstedet, med etikett og lenke for den globale indikatoren", async () => {
+    const abortable = (signal: AbortSignal) => new Promise<void>((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(Object.assign(new Error('stopp'), { name: 'AbortError' })));
+    });
+    runs.start('p1', 'project', async (_onEvent, signal) => abortable(signal), { label: 'Researchagent: Spillet', href: '/p/p1' });
+    runs.start('s5', 'images', async (_onEvent, signal) => abortable(signal));
+    // Different kinds do not block each other.
+    expect(runs.get('p1', 'project')).toMatchObject({ status: 'running', label: 'Researchagent: Spillet', href: '/p/p1' });
+    expect(runs.get('s5', 'images')).toMatchObject({ status: 'running', label: null, href: null });
+    expect(runs.active('images', 'plan').map((x) => x.id)).not.toContain('p1');
+    runs.stop('p1', 'project');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(runs.get('p1', 'project')!.status).toBe('stopped');
+    expect(runs.get('s5', 'images')!.status).toBe('running');
+    runs.stop('s5', 'images');
+    await new Promise((r) => setTimeout(r, 0));
+  });
 });

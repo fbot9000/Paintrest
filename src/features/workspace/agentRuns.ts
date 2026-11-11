@@ -45,7 +45,7 @@ export function startImageHunt(app: App, s: MiniatureSubject, game: string, refe
       + 'Foreslå kandidater med begrunnelse; jeg vurderer bildene selv.';
     await runAgentTurn({ store: app.store, research: app.research, agent: app.agent, ai: app.ai }, task, prompt, onEvent, signal,
       { kind: 'images', subject_ref: ref, subject_name: s.name, game, reference_image: reference, user_images: userImages(app, s) });
-  });
+  }, { label: `Bilder til ${s.name}`, href: `/p/${s.project_id}/m/${s.id}/bilder` });
 }
 
 /** paints: the user's active choice (brukerbeslutning 11.11.2026); the agent has no hidden preference. */
@@ -58,5 +58,5 @@ export function startPlan(app: App, s: MiniatureSubject, game: string, fileIds: 
       + (paints === 'owned' ? 'Bruk bare malinger jeg har.' : 'Velg de malingene som gir best resultat, uansett hva jeg har.');
     await runAgentTurn({ store: app.store, research: app.research, agent: app.agent, ai: app.ai }, task, prompt, onEvent, signal,
       { kind: 'plan', subject_ref: ref, subject_name: s.name, game, reference_images, revision: !!s.current_plan_version_id, paints });
-  });
+  }, { label: `Maleplan for ${s.name}`, href: `/p/${s.project_id}/m/${s.id}/maleplan` });
 }
