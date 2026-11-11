@@ -32,7 +32,7 @@ Ved første start får appen eksempeldata: prosjektet Avalon med fire figurer og
 
 - **Eksempelmalingene fra testdataene** (14 Citadel-malinger og «Grønn glasur fra hylla») vises med et eget varsel og knappen «Fjern eksempelmalingene». De skjules, og eierstatusen fjernes. Planer og oppskrifter som bruker dem, beholder dem. Legger du inn den samme malingen selv senere, tas den skjulte raden i bruk igjen, og planene peker da på din.
 - **En og en:** «Legg til maling». Produsent, serie, navn, kode, type, finish, farge og om du har den. Produsent, serie og type blir stående til neste maling. «Fyll ut med AI» fyller inn tomme felt (også en omtrentlig farge), og feltene AI-en fylte inn er merket til du endrer dem. Finnes malingen fra før, sier skjemaet det, og du får ingen dobbel.
-- **Rediger og skjul:** trykk på en maling. Eierstatus endres rett i listen. Skjulte malinger kan gjenopprettes.
+- **Rediger, skjul og slett:** trykk på en maling. Eierstatus endres rett i listen. Skjulte malinger kan gjenopprettes eller slettes for godt. Før en sletting viser appen hvilke planer, oppskrifter og paletter som mister malingen (stegene blir stående), og serveren tar en sikkerhetskopi av datamappen først.
 - **Import av en liste:** «Importer en liste». Lim inn tekst eller last opp en fil (tekst, CSV/TSV, Excel .xlsx, JSON eller HTML). Fra PDF eller e-post: kopier teksten og lim den inn.
   1. AI-en leser listen i deler på opptil 40 linjer, to om gangen, og foreslår hver maling med produsent, serie, navn, kode, type, finish og omtrentlig farge. Du kan stoppe og fortsette.
   2. Felt AI-en har fylt inn selv, og som ikke står i teksten din, er merket. Serveren merker dem også når modellen glemmer det. Hver rad viser linjen den kom fra.

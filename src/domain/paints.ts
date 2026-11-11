@@ -234,6 +234,52 @@ export function productUsage(t: Tables, ids: Iterable<Id>): ProductUsage {
   return { plans, recipes, palettes };
 }
 
+export interface UsageDetail {
+  /** Miniatures with a plan (any version) that uses the paints: «Merlin (Avalon)». */
+  plans: string[];
+  recipes: string[];
+  /** Miniatures whose palette has the paints. */
+  palettes: string[];
+}
+
+/**
+ * Everything that refers to the paints, by name, for the «slett for godt» question.
+ * Unlike productUsage, old plan versions and hidden objects count too: a permanent
+ * delete changes them as well.
+ */
+export function usageDetail(t: Tables, ids: Iterable<Id>): UsageDetail {
+  const set = new Set(ids);
+  const versions = new Set<Id>();
+  const addStep = (step_id: Id) => {
+    const st = t.plan_step[step_id];
+    const el = st ? t.plan_element[st.element_id] : undefined;
+    if (el) versions.add(el.plan_version_id);
+  };
+  for (const m of Object.values(t.step_material)) if (set.has(m.product_id)) addStep(m.step_id);
+  for (const c of t.mix_component) if (set.has(c.product_id)) { const g = t.mix_group[c.mix_group_id]; if (g) addStep(g.step_id); }
+  for (const d of Object.values(t.local_deviation)) {
+    if (d.step_id && (set.has(d.payload.from_product_id ?? '') || set.has(d.payload.to_product_id ?? ''))) addStep(d.step_id);
+  }
+  const subjectName = (subject_id: Id) => {
+    const s = t.miniature_subject[subject_id];
+    if (!s) return null;
+    const game = t.project[s.project_id] ? t.game[t.project[s.project_id]!.game_id] : undefined;
+    return `${s.name}${game ? ` (${game.primary_name})` : ''}${s.deleted_at ? ', slettet' : ''}`;
+  };
+  const uniq = (xs: (string | null)[]) => [...new Set(xs.filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b, 'nb'));
+  const plans = uniq([...versions].map((v) => { const pv = t.paint_plan_version[v]; return pv ? subjectName(pv.subject_id) : null; }));
+  const recipes = uniq(Object.values(t.recipe_paint).filter((r) => set.has(r.product_id)).map((r) => {
+    const x = t.recipe[r.recipe_id];
+    return x ? `${x.name}${x.deleted_at ? ' (slettet)' : ''}` : null;
+  }));
+  const palettes = uniq(Object.values(t.palette_entry).filter((e) => set.has(e.product_id)).flatMap((e) => (
+    e.scope_kind === 'subjects'
+      ? t.palette_entry_subject.filter((x) => x.palette_entry_id === e.id).map((x) => subjectName(x.subject_id))
+      : [t.project[e.project_id] ? t.game[t.project[e.project_id]!.game_id]?.primary_name ?? null : null]
+  )));
+  return { plans, recipes, palettes };
+}
+
 export function usageText(u: ProductUsage): string | null {
   const parts = [
     u.plans ? `${u.plans} ${u.plans === 1 ? 'maleplan' : 'maleplaner'}` : '',

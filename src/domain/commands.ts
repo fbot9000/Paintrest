@@ -231,6 +231,12 @@ export interface Commands extends KnowledgeCommands {
   importProducts(paints: ImportPaintInput[], opts?: { source?: 'manual' | 'import' }): Promise<ImportSummary>;
   /** Hides the paints from the old sample data and clears their ownership. Returns how many. */
   removeSampleProducts(): Promise<number>;
+  /**
+   * Deletes hidden paints for good, and removes them from plan steps, mixes, open
+   * deviations, recipes and palettes (the steps and recipes stay). Takes a backup of the
+   * data folder first. Refuses paints that are not hidden. Returns how many were deleted.
+   */
+  purgeProducts(product_ids: Id[]): Promise<number>;
 
   // Plan og malevisning
   createEmptyPlan(subject_id: Id): Promise<Id>;

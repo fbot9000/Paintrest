@@ -43,7 +43,13 @@
 .paint-hidden { border-top: 1px solid var(--line); padding-top: 14px; }
 .paint-hidden summary { cursor: pointer; font-weight: 500; padding: 10px 0; }
 .paint-hidden ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
-.paint-hidden li { display: flex; align-items: center; gap: 10px; }
+.paint-hidden li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.paint-hidden > .btn { margin-top: 12px; }
+.link-danger { color: var(--warn); }
+.purge-list, .purge-usage ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.purge-list { list-style: none; padding: 0; }
+.purge-list li { display: flex; align-items: center; gap: 8px; }
+.purge-usage { display: grid; gap: 8px; padding: 12px 14px; border-radius: var(--r-md); background: var(--warn-soft); }
 
 /* Skjemaet for én maling */
 .paint-form { display: grid; gap: 14px; }

@@ -6,7 +6,7 @@ import { Store, emptyTables } from './store';
 import type { ImportPaintInput } from '../domain/commands';
 import type { PaintDiscussResult, PaintReadResult, PaintWire } from '../domain/ai';
 import {
-  addReadResult, applyDiscussResult, chunkRequest, editRow, findProduct, importInputs, newDraft, paintRows,
+  addReadResult, applyDiscussResult, chunkRequest, editRow, findProduct, importInputs, newDraft, paintRows, usageDetail,
   breakLongLine, planChunks, plannedImport, productUsage, rowsWithoutAi, sampleProducts, splitCells, splitLines, tableForAi, uncoveredLines,
 } from '../domain/paints';
 import type { ImportDraft } from '../domain/paints';
@@ -329,5 +329,64 @@ describe('import uten AI', () => {
     expect(d.rows.map((r) => r.key)).toEqual(['R1', 'R2']);
     expect(d.next_row).toBe(3);
     expect(d.chunks).toEqual([]);
+  });
+});
+
+describe('slette malinger for godt', () => {
+  async function setup() {
+    const p = memoryPersistence();
+    const backups: string[] = [];
+    const persistence = { ...p, backup: async (r: 'manual' | 'before-reset') => { backups.push(r); } };
+    const store = new Store(await buildSampleData(persistence, { examplePaints: true }), persistence);
+    const cmd = createLocalCommands(store);
+    const id = (name: string) => byName(store.getTables(), name)[0]!.id;
+    return { store, cmd, id, backups };
+  }
+
+  it('sletter bare skjulte malinger, og forteller hvor de brukes', async () => {
+    const { store, cmd, id } = await setup();
+    await expect(cmd.purgeProducts([id('Warpstone Glow')])).rejects.toThrow(/Skjul «Warpstone Glow»/);
+    await cmd.removeSampleProducts();
+    const u = usageDetail(store.getTables(), [id('Warpstone Glow'), id('Grønn glasur fra hylla')]);
+    expect(u).toEqual({ plans: ['Druid Champions (Avalon: The Riven Veil)', 'Merlin (Avalon: The Riven Veil)'], recipes: ['Grønn kappe'], palettes: [] });
+  });
+
+  it('fjerner malingen fra steg, blandinger, åpne avvik, oppskrifter og paletter, og tar sikkerhetskopi først', async () => {
+    const { store, cmd, id, backups } = await setup();
+    const t0 = store.getTables();
+    const merlin = Object.values(t0.miniature_subject).find((s) => s.name === 'Merlin')!;
+    const warp = id('Warpstone Glow');
+    const glaze = id('Grønn glasur fra hylla');
+    const pv = merlin.current_plan_version_id!;
+    const step = Object.values(t0.step_material).find((m) => m.product_id === warp && Object.values(t0.plan_step).some((s) => s.id === m.step_id))!.step_id;
+    const open = await cmd.addDeviation(pv, { element_id: null, step_id: step, kind: 'swap_product', payload: { from_product_id: warp, to_product_id: id('Moot Green') } });
+    await cmd.addPaletteEntry(merlin.id, warp, { part: 'Kappe' });
+    const before = store.getTables().project[merlin.project_id]!.content_revision;
+    await cmd.removeSampleProducts();
+
+    // Only the glaze: the mix keeps Warpstone Glow.
+    expect(await cmd.purgeProducts([glaze])).toBe(1);
+    let t = store.getTables();
+    expect(t.paint_product[glaze]).toBeUndefined();
+    expect(Object.values(t.mix_group)).toHaveLength(1);
+    expect(t.mix_component.map((c) => c.product_id)).toEqual([warp]);
+
+    expect(await cmd.purgeProducts([warp])).toBe(1);
+    t = store.getTables();
+    expect(backups).toEqual(['manual', 'manual']);
+    expect(Object.values(t.step_material).some((m) => m.product_id === warp)).toBe(false);
+    expect(Object.values(t.mix_group)).toHaveLength(0);
+    expect(t.local_deviation[open]).toBeUndefined();
+    expect(Object.values(t.palette_entry).some((e) => e.product_id === warp)).toBe(false);
+    expect(t.project[merlin.project_id]!.content_revision).toBeGreaterThan(before);
+    const kappe = Object.values(t.recipe).find((r) => r.name === 'Grønn kappe')!;
+    const paints = Object.values(t.recipe_paint).filter((r) => r.recipe_id === kappe.id);
+    expect(paints.map((r) => t.paint_product[r.product_id]!.name).sort()).toEqual(['Caliban Green', 'Moot Green', 'Nuln Oil']);
+    const ids = new Set(paints.map((r) => r.id));
+    expect(Object.values(t.recipe_step).filter((s) => s.recipe_id === kappe.id).every((s) => s.paint_ids.every((x) => ids.has(x)))).toBe(true);
+    // The steps stay, with their text.
+    const view = paintingView(t, merlin.id)!;
+    expect(view.elements.flatMap((e) => e.steps).some((s) => s.step.instruction === 'Lag på de øvre halvdelene av hver fjær.' && s.materials.length === 0)).toBe(true);
+    expect(Object.values(t.change_record).some((r) => r.target_id === warp && r.action === 'delete')).toBe(true);
   });
 });

@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { useCommand, useView } from '../../app/context';
-import { KIND_LABEL, OWNERSHIP_LABEL, hiddenProducts, makersIn, normText, paintCounts, paintLabel, paintRows, productUsage, sampleProducts, usageText } from '../../domain/paints';
+import { useApp, useCommand, useView } from '../../app/context';
+import { KIND_LABEL, OWNERSHIP_LABEL, hiddenProducts, makersIn, normText, paintCounts, paintLabel, paintRows, productUsage, sampleProducts, usageDetail, usageText } from '../../domain/paints';
 import type { OwnershipFilter, PaintRow } from '../../domain/paints';
 import type { Id, Ownership, PaintProduct } from '../../domain/types';
-import { Badge, Button, ErrorNote, Swatch } from '../../ui/components';
+import { Badge, Button, Dialog, ErrorNote, Swatch } from '../../ui/components';
 import { Chip, SearchBox } from '../library/parts';
 import { EMPTY_PAINT, PaintForm, valueOf } from './PaintForm';
 import type { PaintValue } from './PaintForm';
@@ -25,6 +25,7 @@ export function PaintsPage() {
   const [maker, setMaker] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Id | null>(null);
+  const [purge, setPurge] = useState<Id[] | null>(null);
   const { run, error, clearError } = useCommand();
   const draft = useImport().draft;
 
@@ -181,18 +182,66 @@ export function PaintsPage() {
       {data.hidden.length > 0 && (
         <details className="paint-hidden">
           <summary>Skjulte malinger ({data.hidden.length})</summary>
-          <p className="small muted">Skjulte malinger vises ikke i samlingen og når du velger maling. Planer og oppskrifter som bruker dem, beholder dem.</p>
+          <p className="small muted">
+            Skjulte malinger vises ikke i samlingen og når du velger maling. Planer og oppskrifter som bruker dem, beholder dem.
+            «Slett for godt» fjerner malingen helt, også fra planene og oppskriftene.
+          </p>
           <ul>
             {data.hidden.map((p) => (
               <li key={p.id}>
                 <Swatch hex={p.swatch_hex} /> <span>{paintLabel(p)}</span>
-                <button type="button" className="link" onClick={() => run((c) => c.restoreProduct(p.id))}>Gjenopprett</button>
+                <button type="button" className="link" aria-label={`Gjenopprett ${p.name}`} onClick={() => run((c) => c.restoreProduct(p.id))}>Gjenopprett</button>
+                <button type="button" className="link link-danger" aria-label={`Slett ${p.name} for godt`} onClick={() => setPurge([p.id])}>Slett for godt</button>
               </li>
             ))}
           </ul>
+          {data.hidden.length > 1 && (
+            <Button variant="danger" onClick={() => setPurge(data.hidden.map((p) => p.id))}>Slett alle {data.hidden.length} for godt</Button>
+          )}
         </details>
       )}
+      {purge && <PurgeDialog ids={purge} onClose={() => setPurge(null)} />}
     </main>
+  );
+}
+
+/** «Slett for godt»: says exactly what changes, and that a backup is taken first. */
+function PurgeDialog({ ids, onClose }: { ids: Id[]; onClose: () => void }) {
+  const { store } = useApp();
+  const { run, error, busy } = useCommand();
+  const info = useView((t) => ({
+    paints: ids.flatMap((id) => (t.paint_product[id] ? [t.paint_product[id]!] : [])),
+    usage: usageDetail(t, ids),
+  }), [ids.join()]);
+  const n = info.paints.length;
+  const list = (xs: string[]) => (xs.length <= 6 ? xs.join(', ') : `${xs.slice(0, 6).join(', ')} og ${xs.length - 6} til`);
+  const used = info.usage.plans.length + info.usage.recipes.length + info.usage.palettes.length > 0;
+  return (
+    <Dialog open onClose={onClose} title={n === 1 ? `Slette ${info.paints[0]?.name ?? 'malingen'} for godt?` : `Slette ${n} malinger for godt?`}
+      footer={<>
+        <Button onClick={onClose}>Avbryt</Button>
+        <Button variant="danger" disabled={busy || n === 0} onClick={async () => {
+          if (await run((c) => c.purgeProducts(ids)) !== undefined) onClose();
+        }}>{busy ? 'Sletter …' : 'Slett for godt'}</Button>
+      </>}>
+      {n > 1 && <ul className="purge-list">{info.paints.map((p) => <li key={p.id}><Swatch hex={p.swatch_hex} /> {paintLabel(p)}</li>)}</ul>}
+      {used ? (
+        <div className="purge-usage">
+          <p>{n === 1 ? 'Malingen' : 'Malingene'} fjernes også fra:</p>
+          <ul>
+            {info.usage.plans.length > 0 && <li>maleplanen for {list(info.usage.plans)}</li>}
+            {info.usage.recipes.length > 0 && <li>{info.usage.recipes.length === 1 ? 'oppskriften' : 'oppskriftene'} {list(info.usage.recipes)}</li>}
+            {info.usage.palettes.length > 0 && <li>paletten for {list(info.usage.palettes)}</li>}
+          </ul>
+          <p className="small muted">Stegene og oppskriftene blir stående med teksten sin, bare uten {n === 1 ? 'denne malingen' : 'disse malingene'}. Avvik som allerede er lagret som ferdigmalt, blir stående som historikk.</p>
+        </div>
+      ) : <p>{n === 1 ? 'Malingen' : 'Malingene'} brukes ikke i noen plan, oppskrift eller palett.</p>}
+      <p className="small muted">
+        Det kan ikke angres i appen.
+        {store.persistence.kind === 'server' ? ' Det tas en sikkerhetskopi av datamappen først (backups/).' : ' Dataene ligger i nettleseren, så det tas ingen sikkerhetskopi.'}
+      </p>
+      <ErrorNote error={error} />
+    </Dialog>
   );
 }
 

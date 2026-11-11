@@ -679,6 +679,75 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
       });
     },
 
+    async purgeProducts(product_ids) {
+      const ids = new Set(product_ids);
+      if (!ids.size) return 0;
+      const t0 = store.getTables();
+      for (const id of ids) {
+        const p = must(t0.paint_product[id], 'Malingen');
+        if (!p.deleted_at) throw new CommandError(`Skjul «${p.name}» før du sletter den for godt`);
+      }
+      // A permanent delete cannot be undone in the app; the backup in the data folder can.
+      await blobs.backup?.('manual');
+      return tx((t, ws) => {
+        const touchedProjects = new Set<Id>();
+        const projectOfStep = (step_id: Id) => {
+          const el = t.plan_step[step_id] ? t.plan_element[t.plan_step[step_id]!.element_id] : undefined;
+          const pv = el ? t.paint_plan_version[el.plan_version_id] : undefined;
+          return pv ? t.miniature_subject[pv.subject_id]?.project_id : undefined;
+        };
+        const touchStep = (step_id: Id) => { const pid = projectOfStep(step_id); if (pid) touchedProjects.add(pid); };
+        // Plan steps keep their instruction; only the paint goes.
+        for (const m of Object.values(t.step_material)) {
+          if (ids.has(m.product_id)) { touchStep(m.step_id); delete t.step_material[m.id]; }
+        }
+        t.mix_component = t.mix_component.filter((c) => {
+          if (!ids.has(c.product_id)) return true;
+          const g = t.mix_group[c.mix_group_id];
+          if (g) touchStep(g.step_id);
+          return false;
+        });
+        for (const g of Object.values(t.mix_group)) {
+          if (!t.mix_component.some((c) => c.mix_group_id === g.id)) delete t.mix_group[g.id];
+        }
+        // Open swaps to or from the paint mean nothing without it. Sealed ones are history and stay.
+        for (const d of Object.values(t.local_deviation)) {
+          if (d.sealed_at) continue;
+          if (ids.has(d.payload.from_product_id ?? '') || ids.has(d.payload.to_product_id ?? '')) {
+            if (d.step_id) touchStep(d.step_id);
+            delete t.local_deviation[d.id];
+          }
+        }
+        for (const e of Object.values(t.palette_entry)) {
+          if (!ids.has(e.product_id)) continue;
+          touchedProjects.add(e.project_id);
+          t.palette_entry_subject = t.palette_entry_subject.filter((x) => x.palette_entry_id !== e.id);
+          delete t.palette_entry[e.id];
+        }
+        // Recipes keep their steps; the paint leaves the colour sequence and the steps that used it.
+        const ts = now();
+        for (const r of Object.values(t.recipe_paint)) {
+          if (!ids.has(r.product_id)) continue;
+          for (const st of Object.values(t.recipe_step)) {
+            if (st.recipe_id === r.recipe_id && st.paint_ids.includes(r.id)) st.paint_ids = st.paint_ids.filter((x) => x !== r.id);
+          }
+          const recipe = t.recipe[r.recipe_id];
+          if (recipe) {
+            recipe.updated_at = ts;
+            record(t, ws, { target_type: 'recipe', target_id: recipe.id, action: 'update' });
+          }
+          delete t.recipe_paint[r.id];
+        }
+        t.inventory_entry = t.inventory_entry.filter((e) => !ids.has(e.product_id));
+        for (const pid of touchedProjects) { const p = t.project[pid]; if (p) p.content_revision++; }
+        for (const id of ids) {
+          delete t.paint_product[id];
+          record(t, ws, { target_type: 'paint_product', target_id: id, action: 'delete' });
+        }
+        return ids.size;
+      });
+    },
+
     // ---------- Plan og malevisning ----------
     async createEmptyPlan(subject_id) {
       return tx((t, ws) => {
