@@ -11,7 +11,8 @@ import { Badge, Button, ErrorNote, OwnershipFlag } from '../../ui/components';
 import { LiveSteps, Message } from '../agent/AgentPanel';
 import { EvidenceBadge } from './parts';
 import { AiStatusNote, PaintChoicePicker, useAiStatus } from './ResearchPage';
-import { clearRunError, startRun, stopRun, useRun } from './research-runs';
+import { runs, useRuns } from '../../app/runs';
+import { startRun } from './research-runs';
 
 /**
  * Skisse 03 «Kildearbeid og syntese», simplified: the conversation with the
@@ -22,14 +23,15 @@ export function ResearchTaskPage() {
   const { taskId = '' } = useParams();
   const app = useApp();
   const view = useView((t) => knowledgeTaskView(t, taskId), [taskId]);
-  const run = useRun(taskId);
+  const run = useRuns((r) => r.get(taskId, 'knowledge'));
+  const running = run?.status === 'running';
   const choice = useView((t) => t.task_scope[taskId]?.paint_choice ?? null, [taskId]);
   const status = useAiStatus();
   const [text, setText] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
 
   // Follow the agent's progress while it works; otherwise leave the scroll alone so the draft stays in view.
-  useEffect(() => { if (run.running) endRef.current?.scrollIntoView({ block: 'nearest' }); }, [run.running, run.events.length]);
+  useEffect(() => { if (running) endRef.current?.scrollIntoView({ block: 'nearest' }); }, [running, run?.events.length]);
 
   if (!view) {
     return <main className="page"><h1>Fant ikke researchen</h1><p><Link to="/bibliotek/research">Til research</Link></p></main>;
@@ -53,13 +55,19 @@ export function ResearchTaskPage() {
         <h1>{view.title}</h1>
       </div>
       <AiStatusNote status={status} />
-      <ErrorNote error={run.error} onClose={() => clearRunError(taskId)} />
+      <ErrorNote error={run?.status === 'error' ? run.error ?? 'Agenten feilet.' : null} onClose={() => runs.dismiss(taskId, 'knowledge')} />
+      {run?.status === 'stopped' && (
+        <div className="error-note" role="status">
+          <span>Agenten ble stoppet. Send en ny melding for å fortsette.</span>
+          <button type="button" className="link" onClick={() => runs.dismiss(taskId, 'knowledge')}>Lukk</button>
+        </div>
+      )}
 
       {pending.map((p) => <DraftCard key={p.id} p={p} messages={view.messages} revisionOf={view.revision_of?.id ?? null} />)}
 
       <section className="research-chat" aria-label="Samtale med agenten">
         {view.messages.map((m) => <Message key={m.id} m={m} />)}
-        {run.running && <LiveSteps events={run.events} onStop={() => stopRun(taskId)} />}
+        {running && <LiveSteps events={run.events} onStop={() => runs.stop(taskId, 'knowledge')} />}
         <div ref={endRef} />
       </section>
 
@@ -75,7 +83,7 @@ export function ResearchTaskPage() {
         <textarea id="research-msg" value={text} rows={2} placeholder="Spør, rett eller be om mer research"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send(); }} />
-        <Button variant="primary" disabled={!text.trim() || run.running || status !== 'ready'} onClick={send}>Send</Button>
+        <Button variant="primary" disabled={!text.trim() || running || status !== 'ready'} onClick={send}>Send</Button>
       </div>
 
       {done.length > 0 && (

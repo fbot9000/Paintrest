@@ -14,7 +14,7 @@ describe('kjøringer som overlever navigasjon', () => {
     const r = runs.get('s1', 'images')!;
     expect(r.status).toBe('running');
     expect(r.pages[0]!.images).toHaveLength(1);
-    expect(runs.active().map((x) => x.subject_id)).toContain('s1');
+    expect(runs.active().map((x) => x.id)).toContain('s1');
     // A second start while running is ignored.
     runs.start('s1', 'images', async () => {});
     runs.stop('s1', 'images');
@@ -27,5 +27,59 @@ describe('kjøringer som overlever navigasjon', () => {
     runs.start('s2', 'plan', async () => { throw new Error('UiB svarte ikke'); });
     await new Promise((r) => setTimeout(r, 0));
     expect(runs.get('s2', 'plan')).toMatchObject({ status: 'error', error: 'UiB svarte ikke' });
+  });
+
+  describe("research i biblioteket ('knowledge')", () => {
+    const abortable = (signal: AbortSignal) => new Promise<void>((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(Object.assign(new Error('stopp'), { name: 'AbortError' })));
+    });
+
+    it('starter med oppgavens id, samler hendelser og blir ferdig', async () => {
+      let release!: () => void;
+      runs.start('task-1', 'knowledge', async (onEvent) => {
+        onEvent({ type: 'open_done', url: 'https://b.example/artikkel', title: 'B', image_count: 0 });
+        await new Promise<void>((resolve) => { release = resolve; });
+      });
+      const r = runs.get('task-1', 'knowledge')!;
+      expect(r).toMatchObject({ id: 'task-1', kind: 'knowledge', status: 'running' });
+      expect(r.events).toHaveLength(1);
+      expect(runs.get('task-1', 'images')).toBeNull();
+      release();
+      await new Promise((r2) => setTimeout(r2, 0));
+      // Events are kept after the run is done.
+      expect(runs.get('task-1', 'knowledge')).toMatchObject({ status: 'done', error: null });
+      expect(runs.get('task-1', 'knowledge')!.events).toHaveLength(1);
+      expect(runs.get('task-1', 'knowledge')!.finished_at).not.toBeNull();
+    });
+
+    it('kan stoppes, og stoppet skilles fra ferdig', async () => {
+      runs.start('task-2', 'knowledge', async (_onEvent, signal) => abortable(signal));
+      runs.stop('task-2', 'knowledge');
+      await new Promise((r) => setTimeout(r, 0));
+      expect(runs.get('task-2', 'knowledge')).toMatchObject({ status: 'stopped', error: null });
+    });
+
+    it('melder feil, og feilen kan lukkes', async () => {
+      runs.start('task-3', 'knowledge', async () => { throw new Error('Agenten svarte ikke'); });
+      await new Promise((r) => setTimeout(r, 0));
+      expect(runs.get('task-3', 'knowledge')).toMatchObject({ status: 'error', error: 'Agenten svarte ikke' });
+      runs.dismiss('task-3', 'knowledge');
+      expect(runs.get('task-3', 'knowledge')).toBeNull();
+    });
+
+    it('vises ikke som markør i galleriet', async () => {
+      runs.start('task-4', 'knowledge', async (_onEvent, signal) => abortable(signal));
+      runs.start('s4', 'plan', async (_onEvent, signal) => abortable(signal));
+      expect(runs.active().map((x) => x.id)).toEqual(expect.arrayContaining(['task-4', 's4']));
+      const gallery = runs.active('images', 'plan').map((x) => x.id);
+      expect(gallery).toContain('s4');
+      expect(gallery).not.toContain('task-4');
+      // A running run cannot be dismissed.
+      runs.dismiss('task-4', 'knowledge');
+      expect(runs.get('task-4', 'knowledge')?.status).toBe('running');
+      runs.stop('task-4', 'knowledge');
+      runs.stop('s4', 'plan');
+      await new Promise((r) => setTimeout(r, 0));
+    });
   });
 });

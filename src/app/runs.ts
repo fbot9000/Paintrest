@@ -1,13 +1,18 @@
 /**
  * Agent runs that outlive the view that started them. The miniature workspace
- * starts a run here; switching tab or going back to the gallery does not stop
- * it, and every view can show its progress (nothing happens out of sight).
+ * (image hunt, plan) and the library's research ('knowledge') start their runs
+ * here; switching tab or page does not stop them, and every view can show
+ * their progress (nothing happens out of sight).
  */
 import { useSyncExternalStore } from 'react';
 import type { ResearchEvent } from '../domain/ai';
 import type { Id } from '../domain/types';
 
-export type RunKind = 'images' | 'plan';
+/**
+ * 'images' and 'plan' run for a miniature (id = subject id);
+ * 'knowledge' runs a library research turn (id = research task id).
+ */
+export type RunKind = 'images' | 'plan' | 'knowledge';
 
 export interface LivePage {
   url: string;
@@ -24,7 +29,8 @@ export interface LivePage {
 
 export interface Run {
   key: string;
-  subject_id: Id;
+  /** The miniature for 'images'/'plan', the research task for 'knowledge'. */
+  id: Id;
   kind: RunKind;
   status: 'running' | 'done' | 'stopped' | 'error';
   events: ResearchEvent[];
@@ -48,13 +54,13 @@ class RunRegistry {
 
   getVersion = () => this.version;
 
-  get(subject_id: Id, kind: RunKind): Run | null {
-    return this.runs.get(`${subject_id}:${kind}`) ?? null;
+  get(id: Id, kind: RunKind): Run | null {
+    return this.runs.get(keyOf(id, kind)) ?? null;
   }
 
-  /** All runs still working, for markers on the gallery. */
-  active(): Run[] {
-    return [...this.runs.values()].filter((r) => r.status === 'running');
+  /** Runs still working, optionally only of the given kinds (the gallery asks for 'images' and 'plan'). */
+  active(...kinds: RunKind[]): Run[] {
+    return [...this.runs.values()].filter((r) => r.status === 'running' && (kinds.length === 0 || kinds.includes(r.kind)));
   }
 
   private set(run: Run) {
@@ -63,13 +69,13 @@ class RunRegistry {
     this.listeners.forEach((l) => l());
   }
 
-  /** Starts a run; a run of the same kind for the same miniature must finish or be stopped first. */
-  start(subject_id: Id, kind: RunKind, work: (onEvent: (e: ResearchEvent) => void, signal: AbortSignal) => Promise<void>): void {
-    const key = `${subject_id}:${kind}`;
+  /** Starts a run; a run of the same kind for the same id must finish or be stopped first. */
+  start(id: Id, kind: RunKind, work: (onEvent: (e: ResearchEvent) => void, signal: AbortSignal) => Promise<void>): void {
+    const key = keyOf(id, kind);
     if (this.runs.get(key)?.status === 'running') return;
     const ac = new AbortController();
     this.controllers.set(key, ac);
-    this.set({ key, subject_id, kind, status: 'running', events: [], pages: [], error: null, started_at: new Date().toISOString(), finished_at: null });
+    this.set({ key, id, kind, status: 'running', events: [], pages: [], error: null, started_at: new Date().toISOString(), finished_at: null });
     const onEvent = (e: ResearchEvent) => {
       const cur = this.runs.get(key)!;
       const pages = e.type === 'open_done'
@@ -93,8 +99,18 @@ class RunRegistry {
       });
   }
 
-  stop(subject_id: Id, kind: RunKind) {
-    this.controllers.get(`${subject_id}:${kind}`)?.abort();
+  stop(id: Id, kind: RunKind) {
+    this.controllers.get(keyOf(id, kind))?.abort();
+  }
+
+  /** Forgets a finished run (the user closed its error or «stoppet» note). A running run is left alone. */
+  dismiss(id: Id, kind: RunKind) {
+    const key = keyOf(id, kind);
+    const cur = this.runs.get(key);
+    if (!cur || cur.status === 'running') return;
+    this.runs.delete(key);
+    this.version++;
+    this.listeners.forEach((l) => l());
   }
 
   private finish(key: string, status: Run['status'], error: string | null) {
@@ -103,6 +119,10 @@ class RunRegistry {
     this.controllers.delete(key);
     this.set({ ...cur, status, error, finished_at: new Date().toISOString() });
   }
+}
+
+function keyOf(id: Id, kind: RunKind): string {
+  return `${id}:${kind}`;
 }
 
 function hostOf(u: string): string {
