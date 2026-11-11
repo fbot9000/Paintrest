@@ -6,10 +6,10 @@ import type { useApp } from '../../app/context';
 import { runs } from '../../app/runs';
 import { buildAgentContext } from '../../domain/agent';
 import type { Id, MiniatureSubject, SubjectFocus } from '../../domain/types';
-import { subjectTask } from '../../domain/tasks';
+import { gameTask, subjectTask } from '../../domain/tasks';
 import { runAgentTurn } from '../../data/agent-runner';
 import { imageDataUrl } from '../../ui/imageData';
-import { linkedSources, subjectReferences } from '../../domain/views';
+import { linkedSources, liveSubjects, subjectReferences, suggestedSources } from '../../domain/views';
 import { knownSources } from '../../domain/agent';
 import type { RunHint } from '../../domain/ai';
 import { newId } from '../../domain/ids';
@@ -26,11 +26,19 @@ function userImages(app: App, s: MiniatureSubject) {
 
 type App = ReturnType<typeof useApp>;
 
-/** Pages linked to the miniature for this use, with the agent's Norwegian summary when there is one. */
-function pagesFor(app: App, s: MiniatureSubject, use: 'evidence' | 'method') {
+/**
+ * Pages linked to the miniature, with the agent's Norwegian summary when there is one:
+ * 'evidence' tagged by the user, 'suggested' found by a game survey, 'method' saved guides,
+ * and 'game_guides' the guides a survey found for the whole game.
+ */
+function pagesFor(app: App, s: MiniatureSubject, use: 'evidence' | 'method' | 'suggested' | 'game_guides') {
   const t = app.store.getTables();
-  const summaries = new Map(knownSources(t, s.project_id).map((k) => [k.source.id, k.summary]));
-  return linkedSources(t, s.id, use).slice(0, 12).map((x) => ({ url: x.url!, title: x.title, ...(summaries.get(x.id) ? { summary: summaries.get(x.id)!.slice(0, 300) } : {}) }));
+  const known = knownSources(t, s.project_id);
+  const summaries = new Map(known.map((k) => [k.source.id, k.summary]));
+  const list = use === 'suggested' ? suggestedSources(t, s.id)
+    : use === 'game_guides' ? known.filter((k) => k.source.role === 'guide').map((k) => k.source)
+    : linkedSources(t, s.id, use);
+  return list.slice(0, 12).map((x) => ({ url: x.url!, title: x.title, ...(summaries.get(x.id) ? { summary: summaries.get(x.id)!.slice(0, 300) } : {}) }));
 }
 
 /** The running image hunt for each miniature, so what the user tags reaches the agent while it works. */
@@ -74,7 +82,8 @@ export function startImageHunt(app: App, s: MiniatureSubject, game: string, refe
     try {
       await runAgentTurn({ store: app.store, research: app.research, agent: app.agent, ai: app.ai }, task, prompt, onEvent, signal,
         { kind: 'images', subject_ref: ref, subject_name: s.name, game, reference_image: reference, user_images: userImages(app, s),
-          identity: s.identity ?? null, rejected: s.identity_rejected ?? [], tagged_sources: pagesFor(app, s, 'evidence') }, run_id);
+          identity: s.identity ?? null, rejected: s.identity_rejected ?? [], tagged_sources: pagesFor(app, s, 'evidence'),
+          suggested_sources: pagesFor(app, s, 'suggested') }, run_id);
     } finally {
       if (huntChannels.get(s.id) === run_id) huntChannels.delete(s.id);
     }
@@ -91,7 +100,8 @@ export function startPlan(app: App, s: MiniatureSubject, game: string, fileIds: 
       + (paints === 'owned' ? 'Bruk bare malinger jeg har.' : 'Velg de malingene som gir best resultat, uansett hva jeg har.');
     await runAgentTurn({ store: app.store, research: app.research, agent: app.agent, ai: app.ai }, task, prompt, onEvent, signal,
       { kind: 'plan', subject_ref: ref, subject_name: s.name, game, reference_images, revision: !!s.current_plan_version_id, paints,
-        identity: s.identity?.status === 'confirmed' ? s.identity : null, guides: pagesFor(app, s, 'method'), tagged_sources: pagesFor(app, s, 'evidence') });
+        identity: s.identity?.status === 'confirmed' ? s.identity : null, guides: pagesFor(app, s, 'method'), game_guides: pagesFor(app, s, 'game_guides'),
+        tagged_sources: pagesFor(app, s, 'evidence') });
   }, { label: `Maleplan for ${s.name}`, href: `/p/${s.project_id}/m/${s.id}/maleplan` });
 }
 
@@ -99,4 +109,24 @@ export function startPlan(app: App, s: MiniatureSubject, game: string, fileIds: 
 export async function tagPage(app: App, subject_id: Id, page: { url: string; title: string }, on: boolean): Promise<void> {
   await app.cmd.tagSource(subject_id, page, on);
   await hintHunt(app, subject_id, { kind: on ? 'tagged_source' : 'untagged_source', url: page.url, title: page.title });
+}
+
+/**
+ * Game survey, from the miniature list: one run finds the sources for the whole game and works out which
+ * miniature is which. Its own task, so it never shares a conversation with the panel or the workspace.
+ */
+export function startGameSurvey(app: App, project_id: Id, game: string) {
+  runs.start(project_id, 'game', async (onEvent, signal) => {
+    const task = gameTask(app.store.getTables(), project_id)?.id ?? await app.research.startTask(project_id, 'game');
+    const t = app.store.getTables();
+    const refs = buildAgentContext(t, task).subjectRefs;
+    const miniatures = liveSubjects(t, project_id).flatMap((s) => {
+      const ref = Object.entries(refs).find(([, id]) => id === s.id)?.[0];
+      return ref ? [{ ref, name: s.name, images: subjectReferences(t, s).length, identity: s.identity ?? null, rejected: s.identity_rejected ?? [] }] : [];
+    });
+    const prompt = `Kartlegg spillet «${game}» for alle miniatyrene: finn de beste kildene for hele spillet (offisielle sider, gallerier med malte figurer og maleguider), `
+      + 'finn ut hvem hver miniatyr er, og hvilke bilder som viser hvilken. Foreslå bilder til hver miniatyr med begrunnelse; jeg vurderer dem selv.';
+    await runAgentTurn({ store: app.store, research: app.research, agent: app.agent, ai: app.ai }, task, prompt, onEvent, signal,
+      { kind: 'game', game, miniatures });
+  }, { label: `Kartlegging av ${game}`, href: `/p/${project_id}/miniatyrer` });
 }

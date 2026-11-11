@@ -29,14 +29,19 @@ export type ResearchEvent =
   | { type: 'image_search_done'; query: string; images: ImageHit[] }
   | { type: 'look'; count: number; why: string | null }
   | { type: 'look_done'; summary: string }
-  | { type: 'phase'; phase: HuntPhase; text: string }
-  | { type: 'identity'; identity: SubjectIdentity }
+  | { type: 'phase'; phase: HuntPhase | SurveyPhase; text: string }
+  /** subject_ref is set when a game survey identifies one of several miniatures. */
+  | { type: 'identity'; identity: SubjectIdentity; subject_ref?: string }
   /** Something the user did while the agent worked (for example tagged a source), passed on to the agent. */
   | { type: 'hint'; text: string }
   | { type: 'tool_error'; action: string; target: string; error: string }
   | { type: 'final'; message: string; proposals: unknown[]; model: string; warnings: string[]; trace: TraceStep[]; pages: PageSeen[];
       /** Image hunt: who the figure is, found and checked in phase 1 (null when not found or already known). */
-      identity?: SubjectIdentity | null }
+      identity?: SubjectIdentity | null;
+      /** Game survey: who each miniature is, by ref (M1, M2 …). */
+      identities?: { subject_ref: string; identity: SubjectIdentity }[];
+      /** Game survey: the sources for the whole game, with what they are good for and which miniatures they show. */
+      game_sources?: GameSource[] }
   | { type: 'error'; error: string };
 
 /** A page the agent opened in this turn; the client stores it as a draft source. */
@@ -61,7 +66,7 @@ export interface ResearchInput {
   result_types: string[];
   model?: string;
   /** Image hunt for one miniature: a research strategy of its own, more steps and the look tool. */
-  focus?: ImageFocus | PlanFocus | KnowledgeFocus | null;
+  focus?: AnyFocus | null;
   /** Changes inside the project are applied directly and can be undone (open zone). */
   direct_apply?: boolean;
   /** Lets the user's actions during the run (tagged sources) reach the agent; see RunHint. */
@@ -89,6 +94,40 @@ export interface RejectedIdentity {
   image_urls: string[];
 }
 
+export type AnyFocus = ImageFocus | PlanFocus | KnowledgeFocus | GameFocus;
+
+/**
+ * Game survey (brukerønske 11.11.2026): one run for the whole game, started from the miniature list.
+ * Phase «sources» finds the best sources for the game; phase «match» works out which miniature is which
+ * and which pictures show which. The results are stored for the game, so later runs do not rediscover them.
+ */
+export interface GameFocus {
+  kind: 'game';
+  game: string;
+  miniatures: {
+    ref: string;
+    name: string;
+    /** Saved pictures of the miniature. */
+    images: number;
+    identity?: KnownIdentity | null;
+    rejected?: RejectedIdentity[];
+  }[];
+}
+
+export type SurveyPhase = 'sources' | 'match';
+
+/** A source for the whole game, found in a survey: what it is and which miniatures it shows. */
+export interface GameSource {
+  url: string;
+  title: string;
+  role: 'official' | 'painted' | 'guide' | 'other';
+  /** Miniature refs (M1, M2 …) the page shows, as the agent judged it. */
+  shows: string[];
+  summary: string | null;
+  /** Whether the agent read the page, or only saw it in a search. */
+  read: boolean;
+}
+
 /** Paint plan for one miniature, built from the pictures the user chose. */
 export interface PlanFocus {
   kind: 'plan';
@@ -105,6 +144,8 @@ export interface PlanFocus {
   identity?: KnownIdentity | null;
   /** Painting guides and videos saved for the miniature. */
   guides?: TaggedSource[];
+  /** Painting guides found for the whole game (game survey). */
+  game_guides?: TaggedSource[];
   /** Pages the user tagged as showing the miniature. */
   tagged_sources?: TaggedSource[];
 }
@@ -134,6 +175,8 @@ export interface ImageFocus {
   rejected?: RejectedIdentity[];
   /** Pages the user tagged as showing the miniature («Viser figuren»). */
   tagged_sources?: TaggedSource[];
+  /** Pages a game survey found that probably show the miniature (not yet confirmed by the user). */
+  suggested_sources?: TaggedSource[];
 }
 
 /**
@@ -210,8 +253,8 @@ export interface ResearchDeps {
   /** UiB's built-in search tool in the Responses API, or null when switched off. */
   hostedSearch?: HostedSearch | null;
   openPage: (url: string) => Promise<PageResult>;
-  /** Shows images to the model and returns its written assessment. */
-  lookAtImages?: (imageUrls: string[], question: string, reference: string | null) => Promise<string>;
+  /** Shows images to the model and returns its written assessment. `references` are labelled known pictures shown first (game survey). */
+  lookAtImages?: (imageUrls: string[], question: string, reference: string | null, references?: { label: string; image: string }[]) => Promise<string>;
   /** Fetches an image as a data URL (the identity's picture becomes the reference for «look»). */
   imageAsDataUrl?: (url: string) => Promise<string>;
   /** Asks YouTube about a video (oEmbed). */
@@ -232,6 +275,12 @@ export const IDENTIFY_STEPS = 10;
 export const GUIDE_STEPS = 8;
 export const MAX_VIDEOS = 8;
 export const MAX_GUIDES = 8;
+/** Game survey: more steps, since it covers every miniature; the first ones go to finding the sources. */
+export const MAX_GAME_STEPS = 50;
+export const GAME_SOURCE_STEPS = 18;
+export const MAX_GAME_SOURCES = 40;
+/** Pictures of other miniatures shown as references in one «look» (game survey). */
+const MAX_COMPARE = 4;
 export const MAX_PLAN_STEPS = 16;
 export const MAX_KNOWLEDGE_STEPS = 16;
 
@@ -258,12 +307,13 @@ Gi dem samme navn med «– med malinger du har» og «– beste valg» til slut
 const MAX_LOOK = 8;
 const MAX_MESSAGES = 30;
 
-export function researchInstructions(context: unknown, resultTypes: string[], mode: WebMode, anyFocus: ImageFocus | PlanFocus | KnowledgeFocus | null = null, vision = false, imagesAttached = false, direct = false, hunt0: HuntState | null = null, imageSearch = false): string {
+export function researchInstructions(context: unknown, resultTypes: string[], mode: WebMode, anyFocus: AnyFocus | null = null, vision = false, imagesAttached = false, direct = false, hunt0: HuntState | null = null, imageSearch = false, survey0: SurveyState | null = null): string {
   if (anyFocus?.kind === 'knowledge') return knowledgeInstructions(context, resultTypes, mode, anyFocus, imageSearch && mode !== 'none');
   const img = imageSearch && mode !== 'none';
   const focus = anyFocus?.kind === 'images' ? anyFocus : null;
   const plan = anyFocus?.kind === 'plan' ? anyFocus : null;
-  const maxSteps = focus ? MAX_IMAGE_STEPS : plan ? MAX_PLAN_STEPS : MAX_TOOL_STEPS;
+  const game = anyFocus?.kind === 'game' ? anyFocus : null;
+  const maxSteps = focus ? MAX_IMAGE_STEPS : plan ? MAX_PLAN_STEPS : game ? MAX_GAME_STEPS : MAX_TOOL_STEPS;
   const sourceRules = `Kildekrav (viktig):
 - Påstander om hvilke miniatyrer og hvor mange som finnes, skal bygge på kilder. Oppgi dem i "sources" med eksakt URL.
 - Bilder du foreslår, må være fra bildelisten på en side du har åpnet med "open"${img ? ' eller fra et bildesøk ("image_search")' : ''}. Bruk eksakt bilde-URL og sidens URL. Ikke gjett eller lag bilde-URL-er.
@@ -301,15 +351,19 @@ Du har også BILDESØK, slik en person bruker Google Bilder:
   {"action": "image_search", "query": "…", "why": "kort grunn"}
 Du får inntil 40 bilder, hvert med siden det kommer fra. Bilder fra bildesøket kan vises med "look" og foreslås direkte (eksakt bilde-URL og side-URL fra listen), uten at du åpner siden.
 Mange av de beste kildene (Reddit, BoardGameGeek, Etsy, Instagram, Facebook) kan ikke åpnes av Paintrest, men bildene deres finnes i bildesøket.` : '';
-  const hunt = focus ? huntInstructions(focus, hunt0 ?? { phase: 'identify', identity: null, confirmed: false }, mode, vision, img) : '';
+  const hunt = focus ? huntInstructions(focus, hunt0 ?? { phase: 'identify', identity: null, confirmed: false }, mode, vision, img)
+    : game ? surveyInstructions(game, survey0 ?? { phase: 'sources', identities: new Map() }, mode, vision, img) : '';
+  const lookCompare = game && vision && mode !== 'none' ? `
+I kartleggingen kan "look" også ha "compare_with": ["M1", "M3"] (høyst ${MAX_COMPARE} miniatyrer). Da viser Paintrest de offisielle bildene av dem først, merket med ref og navn, og du kan spørre hvilke kandidater som viser hvilken miniatyr.` : '';
   const planId = plan?.identity && plan.identity.status === 'confirmed' ? plan.identity : null;
   const planGuides = (plan?.guides ?? []).slice(0, 8);
   const planTagged = (plan?.tagged_sources ?? []).slice(0, 8);
+  const planGameGuides = (plan?.game_guides ?? []).filter((g) => !planGuides.some((x) => x.url === g.url)).slice(0, 6);
   const planTask = plan ? `
 
 OPPDRAG: MALEPLAN for miniatyren «${plan.subject_name}» (${plan.subject_ref}) fra spillet «${plan.game}».
 ${planId ? `Figuren er identifisert, og brukeren har bekreftet det:\n${identityText(planId)}\nBruk det offisielle navnet og de andre navnene når du søker etter maleguider.\n` : ''}${imagesAttached ? `Brukerens melding har ${plan.reference_images.length} bilde(r) av miniatyren som brukeren har valgt som referanse. Planen skal gjenskape uttrykket i dem.` : 'Du har ingen bilder av miniatyren; bygg på kilder og beskrivelser.'}
-${planGuides.length ? `Brukeren har lagret disse maleguidene og videoene for figuren. Åpne dem FØRST, og bygg på det de sier om malinger og metode:\n${planGuides.map((g) => `- ${g.url} — ${g.title}`).join('\n')}\n` : ''}${planTagged.length ? `Brukeren har merket disse sidene som at de viser figuren:\n${planTagged.map((g) => `- ${g.url} — ${g.title}`).join('\n')}\n` : ''}Arbeid slik:
+${planGuides.length ? `Brukeren har lagret disse maleguidene og videoene for figuren. Åpne dem FØRST, og bygg på det de sier om malinger og metode:\n${planGuides.map((g) => `- ${g.url} — ${g.title}`).join('\n')}\n` : ''}${planGameGuides.length ? `Kartleggingen av spillet fant disse maleguidene for spillet. Åpne de som passer figuren, før du søker etter nye:\n${planGameGuides.map((g) => `- ${g.url} — ${g.title}${g.summary ? ` (${g.summary.slice(0, 160)})` : ''}`).join('\n')}\n` : ''}${planTagged.length ? `Brukeren har merket disse sidene som at de viser figuren:\n${planTagged.map((g) => `- ${g.url} — ${g.title}`).join('\n')}\n` : ''}Arbeid slik:
 1. Analyser uttrykket: hvilke deler og fargesoner figuren har (for eksempel kappe, hud, rustning, våpen, base), hvilke farger, hvor mørk og kontrastrik den er, og eventuelle effekter (glød, OSL, rust).
 2. Let etter maleguider for denne figuren eller lignende uttrykk${mode !== 'none' ? ` (${planGuides.length ? 'de lagrede guidene først, så ' : ''}known_sources; koreanske og japanske malere oppgir ofte malingene sine, og agenten må oversette)` : ''}. Bruk det kildene faktisk sier om malinger og metode.
 3. Velg en arbeidsmåte som passer (for eksempel svart grunning med zenithal og slapchop, kontrastmaling, eller lagvis med glasur) og begrunn kort.
@@ -326,7 +380,7 @@ Lag ikke andre forslagstyper i dette oppdraget.` : '';
 Du hjelper brukeren å kartlegge miniatyrer i brettspillprosjekter, finne referansebilder og lage maleplaner med eksakte malingsprodukter.
 Svar alltid på norsk bokmål.
 
-${web}${look}${imageTool}${hunt}${planTask}
+${web}${look}${lookCompare}${imageTool}${hunt}${planTask}
 
 Regler for forslag:
 - Du arbeider fritt INNE I DETTE PROSJEKTET mens brukeren setter det opp. Du kan lage, endre, dele, slå sammen og slette miniatyrer, og lage nye versjoner av maleplaner, også for det som allerede er godkjent. Ikke be brukeren gjøre endringer manuelt; gjør det selv gjennom "proposals".
@@ -515,7 +569,12 @@ ${rejected.map((r) => `- ${r.official_name ?? 'uten navn'}${r.image_urls.length 
 Slike bilder er vanskelige å finne og ofte dårlig merket. Jakten har tre faser, og Paintrest styrer overgangen mellom dem:
 1. identifiser figuren (navn, beskrivelse og offisielle bilder), 2. finn bilder fra andre som har malt den, 3. finn maleguider.
 Det du finner i fase 1, bruker du i fase 2 og 3. Åpne sider i known_sources direkte når de er relevante, i stedet for å søke dem fram på nytt.`;
-  const context = `${userBlock}${taggedBlock}${rejectedBlock}`;
+  const suggested = (focus.suggested_sources ?? []).filter((x) => !tagged.some((t) => t.url === x.url)).slice(0, 12);
+  const suggestedBlock = suggested.length ? `
+Kartleggingen av spillet fant ${suggested.length === 1 ? 'denne siden' : 'disse sidene'}, som trolig viser figuren (ikke bekreftet av brukeren):
+${suggested.map((t) => `- ${t.url} — ${t.title}${t.summary ? ` (${t.summary.slice(0, 200)})` : ''}`).join('\n')}
+${hunt.phase === 'identify' ? 'Åpne dem tidlig, og kontroller at de viser riktig figur.' : 'Bruk dem som spor, og ta med bildene derfra som faktisk viser figuren.'}` : '';
+  const context = `${userBlock}${taggedBlock}${suggestedBlock}${rejectedBlock}`;
 
   if (hunt.phase === 'identify') {
     const earlier = focus.identity && focus.identity.status === 'proposed' ? `
@@ -602,18 +661,87 @@ Avslutt med final, med ALT fra jakten i forslaget: bildene fra fase 2 (opptil 20
 ${format}`;
 }
 
+export interface SurveyState {
+  phase: SurveyPhase;
+  /** Identified in this run, by miniature ref. */
+  identities: Map<string, SubjectIdentity>;
+}
+
+/**
+ * Game survey: phase 1 finds the sources for the whole game; phase 2 works out which miniature is
+ * which, and which pictures show which. Everything found is stored for the game.
+ */
+function surveyInstructions(game: GameFocus, state: SurveyState, mode: WebMode, vision: boolean, img: boolean): string {
+  const lookIt = vision && mode !== 'none';
+  const list = game.miniatures.map((m) => {
+    const found = state.identities.get(m.ref);
+    const known = m.identity;
+    const status = found ? `identifisert i denne kjøringen som «${found.official_name ?? '?'}»`
+      : known?.status === 'confirmed' ? `bekreftet av brukeren som «${known.official_name ?? m.name}»${known.images.length ? ` (offisielt bilde: ${known.images[0]!.image_url})` : ''}`
+      : known ? `foreslått tidligere som «${known.official_name ?? '?'}», ikke bekreftet`
+      : 'ikke identifisert';
+    const wrong = (m.rejected ?? []).map((r) => r.official_name).filter(Boolean);
+    return `- ${m.ref} «${m.name}»: ${status}; ${m.images ? `${m.images} lagrede bilder` : 'ingen bilder'}${wrong.length ? `; IKKE: ${wrong.join(', ')}` : ''}`;
+  }).join('\n');
+  const head = `OPPDRAG: KARTLEGG SPILLET «${game.game}»: kilder og hvem er hvem, for alle miniatyrene samtidig.
+Miniatyrene i prosjektet (ref, brukerens navn og det som er kjent):
+${list}
+Kartleggingen har to faser, og Paintrest styrer overgangen. Det du finner, lagres for spillet: kildene med hva de viser, hvem hver miniatyr er, og bildeforslag til hver miniatyr. Senere agenter (bildejakt og maleplan for hver miniatyr) bygger på det, så de slipper å finne det på nytt.
+"known_sources" i konteksten er sider som allerede er funnet for spillet, med rolle ("role") og hvilke miniatyrer de viser ("shows_confirmed" er bekreftet av brukeren, "shows_suggested" er en tidligere agents vurdering). Åpne dem i stedet for å søke dem fram på nytt.`;
+  const identify = `Identifiser en miniatyr med ETT JSON-objekt per miniatyr, når du vet nok (det går i begge faser):
+  {"action": "identify", "subject": "M2", "official_name": "…", "aliases": ["…"], "edition": "…", "faction": "…", "description": "hvordan figuren ser ut",
+   "images": [{"image_url": "https://…", "page_url": "https://…", "kind": "concept_art|official|render"}], "painter": null, "confidence": "high|medium|low", "why": "…",
+   "sources": [{"url": "https://…", "title": "…"}]}
+Navnet i Paintrest er brukerens eget og kan være kort, uoffisielt eller på norsk. Bilder må være fra en side du har åpnet${img ? ' eller fra et bildesøk' : ''}. Ikke identifiser miniatyrer som er bekreftet av brukeren på nytt, og velg aldri det som står som «IKKE».`;
+  if (state.phase === 'sources') {
+    return `
+
+${head}
+
+FASE 1 AV 2: KILDER FOR SPILLET (høyst ${GAME_SOURCE_STEPS} verktøysteg)
+Finn de beste kildene for HELE spillet, ikke for én figur. Sider som viser mange figurer samtidig, er mest verdt.
+${img ? `Begynn med bredt bildesøk: «${game.game} miniatures», «${game.game} painted», «${game.game} painted miniatures reddit» og «${game.game} concept art».
+` : ''}Let etter:
+- Offisielle kilder: utgiverens produktsider, kampanjen på Kickstarter eller Gamefound (hovedside, oppdateringer og tillegg), BoardGameGeek (bildegalleri og filer: regelbok og komponentliste) og spillets wiki. De viser ofte alle figurene med navn, og konseptkunst.
+- Malt av andre: gallerier, malerapporter og tråder som viser mange av figurene malt, på flere språk (Reddit, BGG, blogger, Putty&Paint, koreanske og japanske blogger).
+- Maleguider: guider og videoer for spillet, fraksjonene eller figurene.
+Åpne sidene som viser flest figurer. Noter hvilke miniatyrer (ref) hver side viser.
+${identify}
+Gå videre med {"action": "next_phase", "why": "kort grunn"} når du har gode kilder. Paintrest flytter deg uansett etter ${GAME_SOURCE_STEPS} steg.`;
+  }
+  return `
+
+${head}
+
+FASE 2 AV 2: HVEM ER HVEM
+Bruk kildene fra fase 1. Gå gjennom miniatyrene, helst de som ikke er identifisert eller mangler bilder:
+1. Identifiser hver miniatyr du kan, med "identify" (én gang per miniatyr).
+2. Finn ut hvilke bilder som viser hvilken miniatyr${lookIt ? `: bruk «look» med "compare_with" for å få de offisielle bildene vist først, og spør hvilke kandidater som viser hvilken miniatyr. Sammenlign form, positur, våpen og base, ikke farger` : ', ut fra teksten rundt bildene'}.
+3. Bruk flere språk og spillets egne navn når du søker. Gruppebilder er bra: en figur er ofte med på bilder av flere.
+${identify}
+Avslutt med ETT JSON-objekt:
+  {"action": "final", "message": "kort norsk oppsummering: hva du fant, og hva som mangler", "proposals": [ … ], "game_sources": [ … ]}
+"proposals": ETT reference_selection-forslag per miniatyr du fant bilder, videoer eller maleguider til, med "subject" (ref). For hvert bilde: "confidence": "high|medium|low", "reason": "norsk begrunnelse", "original_text": "kort utdrag på originalspråket eller null", og "kind". I payload kan du også ha "videos" og "guides" (som i bildejakten) og "sources_read" med norsk sammendrag. Ta bare med bilder du har grunn til å tro viser akkurat den miniatyren.
+"game_sources": kildene for hele spillet, høyst ${MAX_GAME_SOURCES}:
+  [{"url": "https://…", "title": "…", "role": "official|painted|guide|other", "shows": ["M1", "M3"], "summary": "norsk: hva siden viser, og hvorfor den er nyttig"}]
+  "shows" er miniatyrene siden viser, så langt du kan avgjøre. Ta med sider du har åpnet eller sett i søk.
+Lag ikke andre forslagstyper i dette oppdraget.`;
+}
+
 type Action =
   | { action: 'search'; query: string; why: string | null }
   | { action: 'open'; url: string; why: string | null }
-  | { action: 'look'; image_urls: string[]; question: string; why: string | null }
+  | { action: 'look'; image_urls: string[]; question: string; why: string | null; compare_with: string[] }
   | { action: 'image_search'; query: string; why: string | null }
   | IdentifyAction
   | { action: 'next_phase'; why: string | null }
-  | { action: 'final'; message: string; proposals: unknown[] };
+  | { action: 'final'; message: string; proposals: unknown[]; game_sources: unknown[] };
 
 /** Phase 1's answer, before it is checked against the pages and searches of this run. */
 export interface IdentifyAction {
   action: 'identify';
+  /** Game survey: which miniature (M1, M2 …). Not used in a single-miniature hunt. */
+  subject: string | null;
   official_name: string | null;
   aliases: string[];
   edition: string | null;
@@ -643,7 +771,8 @@ export function parseAction(text: string): Action | null {
     if (v.action === 'open' && typeof v.url === 'string') return { action: 'open', url: v.url, why };
     if (v.action === 'image_search' && typeof v.query === 'string') return { action: 'image_search', query: v.query, why };
     if (v.action === 'look' && Array.isArray(v.image_urls)) {
-      return { action: 'look', image_urls: v.image_urls.filter((x): x is string => typeof x === 'string'), question: typeof v.question === 'string' ? v.question : '', why };
+      return { action: 'look', image_urls: v.image_urls.filter((x): x is string => typeof x === 'string'), question: typeof v.question === 'string' ? v.question : '', why,
+        compare_with: (Array.isArray(v.compare_with) ? v.compare_with : []).filter((x): x is string => typeof x === 'string') };
     }
     if (v.action === 'identify' || v.action === 'anchor') {
       const s = (x: unknown) => (typeof x === 'string' && x.trim() ? x.trim() : null);
@@ -657,7 +786,7 @@ export function parseAction(text: string): Action | null {
       const single = s(v.image_url);
       if (single && !images.some((i) => i.image_url === single)) images.unshift({ image_url: single, page_url: s(v.page_url), kind: s(v.kind) });
       return {
-        action: 'identify', official_name: s(v.official_name) ?? s(v.name), aliases: list(v.aliases).flatMap((a) => (s(a) ? [s(a)!] : [])),
+        action: 'identify', subject: s(v.subject), official_name: s(v.official_name) ?? s(v.name), aliases: list(v.aliases).flatMap((a) => (s(a) ? [s(a)!] : [])),
         edition: s(v.edition), faction: s(v.faction), description: s(v.description), images, painter: s(v.painter), confidence: s(v.confidence), why,
         sources: list(v.sources).flatMap((x) => {
           const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>;
@@ -668,7 +797,8 @@ export function parseAction(text: string): Action | null {
     }
     if (v.action === 'next_phase') return { action: 'next_phase', why };
     if (v.action === 'final' || 'message' in v || 'proposals' in v) {
-      return { action: 'final', message: typeof v.message === 'string' ? v.message : '', proposals: Array.isArray(v.proposals) ? v.proposals : [] };
+      return { action: 'final', message: typeof v.message === 'string' ? v.message : '', proposals: Array.isArray(v.proposals) ? v.proposals : [],
+        game_sources: Array.isArray(v.game_sources) ? v.game_sources : [] };
     }
   }
   return null;
@@ -684,11 +814,17 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   const focus = input.focus?.kind === 'images' ? input.focus : null;
   const plan = input.focus?.kind === 'plan' ? input.focus : null;
   const knowledge = input.focus?.kind === 'knowledge' ? input.focus : null;
+  const game = input.focus?.kind === 'game' ? input.focus : null;
   // Library research has no use for looking at images.
   let vision = !!deps.lookAtImages && !knowledge;
   // The plan request carries the chosen pictures as input_image; dropped if the model refuses images.
   let imagesAttached = !!plan?.reference_images.length;
-  const maxSteps = focus ? MAX_IMAGE_STEPS : plan ? MAX_PLAN_STEPS : knowledge ? MAX_KNOWLEDGE_STEPS : MAX_TOOL_STEPS;
+  const maxSteps = focus ? MAX_IMAGE_STEPS : plan ? MAX_PLAN_STEPS : knowledge ? MAX_KNOWLEDGE_STEPS : game ? MAX_GAME_STEPS : MAX_TOOL_STEPS;
+  // Game survey: phase 1 finds the sources for the whole game, phase 2 works out who is who.
+  const survey: SurveyState | null = game ? { phase: 'sources', identities: new Map() } : null;
+  const gameRefs = new Map((game?.miniatures ?? []).map((m) => [m.ref, m]));
+  /** Data URLs of each miniature's official picture, for «look» with compare_with. */
+  const refImages = new Map<string, string | null>();
   // Image hunt in three phases: identify the figure, find painted versions, find painting guides.
   // A figure the user has confirmed is not identified again: the hunt starts in phase 2 with it.
   const given = focus?.identity ?? null;
@@ -698,7 +834,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   let identityRef: string | null = null;
   let foundIdentity: SubjectIdentity | null = null;
   // A final answer given in phase 2 is kept, in case the one at the end of phase 3 leaves the pictures out.
-  let held: { message: string; proposals: unknown[] } | null = null;
+  let held: { message: string; proposals: unknown[]; game_sources?: unknown[] } | null = null;
   let phaseSteps = 0;
   let huntNudges = 0;
   // Image search needs a Tavily or Brave key; it works next to UiB's own web search too.
@@ -716,12 +852,20 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
     if (!/^https?:\/\//.test(i.image_url) || !/^https?:\/\//.test(i.page_url)) continue;
     imageHits.set(normUrl(i.image_url), { image_url: i.image_url, thumbnail_url: i.thumbnail_url ?? null, page_url: i.page_url, title: i.page_title ?? '', site: i.site ?? hostOf(i.page_url) });
   }
-  for (const s of [...(given?.sources ?? []), ...(focus?.tagged_sources ?? []), ...(plan?.tagged_sources ?? []), ...(plan?.guides ?? [])]) {
+  // A survey's miniatures: pictures from earlier identifications count as seen.
+  for (const m of game?.miniatures ?? []) {
+    for (const i of m.identity?.images ?? []) {
+      if (!/^https?:\/\//.test(i.image_url) || !/^https?:\/\//.test(i.page_url)) continue;
+      imageHits.set(normUrl(i.image_url), { image_url: i.image_url, thumbnail_url: i.thumbnail_url ?? null, page_url: i.page_url, title: i.page_title ?? '', site: i.site ?? hostOf(i.page_url) });
+    }
+  }
+  for (const s of [...(given?.sources ?? []), ...(focus?.tagged_sources ?? []), ...(focus?.suggested_sources ?? []), ...(plan?.tagged_sources ?? []), ...(plan?.guides ?? []), ...(plan?.game_guides ?? []),
+    ...(game?.miniatures ?? []).flatMap((m) => m.identity?.sources ?? [])]) {
     if (/^https?:\/\//.test(s.url)) searched.set(normUrl(s.url), { title: s.title, url: s.url, snippet: '' });
   }
   // Tagged while the agent works: the instructions are rebuilt with the new list.
   let liveFocus = input.focus ?? null;
-  const build = () => researchInstructions(input.context, input.result_types, mode, liveFocus, vision, imagesAttached, !!input.direct_apply && !input.focus, hunt, imageSearchOn);
+  const build = () => researchInstructions(input.context, input.result_types, mode, liveFocus, vision, imagesAttached, !!input.direct_apply && !input.focus, hunt, imageSearchOn, survey);
   const withImages = (): ResponsesMessage[] => {
     if (!imagesAttached || !plan) return history;
     const last = history.at(-1)!;
@@ -781,7 +925,17 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
     tell(`${note} Fase 3 starter nå: maleguider og videoer. Du har ${Math.max(0, maxSteps - steps)} verktøysteg igjen. Avslutt med final, med alt fra jakten i forslaget.`);
   };
   /** Checks the answer and sends it as the final event. An image hunt also gets what it found along the way. */
-  const finish = async (message: string, proposals: unknown[]) => {
+  const finish = async (message: string, proposals: unknown[], gameSources: unknown[] = []) => {
+    if (survey && game) {
+      const raw = mergeSurvey(proposals, held?.proposals ?? []);
+      const checked = verifyProposals(raw, opened, searched, imageHits, hostedOpened);
+      checked.proposals = checked.proposals.filter((p) => isSel(p) && gameRefs.has(String(p.payload.subject)) || !isSel(p));
+      await finishSurvey(checked, raw, game, survey, opened, searched, hostedOpened, deps.videoInfo, imageHits);
+      const sources = verifyGameSources([...gameSources, ...(held?.game_sources ?? [])], opened, searched, hostedOpened, new Set(gameRefs.keys()), checked.warnings);
+      emit({ ...finalEvent(message, checked.proposals, model, checked.warnings, trace, opened) as Extract<ResearchEvent, { type: 'final' }>,
+        identities: [...survey.identities].map(([subject_ref, identity]) => ({ subject_ref, identity })), game_sources: sources });
+      return;
+    }
     const raw = hunt ? mergeHeld(proposals, held?.proposals ?? []) : proposals;
     const checked = verifyProposals(raw, opened, searched, imageHits, hostedOpened);
     if (knowledge && mode === 'none') checked.warnings.unshift('Uten nettsøk: utkastet bygger bare på det modellen vet fra før. Slå på nettsøk under «AI og nettsøk».');
@@ -814,11 +968,34 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   };
 
   if (hunt) emit({ type: 'phase', phase: hunt.phase, text: hunt.confirmed ? `${PHASE_TEXT.painted} (figuren er bekreftet, så fase 1 hoppes over)` : PHASE_TEXT.identify });
+  if (survey) emit({ type: 'phase', phase: 'sources', text: SURVEY_TEXT.sources });
+  const startMatch = (note: string) => {
+    survey!.phase = 'match';
+    phaseSteps = 0;
+    huntNudges = 0;
+    instructions = build();
+    emit({ type: 'phase', phase: 'match', text: SURVEY_TEXT.match });
+    tell(`${note} Fase 2 starter nå: hvem er hvem. Du har ${Math.max(0, maxSteps - steps)} verktøysteg igjen. Avslutt med final, med forslag per miniatyr og "game_sources".`);
+  };
+  /** The official picture of a miniature, for «look» (found in this run, or known from before). */
+  const refImage = async (ref: string): Promise<string | null> => {
+    if (refImages.has(ref)) return refImages.get(ref)!;
+    const id = survey?.identities.get(ref) ?? gameRefs.get(ref)?.identity ?? null;
+    let out: string | null = null;
+    if (id && deps.imageAsDataUrl) {
+      const best = [...id.images].sort((a, b) => Number(a.kind === 'concept_art') - Number(b.kind === 'concept_art'));
+      for (const u of best.flatMap((i) => [i.image_url, i.thumbnail_url]).filter((x): x is string => !!x)) {
+        try { out = await deps.imageAsDataUrl(u); break; } catch { /* next */ }
+      }
+    }
+    refImages.set(ref, out);
+    return out;
+  };
   if (confirmedId) await loadIdentityRef(confirmedId);
   instructions = build();
   emit({ type: 'status', text: knowledge ? (knowledge.revision ? `Forbedring av ${knowledge.revision.name}` : knowledge.target === 'technique' ? 'Research: teknikk' : 'Research: oppskrift') : plan ? `Maleplan for ${plan.subject_name}${imagesAttached ? ` · ${plan.reference_images.length} bilder` : ''}` : focus ? `Bildejakt for ${focus.subject_name}` : mode === 'hosted' ? 'Agenten søker via UiB' : mode === 'search' ? 'Agenten planlegger søket' : 'Agenten svarer uten nettilgang' });
 
-  for (let round = 0; round < maxSteps + (hunt ? 14 : 4); round++) {
+  for (let round = 0; round < maxSteps + (hunt || survey ? 14 : 4); round++) {
     if (deps.signal?.aborted) throw new UserError('Avbrutt');
     takeHints();
     let out;
@@ -883,6 +1060,39 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       emit(finalEvent(isRefusal(out.text) ? 'Agenten fikk ikke svar fra modellen denne gangen.' : out.text.trim(), [], model, [warning], trace, opened));
       return;
     }
+    if (action.action === 'identify' && survey) {
+      const ref = action.subject ?? '';
+      const m = gameRefs.get(ref);
+      if (!m) {
+        tell(`"subject" må være en av miniatyrene: ${[...gameRefs.keys()].join(', ')}.`);
+        continue;
+      }
+      if (m.identity?.status === 'confirmed') {
+        tell(`${ref} er allerede bekreftet av brukeren. Identifiser de andre.`);
+        continue;
+      }
+      const wrongUrls = new Set((m.rejected ?? []).flatMap((r) => r.image_urls.map(normUrl)));
+      const checked = identityFrom(action, opened, searched, imageHits, hostedOpened, wrongUrls);
+      const wrongName = (m.rejected ?? []).find((r) => r.official_name && checked.identity.official_name
+        && r.official_name.trim().toLowerCase() === checked.identity.official_name.trim().toLowerCase());
+      if (wrongName) {
+        tell(`Brukeren har sagt at «${wrongName.official_name}» ikke er ${ref}. Finn riktig figur, eller la den være.`);
+        continue;
+      }
+      if (!(checked.identity.official_name || checked.identity.description || checked.identity.images.length)) {
+        tell(`Identifiseringen av ${ref} var tom. Ta med navn, beskrivelse eller bilder, eller la den være.`);
+        continue;
+      }
+      survey.identities.set(ref, checked.identity);
+      refImages.delete(ref);
+      instructions = build();
+      emit({ type: 'identity', identity: checked.identity, subject_ref: ref });
+      trace.push({ action: 'identify', target: `${ref}: ${checked.identity.official_name ?? 'uten navn'}`, result: (checked.identity.why ?? '').slice(0, 160) });
+      tell(`Registrert: ${ref} er «${checked.identity.official_name ?? 'uten navn'}»${checked.identity.images.length ? ` med ${checked.identity.images.length} offisielle bilder` : ''}.`
+        + (checked.dropped.length ? ` Disse bildene ble ikke godtatt (ikke fra en åpnet side eller et bildesøk): ${checked.dropped.slice(0, 3).join(', ')}.` : '') + ' Fortsett.');
+      continue;
+    }
+
     if (action.action === 'identify') {
       if (!hunt || hunt.phase !== 'identify') {
         tell(hunt ? 'Figuren er allerede identifisert. Fortsett med verktøyene for denne fasen.' : '"identify" brukes bare i bildejakt. Svar med et verktøy eller final.');
@@ -903,6 +1113,17 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       continue;
     }
 
+    if (action.action === 'next_phase' && survey) {
+      if (survey.phase === 'sources') startMatch('Greit.');
+      else tell('Dette er siste fase. Avslutt med final.');
+      continue;
+    }
+    // A final answer while still finding sources is kept; the survey goes on to who is who.
+    if (action.action === 'final' && survey?.phase === 'sources' && mode !== 'none' && steps < maxSteps) {
+      held = { message: action.message, proposals: action.proposals, game_sources: action.game_sources };
+      startMatch('Svaret ditt er tatt vare på.');
+      continue;
+    }
     if (action.action === 'next_phase') {
       if (hunt?.phase === 'painted') startGuides('Greit.');
       else tell(hunt?.phase === 'identify' ? 'Avslutt fase 1 med {"action": "identify", …}.' : hunt ? 'Dette er siste fase. Avslutt med final.' : '"next_phase" brukes bare i bildejakt. Svar med et verktøy eller final.');
@@ -930,7 +1151,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       continue;
     }
     if (action.action === 'final') {
-      await finish(action.message || held?.message || '', action.proposals);
+      await finish(action.message || held?.message || '', action.proposals, action.game_sources);
       return;
     }
     const allowed = action.action === 'look'
@@ -938,6 +1159,10 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       : action.action === 'image_search'
         ? imageSearchOn && mode !== 'none'
         : mode === 'search' || (mode === 'hosted' && action.action === 'open');
+    if (allowed && survey?.phase === 'sources' && phaseSteps >= GAME_SOURCE_STEPS && steps < maxSteps) {
+      startMatch(`Fase 1 har brukt sine ${GAME_SOURCE_STEPS} steg.`);
+      continue;
+    }
     if (allowed && hunt?.phase === 'identify' && phaseSteps >= IDENTIFY_STEPS && steps < maxSteps) {
       if (++huntNudges <= 2) {
         tell(`Fase 1 har brukt sine ${IDENTIFY_STEPS} steg. Svar nå med {"action": "identify", …} med det du har funnet, og null for det du ikke vet.`);
@@ -963,7 +1188,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       continue;
     }
     steps++;
-    if (hunt) phaseSteps++;
+    if (hunt || survey) phaseSteps++;
 
     if (action.action === 'look') {
       // Only images from pages opened in this turn: the model cannot make Paintrest fetch arbitrary files.
@@ -978,7 +1203,15 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       try {
         // Image-search hits are shown from the search service's small copy: the original site often blocks other servers.
         const fetchable = urls.map((u) => imageHits.get(u)?.thumbnail_url ?? u);
-        const verdict = await deps.lookAtImages!(fetchable, action.question || `Viser bildene ${focus?.subject_name ?? 'figuren'}?`, focus?.reference_image ?? identityRef ?? plan?.reference_images[0] ?? null);
+        // Game survey: the official pictures of the miniatures asked about go first, labelled.
+        const references: { label: string; image: string }[] = [];
+        for (const ref of survey ? [...new Set(action.compare_with)].filter((r) => gameRefs.has(r)).slice(0, MAX_COMPARE) : []) {
+          const image = await refImage(ref);
+          const id = survey!.identities.get(ref) ?? gameRefs.get(ref)!.identity;
+          if (image) references.push({ label: `${ref} «${id?.official_name ?? gameRefs.get(ref)!.name}»`, image });
+        }
+        const verdict = await deps.lookAtImages!(fetchable, action.question || `Viser bildene ${focus?.subject_name ?? 'figuren'}?`,
+          focus?.reference_image ?? identityRef ?? plan?.reference_images[0] ?? null, references.length ? references : undefined);
         emit({ type: 'look_done', summary: verdict.slice(0, 300) });
         trace.push({ action: 'look', target: `${urls.length} bilder`, result: verdict.slice(0, 160) });
         work.push({ role: 'user', content: `Vurdering av bildene:\n${verdict}` });
@@ -1054,7 +1287,11 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       }
     }
   }
-  // Out of rounds: an image hunt still delivers what it found (the identification, and an answer kept from phase 2).
+  // Out of rounds: a survey or an image hunt still delivers what it found (identifications, and an answer kept earlier).
+  if (survey && (held || survey.identities.size)) {
+    await finish(held?.message || 'Agenten ble ikke ferdig innen grensen for antall steg, men dette ble funnet.', []);
+    return;
+  }
   if (hunt && (held || foundIdentity)) {
     await finish(held?.message || 'Agenten ble ikke ferdig innen grensen for antall steg, men dette ble funnet.', []);
     return;
@@ -1247,6 +1484,11 @@ export function unquote(q: string): string {
   return q.replace(/["«»“”]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+const SURVEY_TEXT: Record<SurveyPhase, string> = {
+  sources: 'Fase 1 av 2: finner kilder for hele spillet',
+  match: 'Fase 2 av 2: finner ut hvem som er hvem',
+};
+
 const PHASE_TEXT: Record<HuntPhase, string> = {
   identify: 'Fase 1 av 3: identifiserer figuren (navn, beskrivelse og offisielle bilder)',
   painted: 'Fase 2 av 3: leter etter bilder fra andre som har malt den',
@@ -1383,26 +1625,25 @@ function checkSourcesRead(list: unknown, opened: Map<string, PageResult>) {
 }
 
 /**
- * Completes the image hunt's proposal: the official pictures from the identification go first,
+ * Completes one miniature's proposal: the official pictures from the identification go first,
  * videos are kept only when YouTube or the search confirms them, and guides only when the
  * agent opened them or found them in a search. Works from the raw answer, so a proposal with
- * only videos or guides is not lost.
+ * only videos or guides is not lost. Used by the image hunt (one miniature) and the game survey (each).
  */
-async function finishHunt(checked: { proposals: unknown[]; warnings: string[] }, raw: unknown[], focus: ImageFocus, hunt: HuntState,
-  opened: Map<string, PageResult>, searched: Map<string, SearchHit>, hostedOpened: Set<string>, videoInfo?: (url: string) => Promise<VideoInfo>, imageHits: Map<string, ImageHit> = new Map()) {
-  const all = checked.proposals as Sel[];
-  const rawSel = raw.filter(isSel);
+async function completeSelection(all: Sel[], rawSel: Sel[], subject: { ref: string; name: string }, id: SubjectIdentity | null, warnings: string[],
+  opened: Map<string, PageResult>, searched: Map<string, SearchHit>, hostedOpened: Set<string>, videoInfo: ((url: string) => Promise<VideoInfo>) | undefined,
+  imageHits: Map<string, ImageHit>, mine: Set<string> = new Set()) {
   const rawGuides = rawSel.flatMap((p) => (Array.isArray(p.payload.guides) ? p.payload.guides as unknown[] : []));
   const urlOf = (g: unknown) => (typeof g === 'string' ? g : g && typeof g === 'object' && typeof (g as { url?: unknown }).url === 'string' ? (g as { url: string }).url : '');
   const rawVideos = [...rawSel.flatMap((p) => (Array.isArray(p.payload.videos) ? p.payload.videos as unknown[] : [])), ...rawGuides.filter((g) => youtubeId(urlOf(g)))];
-  const videos = await verifyVideos(rawVideos, opened, searched, videoInfo, checked.warnings);
-  const guides = verifyGuides(rawGuides.filter((g) => !youtubeId(urlOf(g))), opened, searched, hostedOpened, checked.warnings);
-  const id = hunt.identity;
+  const videos = await verifyVideos(rawVideos, opened, searched, videoInfo, warnings);
+  const guides = verifyGuides(rawGuides.filter((g) => !youtubeId(urlOf(g))), opened, searched, hostedOpened, warnings);
+  // The caller passes only this miniature's proposals (the hunt has one miniature).
   let sel = all.find((p) => p.type === 'reference_selection');
   if (!sel && (id?.images.length || videos.length || guides.length)) {
     const first = rawSel[0]?.payload;
     sel = { type: 'reference_selection', evidence: 'documented', uncertainty: [], payload: {
-      subject: focus.subject_ref, note: typeof first?.note === 'string' ? first.note : null, images: [], sources_read: checkSourcesRead(first?.sources_read, opened),
+      subject: subject.ref, note: typeof first?.note === 'string' ? first.note : null, images: [], sources_read: checkSourcesRead(first?.sources_read, opened),
     } };
     all.push(sel);
   }
@@ -1416,16 +1657,77 @@ async function finishHunt(checked: { proposals: unknown[]; warnings: string[] },
     images.unshift({
       image_url: i.image_url, thumbnail_url: i.thumbnail_url ?? imageHits.get(normUrl(i.image_url))?.thumbnail_url ?? null,
       page_url: i.page_url, page_title: i.page_title ?? i.page_url, site: i.site ?? hostOf(i.page_url), creator: page?.author ?? null,
-      caption: img?.caption ?? img?.alt ?? `${what} av ${id?.official_name ?? focus.subject_name}`, kind: i.kind === 'concept_art' ? 'concept_art' : 'official',
+      caption: img?.caption ?? img?.alt ?? `${what} av ${id?.official_name ?? subject.name}`, kind: i.kind === 'concept_art' ? 'concept_art' : 'official',
       confidence: 'high', reason: id?.why ?? null, original_text: img?.context ?? null, page_language: page?.language ?? null,
     });
   }
   // The user's own finds are already theirs; they are not suggested back.
-  const mine = new Set((focus.user_images ?? []).map((u) => normUrl(u.image_url)));
   sel.payload.images = images.filter((i) => !mine.has(normUrl(String(i.image_url))));
   delete sel.payload.anchor;
   sel.payload.videos = videos;
   sel.payload.guides = guides;
+}
+
+async function finishHunt(checked: { proposals: unknown[]; warnings: string[] }, raw: unknown[], focus: ImageFocus, hunt: HuntState,
+  opened: Map<string, PageResult>, searched: Map<string, SearchHit>, hostedOpened: Set<string>, videoInfo?: (url: string) => Promise<VideoInfo>, imageHits: Map<string, ImageHit> = new Map()) {
+  const mine = new Set((focus.user_images ?? []).map((u) => normUrl(u.image_url)));
+  await completeSelection(checked.proposals as Sel[], raw.filter(isSel), { ref: focus.subject_ref, name: focus.subject_name }, hunt.identity, checked.warnings,
+    opened, searched, hostedOpened, videoInfo, imageHits, mine);
+}
+
+/** The game survey's proposals, one per miniature, each completed as in the image hunt. */
+async function finishSurvey(checked: { proposals: unknown[]; warnings: string[] }, raw: unknown[], game: GameFocus, survey: SurveyState,
+  opened: Map<string, PageResult>, searched: Map<string, SearchHit>, hostedOpened: Set<string>, videoInfo: ((url: string) => Promise<VideoInfo>) | undefined, imageHits: Map<string, ImageHit>) {
+  const all = checked.proposals as Sel[];
+  for (const m of game.miniatures) {
+    const rawSel = raw.filter(isSel).filter((p) => String(p.payload.subject ?? '') === m.ref);
+    const found = survey.identities.get(m.ref) ?? null;
+    if (!rawSel.length && !found?.images.length) continue;
+    const mine = all.filter((p) => isSel(p) && String(p.payload.subject ?? '') === m.ref);
+    await completeSelection(mine, rawSel, m, found, checked.warnings, opened, searched, hostedOpened, videoInfo, imageHits);
+    for (const p of mine) if (!all.includes(p)) all.push(p);
+  }
+}
+
+/** Joins the survey's final answer with one given earlier, per miniature. */
+export function mergeSurvey(final: unknown[], held: unknown[]): unknown[] {
+  if (!held.length) return final;
+  const subjects = new Set([...final, ...held].filter(isSel).map((p) => String(p.payload.subject ?? '')));
+  const others = final.filter((p) => !isSel(p));
+  return [...others, ...[...subjects].flatMap((ref) => mergeHeld(final.filter(isSel).filter((p) => String(p.payload.subject ?? '') === ref),
+    held.filter(isSel).filter((p) => String(p.payload.subject ?? '') === ref)))];
+}
+
+/**
+ * The survey's sources for the whole game: only pages opened or found by a search in this run,
+ * roles from a fixed list, and «shows» limited to the project's miniatures. At most MAX_GAME_SOURCES.
+ */
+export function verifyGameSources(raw: unknown[], opened: Map<string, PageResult>, searched: Map<string, SearchHit>, hostedOpened: Set<string>,
+  refs: Set<string>, warnings: string[]): GameSource[] {
+  const out = new Map<string, GameSource>();
+  let dropped = 0;
+  const str = (x: unknown, n: number) => (typeof x === 'string' && x.trim() ? x.trim().slice(0, n) : null);
+  for (const r of raw) {
+    const o = (r && typeof r === 'object' ? r : {}) as Record<string, unknown>;
+    const url = str(o.url, 2000);
+    if (!url || !/^https?:\/\//.test(url)) { dropped++; continue; }
+    const key = normUrl(url);
+    const page = opened.get(key);
+    const hit = searched.get(key);
+    const viaUib = hostedOpened.has(key);
+    if (!page && !hit && !viaUib) { dropped++; continue; }
+    const shows = (Array.isArray(o.shows) ? o.shows : []).filter((x): x is string => typeof x === 'string' && refs.has(x));
+    const prev = out.get(key);
+    if (prev) { prev.shows = [...new Set([...prev.shows, ...shows])]; continue; }
+    if (out.size >= MAX_GAME_SOURCES) continue;
+    out.set(key, {
+      url: page?.url ?? hit?.url ?? url, title: page?.title ?? hit?.title ?? str(o.title, 200) ?? url,
+      role: (['official', 'painted', 'guide', 'other'] as const).find((x) => x === o.role) ?? 'other',
+      shows: [...new Set(shows)], summary: str(o.summary, 600), read: !!page || viaUib,
+    });
+  }
+  if (dropped) warnings.push(`Fjernet ${dropped} kilde(r) for spillet som agenten ikke hadde søkt fram eller åpnet.`);
+  return [...out.values()];
 }
 
 /** Keeps YouTube videos that YouTube (oEmbed) or this turn's search confirms; at most MAX_VIDEOS. */

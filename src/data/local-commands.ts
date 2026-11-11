@@ -410,7 +410,15 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
           for (const l of links) { l.deleted_at = now(); log('source_link', l.id, 'detach'); }
           return;
         }
-        if (links.length) return;
+        if (links.length) {
+          // Confirming the agent's suggestion («Trolig figuren») makes it the user's own tag.
+          for (const l of links.filter((x) => x.suggested_by_task_id)) {
+            l.suggested_by_task_id = null;
+            log('source_link', l.id, 'update');
+          }
+          if (existing && existing.retention !== 'kept') existing.retention = 'kept';
+          return;
+        }
         // Tagging is the user's choice to keep the page (a draft found by the agent becomes kept).
         const source_id = sourceFor(t, ws, { url: page.url, title: page.title || page.url, creator: null, kind: 'article' }, null, log);
         const id = newId();

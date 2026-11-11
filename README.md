@@ -136,6 +136,29 @@ Når agenten leser en side, tas bare bildene i selve innholdet med (artikkel ell
 
 Sider som bygges med skript (typisk kampanjesider), har ofte bildene i sidedata i stedet for i HTML. Har en side færre enn fire synlige bilder, leser Paintrest også bildeadresser fra kildekoden.
 
+## Kartlegg spillet
+
+«✦ Kartlegg spillet med AI» på miniatyrlisten gjør jobben én gang for hele spillet, i stedet for at hver bildejakt finner de samme kildene på nytt. Kartleggingen har sin egen oppgave og forstyrrer ikke panelet eller verkstedet. Fremdriften vises øverst på listen, med «Stopp».
+
+1. **Kilder for spillet (høyst 18 steg).** Agenten finner:
+   - de offisielle sidene: utgiveren, kampanjen med oppdateringer og tillegg, BoardGameGeek med regelbok og komponentliste, og wikier
+   - gallerier og tråder med mange malte figurer, på flere språk
+   - maleguider for spillet
+   
+   Den kan identifisere miniatyrer allerede her.
+2. **Hvem er hvem (resten av de 50 stegene).** Agenten identifiserer hver miniatyr (`identify` med `subject`). Den finner også ut hvilke bilder som viser hvilken miniatyr. Når den bruker «look» med `compare_with`, viser Paintrest de offisielle bildene av opptil fire miniatyrer først, merket R1, R2 …, og agenten svarer hvilken kandidat som er hvilken.
+
+**Dette lagres for spillet:**
+- **Hvem hver miniatyr er:** som forslag på miniatyren, akkurat som etter en bildejakt. Kortet på listen viser navnet med «?» til du har bekreftet det.
+- **Bildeforslag til hver miniatyr:** i Bilder-fanen. Kortet viser «N bildeforslag».
+- **Kildene for spillet:** med rolle (Offisiell, Malt, Guide) og hvilke miniatyrer hver side viser. Kildelisten i verkstedet viser dette som «Trolig figuren». Ett trykk gjør det til ditt eget merke, og × sier at siden ikke viser figuren. Ingen av delene foreslås på nytt.
+
+**Senere kjøringer bygger på kartleggingen:**
+- Bildejakten for en miniatyr åpner sidene merket «Trolig figuren» tidlig.
+- Maleplanen får maleguidene for spillet.
+- Alle agenter ser i `known_sources` hvilken rolle hver side har, og hvilke miniatyrer den viser.
+- Kjører du kartleggingen på nytt, åpner agenten sidene den kjenner, i stedet for å søke dem fram igjen.
+
 ## Miniatyrverkstedet
 
 Trykk på bildet eller navnet på et miniatyrkort. Da åpnes verkstedet for miniatyren, som bruker hele skjermen:

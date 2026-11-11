@@ -32,3 +32,16 @@
 @media (prefers-reduced-motion: reduce) { .mini-working { animation: none; } }
 .mini-name { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
 .mini-name:hover { text-decoration: underline; }
+
+/* Kartlegging av spillet */
+.page-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.survey-panel { background: var(--pine); color: var(--on-dark); border-radius: var(--r-lg); padding: 14px 16px; }
+.survey-panel .msg { padding: 0; background: none; }
+.survey-result { display: grid; gap: 6px; font-size: 14px; }
+.survey-result p { margin: 0; }
+.survey-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.survey-head .eyebrow { color: var(--moss); }
+.survey-panel .link { color: var(--moss); }
+.survey-warn { color: #f3c9a8; }
+.mini-found { display: flex; gap: 10px; flex-wrap: wrap; margin: 0; }
+.mini-found .link { text-align: left; overflow-wrap: anywhere; }

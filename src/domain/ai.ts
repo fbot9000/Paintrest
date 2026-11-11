@@ -63,13 +63,20 @@ export interface AgentTurnInput {
         /** Identifications the user said were wrong. */
         rejected?: { official_name: string | null; image_urls: string[] }[];
         /** Pages the user tagged as showing the figure («Viser figuren»). */
-        tagged_sources?: TaggedSourceRef[] }
+        tagged_sources?: TaggedSourceRef[];
+        /** Pages a game survey found that probably show the figure (not confirmed). */
+        suggested_sources?: TaggedSourceRef[] }
     | { kind: 'plan'; subject_ref: string; subject_name: string; game: string; reference_images: string[]; revision: boolean; paints?: 'owned' | 'best' | null;
         /** Who the figure is, when the user has confirmed it. */
         identity?: SubjectIdentityRecord | null;
         /** Painting guides and videos saved for the miniature. */
         guides?: TaggedSourceRef[];
+        /** Painting guides for the whole game (game survey). */
+        game_guides?: TaggedSourceRef[];
         tagged_sources?: TaggedSourceRef[] }
+    /** Game survey: sources for the whole game, and which miniature is which (started from the miniature list). */
+    | { kind: 'game'; game: string; miniatures: { ref: string; name: string; images: number; identity?: SubjectIdentityRecord | null;
+        rejected?: { official_name: string | null; image_urls: string[] }[] }[] }
     /** Library research (bit 7.4): a technique or recipe for the user's own library. */
     | { kind: 'knowledge'; target: 'technique' | 'recipe'; revision?: { name: string } | null; paints?: 'both' | 'owned' | 'best' | null }
     | null;
@@ -115,17 +122,23 @@ export type ResearchEvent =
   | { type: 'image_search_done'; query: string; images: ImageHit[] }
   | { type: 'look'; count: number; why: string | null }
   | { type: 'look_done'; summary: string }
-  | { type: 'phase'; phase: 'identify' | 'painted' | 'guides'; text: string }
-  | { type: 'identity'; identity: SubjectIdentity }
+  | { type: 'phase'; phase: 'identify' | 'painted' | 'guides' | 'sources' | 'match'; text: string }
+  /** subject_ref is set when a game survey identifies one of several miniatures. */
+  | { type: 'identity'; identity: SubjectIdentity; subject_ref?: string }
   /** The agent was told about something the user did while it worked (a tagged source). */
   | { type: 'hint'; text: string }
   | { type: 'tool_error'; action: string; target: string; error: string }
   | { type: 'final'; message: string; proposals: unknown[]; model: string; warnings: string[]; trace: TraceStep[]; pages?: PageSeen[];
       /** Image hunt: who the figure is, found in phase 1 of this run. */
-      identity?: SubjectIdentity | null }
+      identity?: SubjectIdentity | null;
+      /** Game survey: who each miniature is, by ref. */
+      identities?: { subject_ref: string; identity: SubjectIdentity }[];
+      /** Game survey: sources for the whole game, with role and which miniatures they show. */
+      game_sources?: GameSourceIn[] }
   | { type: 'error'; error: string };
 
 import type { SubjectIdentity, SubjectIdentityRecord } from './types';
+import type { GameSourceIn } from './research';
 
 /** One picture from an image search, with the page it was found on. */
 export interface ImageHit {

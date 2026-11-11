@@ -11,7 +11,7 @@ import { hostedSearchOf } from './provider.ts';
 import type { ResponsesProvider } from './provider.ts';
 import { runResearch } from './research-agent.ts';
 import { lookAtImages } from './vision.ts';
-import type { ImageFocus, KnownIdentity, KnowledgeFocus, PlanFocus, ResearchEvent, ResearchInput, RunHint, TaggedSource } from './research-agent.ts';
+import type { AnyFocus, KnownIdentity, ResearchEvent, ResearchInput, RunHint, TaggedSource } from './research-agent.ts';
 import { SEARCH_PROVIDERS } from './search.ts';
 import type { SearchProviderId, WebSearch } from './search.ts';
 
@@ -235,7 +235,7 @@ async function streamResearch(req: IncomingMessage, res: ServerResponse, d: AppD
     const hostedSearch = hostedSearchOf(d.aiStore.get()?.hosted_search);
     await runResearch({
       provider: d.provider, search: d.search, hostedSearch, openPage: d.openPage, signal: ac.signal,
-      lookAtImages: (urls, question, reference) => lookAtImages(d.provider, d.getImage, urls, question, reference, input.model),
+      lookAtImages: (urls, question, reference, references) => lookAtImages(d.provider, d.getImage, urls, question, reference, input.model, references),
       imageAsDataUrl: async (url) => {
         const img = await d.getImage(url);
         if (img.body.length > 4 * 1024 * 1024) throw new UserError('Ankerbildet er for stort til å vises modellen');
@@ -308,7 +308,7 @@ export function parseIdentity(v: unknown): KnownIdentity | null {
   };
 }
 
-export function parseFocus(v: unknown): ImageFocus | PlanFocus | KnowledgeFocus | null {
+export function parseFocus(v: unknown): AnyFocus | null {
   if (!v || typeof v !== 'object') return null;
   const f = v as Record<string, unknown>;
   if (f.kind === 'knowledge') {
@@ -328,7 +328,23 @@ export function parseFocus(v: unknown): ImageFocus | PlanFocus | KnowledgeFocus 
       paints: f.paints === 'owned' || f.paints === 'best' ? f.paints : null,
       identity: parseIdentity(f.identity),
       guides: pageRefs(f.guides, 8),
+      game_guides: pageRefs(f.game_guides, 8),
       tagged_sources: pageRefs(f.tagged_sources),
+    };
+  }
+  if (f.kind === 'game') {
+    // Game survey: every miniature in the project, with what is known about it.
+    return {
+      kind: 'game',
+      game: str(f.game).slice(0, 160),
+      miniatures: list(f.miniatures).flatMap((m) => {
+        const ref = text(m.ref, 12);
+        if (!ref || !/^M\d{1,4}$/.test(ref)) return [];
+        return [{
+          ref, name: text(m.name, 120) ?? ref, images: typeof m.images === 'number' && m.images >= 0 ? Math.min(999, Math.floor(m.images)) : 0,
+          identity: parseIdentity(m.identity), rejected: parseRejected(m.rejected),
+        }];
+      }).slice(0, 120),
     };
   }
   if (f.kind !== 'images') return null;
@@ -347,12 +363,17 @@ export function parseFocus(v: unknown): ImageFocus | PlanFocus | KnowledgeFocus 
       return image_url && page_url && HTTP.test(image_url) && HTTP.test(page_url) ? [{ image_url, page_url, title: text(u.title, 200) ?? '' }] : [];
     }).slice(0, 12),
     identity: parseIdentity(f.identity),
-    rejected: list(f.rejected).map((r) => ({
-      official_name: text(r.official_name, 160),
-      image_urls: (Array.isArray(r.image_urls) ? r.image_urls : []).flatMap((u) => (text(u, 2000) && HTTP.test(String(u)) ? [String(u)] : [])).slice(0, 3),
-    })).slice(0, 5),
+    rejected: parseRejected(f.rejected),
     tagged_sources: pageRefs(f.tagged_sources),
+    suggested_sources: pageRefs(f.suggested_sources),
   };
+}
+
+function parseRejected(v: unknown) {
+  return list(v).map((r) => ({
+    official_name: text(r.official_name, 160),
+    image_urls: (Array.isArray(r.image_urls) ? r.image_urls : []).flatMap((u) => (text(u, 2000) && HTTP.test(String(u)) ? [String(u)] : [])).slice(0, 3),
+  })).slice(0, 5);
 }
 
 /** A user action sent while a run is going (POST /api/agent/hint). */

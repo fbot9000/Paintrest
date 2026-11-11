@@ -20,6 +20,8 @@ export async function lookAtImages(
   question: string,
   reference: string | null,
   model?: string,
+  /** Game survey: known pictures of several miniatures, labelled («M1 «Merlin»»), shown first instead of one reference. */
+  references: { label: string; image: string }[] = [],
 ): Promise<string> {
   const parts: Extract<ResponsesMessage, { content: unknown[] }>['content'] = [];
   const shown: string[] = [];
@@ -36,13 +38,22 @@ export async function lookAtImages(
   }
   if (!shown.length) throw new UserError(`Ingen av bildene kunne hentes: ${skipped.join('; ')}`, 502);
 
-  const intro = `Du hjelper en miniatyrmaler å finne bilder av én bestemt figur. ${question}
+  const refs = references.slice(0, 4);
+  const intro = refs.length
+    ? `Du hjelper en miniatyrmaler å finne ut hvilke bilder som viser hvilken figur i et spill. ${question}
+De ${refs.length} første bildene er REFERANSER, i denne rekkefølgen: ${refs.map((r, i) => `R${i + 1} = ${r.label}`).join(', ')}.
+Sammenlign kandidatene med dem (form, positur, våpen, base, detaljer), ikke med fargene, siden malere velger egne farger.
+Kandidatene etter referansene er nummerert 1–${shown.length} i denne rekkefølgen:
+${shown.map((u, i) => `${i + 1}. ${u}`).join('\n')}
+Svar på norsk, én linje per kandidat: «nummer – hvilken referanse den viser (for eksempel R2), eller ingen/usikker – hva bildet viser (malt, offisielt foto, konseptillustrasjon, annet) – kort begrunnelse». Avslutt med én linje som oppsummerer.`
+    : `Du hjelper en miniatyrmaler å finne bilder av én bestemt figur. ${question}
 ${reference ? 'Det første bildet er en REFERANSE: et kjent bilde av figuren. Sammenlign de andre med det (form, positur, våpen, base, detaljer), ikke med fargene, siden malere velger egne farger.\n' : ''}Bildene etter referansen er nummerert 1–${shown.length} i denne rekkefølgen:
 ${shown.map((u, i) => `${i + 1}. ${u}`).join('\n')}
 Svar på norsk, én linje per bilde: «nummer – ja/nei/usikker – hva bildet viser (malt, offisielt foto, konseptillustrasjon, annet) – kort begrunnelse». Avslutt med én linje som oppsummerer.`;
   const content = [
     { type: 'input_text' as const, text: intro },
-    ...(reference ? [{ type: 'input_image' as const, image_url: reference }] : []),
+    ...(refs.length ? refs.map((r) => ({ type: 'input_image' as const, image_url: r.image }))
+      : reference ? [{ type: 'input_image' as const, image_url: reference }] : []),
     ...parts,
   ];
   try {

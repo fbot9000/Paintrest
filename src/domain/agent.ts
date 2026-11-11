@@ -611,10 +611,19 @@ export function buildAgentContext(t: Tables, task_id: Id): AgentContext {
       miniatures: subjectData,
       paints,
       your_pending_proposals: pending,
-      known_sources: knownSources(t, project.id).slice(0, 60).map((k) => ({
-        url: k.source.url, title: k.source.title, status: k.status, saved_images: k.asset_count,
-        ...(k.summary ? { summary: k.summary.slice(0, 300) } : {}),
-      })),
+      // Which miniatures each page shows, and what it is good for, so no agent has to find it again.
+      known_sources: knownSources(t, project.id).slice(0, 80).map((k) => {
+        const refOf = (id: Id) => Object.entries(subjectRefs).find(([, sid]) => sid === id)?.[0];
+        const confirmed = k.shows_confirmed.map(refOf).filter(Boolean);
+        const suggested = k.shows_suggested.map(refOf).filter(Boolean);
+        return {
+          url: k.source.url, title: k.source.title, status: k.status, saved_images: k.asset_count,
+          ...(k.source.role ? { role: k.source.role } : {}),
+          ...(confirmed.length ? { shows_confirmed: confirmed } : {}),
+          ...(suggested.length ? { shows_suggested: suggested } : {}),
+          ...(k.summary ? { summary: k.summary.slice(0, 300) } : {}),
+        };
+      }),
     },
   };
 }
@@ -693,6 +702,8 @@ export function libraryKnownSources(t: Tables): KnownSource[] {
       asset_count: 0,
       status: source.retention === 'kept' ? 'kept' as const : 'found' as const,
       summary: Object.values(t.source_layer).find((l) => l.source_id === source.id && l.layer === 'translation' && !l.deleted_at)?.body ?? null,
+      // The library has no miniatures.
+      shows_confirmed: [], shows_suggested: [],
     }))
     .sort((a, b) => Number(b.status === 'kept') - Number(a.status === 'kept'));
 }
@@ -703,6 +714,9 @@ export interface KnownSource {
   /** kept: the user saved images or evidence from it; found: the agent read it (draft). */
   status: 'kept' | 'found';
   summary: string | null;
+  /** Miniatures the page shows: confirmed by the user (tag or approval), or suggested by a game survey. */
+  shows_confirmed: Id[];
+  shows_suggested: Id[];
 }
 
 /**
@@ -725,8 +739,16 @@ export function knownSources(t: Tables, project_id: Id): KnownSource[] {
       asset_count: Object.values(t.source_asset).filter((a) => a.source_id === source.id && !a.deleted_at).length,
       status: source.retention === 'kept' ? 'kept' as const : 'found' as const,
       summary: Object.values(t.source_layer).find((l) => l.source_id === source.id && l.layer === 'translation' && !l.deleted_at)?.body ?? null,
+      ...showsOf(t, source.id, subjectIds),
     }))
     .sort((a, b) => Number(b.status === 'kept') - Number(a.status === 'kept') || b.asset_count - a.asset_count);
+}
+
+function showsOf(t: Tables, source_id: Id, subjectIds: Set<Id>): { shows_confirmed: Id[]; shows_suggested: Id[] } {
+  const links = Object.values(t.source_link).filter((l) => !l.deleted_at && l.source_id === source_id && l.target_type === 'subject' && l.use === 'evidence' && subjectIds.has(l.target_id)
+    && !t.miniature_subject[l.target_id]?.deleted_at);
+  const confirmed = [...new Set(links.filter((l) => !l.suggested_by_task_id).map((l) => l.target_id))];
+  return { shows_confirmed: confirmed, shows_suggested: [...new Set(links.filter((l) => l.suggested_by_task_id && !confirmed.includes(l.target_id)).map((l) => l.target_id))] };
 }
 
 export function proposalTitle(t: Tables, type: ResultType, payload: unknown): string {

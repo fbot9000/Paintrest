@@ -8,7 +8,7 @@ import { useApp, useCommand, useView } from '../../app/context';
 import type { Run } from '../../app/runs';
 import type { GuideRef, ReferenceImage, ReferenceSelectionPayload, VideoRef } from '../../domain/agent';
 import type { Id, MiniatureSubject, SubjectIdentity, Tables } from '../../domain/types';
-import { linkedSources, subjectReferences } from '../../domain/views';
+import { linkedSources, subjectReferences, suggestedSources } from '../../domain/views';
 import { Badge, Button, ErrorNote, ImagePicker } from '../../ui/components';
 import { startImageHunt, tagPage } from './agentRuns';
 import { addPasted, removePasted, usePasted } from './pasted';
@@ -36,7 +36,9 @@ function view(t: Tables, s: MiniatureSubject) {
   const savedGuides = new Set(linkedSources(t, s.id, 'method').map((x) => x.url!));
   // Pages the user tagged as showing the figure («Viser figuren»).
   const tagged = new Set(linkedSources(t, s.id, 'evidence').map((x) => x.url!));
-  return { proposals, suggested, saved, read, videos, savedVideos, guides, savedGuides, tagged };
+  // Pages a game survey found that probably show it («Trolig figuren»), not yet confirmed.
+  const likely = new Set(suggestedSources(t, s.id).map((x) => x.url!));
+  return { proposals, suggested, saved, read, videos, savedVideos, guides, savedGuides, tagged, likely };
 }
 
 export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, referenceFileId }: {
@@ -174,7 +176,8 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
   const guides = dedupeGuides(data.guides);
   const tag = (page: { url: string; title: string }, on: boolean) => cmdRun(() => tagPage(app, s.id, page, on));
   // The page being browsed may have moved (redirect); a tag on either address counts.
-  const browseTagged = page && data.tagged.has(page.url) ? page.url : browseUrl && data.tagged.has(browseUrl) ? browseUrl : null;
+  const marked = (u: string) => data.tagged.has(u) || data.likely.has(u);
+  const browseTagged = page && marked(page.url) ? page.url : browseUrl && marked(browseUrl) ? browseUrl : null;
   const official = rest.filter((c) => c.kind === 'official' || c.kind === 'concept_art');
   const painted = rest.filter((c) => c.kind !== 'official' && c.kind !== 'concept_art');
   const videos = dedupeVideos(data.videos);
@@ -337,7 +340,7 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
                 <strong>{p.title}</strong>
                 <span className="small muted"> · {visible(p.candidates).length}</span>
                 {!p.search && <a className="small" href={p.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}> ↗</a>}
-                {!p.search && <TagButton on={data.tagged.has(p.url)} onToggle={(on) => tag({ url: p.url, title: p.title }, on)} />}
+                {!p.search && <TagButton state={tagState(data, p.url)} onToggle={(on) => tag({ url: p.url, title: p.title }, on)} />}
               </summary>
               {grid(p.candidates, false)}
             </details>
@@ -350,7 +353,7 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
           <div className="wsi-section-head">
             <h3>{page?.title ?? 'Leser …'}</h3>
             <span className="wsi-head-actions">
-              <TagButton on={!!browseTagged} onToggle={(on) => tag({ url: browseTagged ?? browseUrl, title: page?.title ?? browseUrl }, on)} />
+              <TagButton state={browseTagged ? tagState(data, browseTagged) : 'off'} onToggle={(on) => tag({ url: browseTagged ?? browseUrl, title: page?.title ?? browseUrl }, on)} />
               <button type="button" className="link small" onClick={() => setBrowseUrl(null)}>Lukk</button>
             </span>
           </div>
@@ -386,12 +389,33 @@ function dedupeGuides(list: GuideRef[]): GuideRef[] {
   return list.filter((g) => !seen.has(g.url) && !!seen.add(g.url));
 }
 
-/** «Viser figuren»: the user tags a page as showing the miniature; a running hunt hears about it at once. */
-export function TagButton({ on, onToggle }: { on: boolean; onToggle: (on: boolean) => void }) {
+export type TagState = 'on' | 'likely' | 'off';
+
+/** Tagged by the user, suggested by a game survey («Trolig figuren»), or neither. */
+export function tagState(d: { tagged: Set<string>; likely: Set<string> }, url: string): TagState {
+  return d.tagged.has(url) ? 'on' : d.likely.has(url) ? 'likely' : 'off';
+}
+
+/**
+ * «Viser figuren»: the user tags a page as showing the miniature; a running hunt hears about it at once.
+ * A page the game survey suggested shows «Trolig figuren»: one click confirms it, × says it does not.
+ */
+export function TagButton({ state, onToggle }: { state: TagState; onToggle: (on: boolean) => void }) {
+  const click = (on: boolean) => (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); onToggle(on); };
+  if (state === 'likely') {
+    return (
+      <span className="wsi-tag-likely">
+        <button type="button" className="wsi-tag likely" onClick={click(true)}
+          title="Kartleggingen av spillet mener at siden viser figuren. Trykk for å bekrefte.">Trolig figuren</button>
+        <button type="button" className="wsi-tag-x" onClick={click(false)} aria-label="Viser ikke figuren" title="Siden viser ikke figuren">×</button>
+      </span>
+    );
+  }
+  const on = state === 'on';
   return (
     <button type="button" className={`wsi-tag ${on ? 'on' : ''}`} aria-pressed={on}
       title={on ? 'Du har merket at siden viser figuren. Trykk for å fjerne merket.' : 'Merk at siden viser figuren. Agenten åpner merkede sider først, også mens den jobber.'}
-      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(!on); }}>
+      onClick={click(!on)}>
       {on ? '✓ Viser figuren' : 'Viser figuren?'}
     </button>
   );

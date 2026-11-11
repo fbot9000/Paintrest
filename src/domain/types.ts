@@ -329,7 +329,12 @@ export interface Source {
   deleted_at: Timestamp | null;
   /** PROTOTYPE: the page's language when known (html lang or guessed). */
   language?: string | null;
+  /** PROTOTYPE (game survey): what the page is good for in this game. Set only on pages that belong to the project. */
+  role?: SourceRole | null;
 }
+
+/** official: the publisher's or the campaign's own; painted: others' painted figures; guide: how to paint. */
+export type SourceRole = 'official' | 'painted' | 'guide' | 'other';
 
 export interface SourceAsset {
   id: Id;
@@ -363,6 +368,11 @@ export interface SourceLink {
   use: LinkUse;
   layer_id: Id | null;
   deleted_at: Timestamp | null;
+  /**
+   * PROTOTYPE (game survey): an evidence link the agent suggested («Trolig figuren»), from this task.
+   * The user confirms it (the field is cleared) or removes it. Absent: made or confirmed by the user, or by an approval.
+   */
+  suggested_by_task_id?: Id | null;
 }
 
 export interface SourceLinkAsset {
@@ -585,6 +595,8 @@ export interface TaskScope {
    * project's agent panel or with each other. Absent or null: the panel's task.
    */
   subject_focus?: SubjectFocus | null;
+  /** PROTOTYPE: the game survey's own task (started from the miniature list), apart from the panel and the workspace. */
+  game_focus?: boolean;
 }
 
 export interface SubjectFocus {

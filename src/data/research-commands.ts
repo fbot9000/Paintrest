@@ -7,7 +7,7 @@ import type { ChangeAction, Id, MiniatureSubject, PaintChoice, ResearchProposal,
 import { attachedExpansions } from '../domain/views';
 import type { Store } from './store';
 import { revertPatches } from './store';
-import { addSourceLayers, attachImages, attachImagesTo, downloadImages, setCover, sourceFor } from './images-tx';
+import { addSourceLayers, attachImages, attachImagesTo, downloadImages, setCover, sourceBelongsTo, sourceFor } from './images-tx';
 import type { Downloaded } from './images-tx';
 
 /** Result types implemented in this version. See docs/AVVIK.md. */
@@ -202,6 +202,48 @@ export function createAgentCommands(store: Store): AgentCommands {
       });
     },
 
+    recordGameSources(task_id, sources, subjectRefs) {
+      if (!sources.length) return { sources: 0, links: 0 };
+      return tx((t, ws) => {
+        const project_id = t.task_scope[task_id]?.work_project_id;
+        if (!project_id) return { sources: 0, links: 0 };
+        const who: Who = { initiated_by: 'agent', task_id };
+        let saved = 0;
+        let links = 0;
+        for (const g of sources) {
+          if (!/^https?:\/\//.test(g.url)) continue;
+          let src = Object.values(t.source).find((x) => !x.deleted_at && x.url === g.url);
+          if (!src) {
+            // Also pages only seen in a search (Reddit, Instagram …): kept as drafts so the next run finds them.
+            const id = newId();
+            src = { id, workspace_id: ws, kind: g.role === 'guide' ? 'guide' : 'article', title: g.title, creator: null, url: g.url, locator: null,
+              analysis_state: 'stored', retention: 'draft', created_by_task_id: task_id, created_at: now(), deleted_at: null };
+            t.source[id] = src;
+            record(t, ws, 'source', id, 'create', who);
+            saved++;
+          }
+          // A page shared with another game may get a link, but its content is left alone (AVVIK regel 1).
+          if (sourceBelongsTo(t, src.id, project_id)) {
+            if (g.role !== 'other' || !src.role) src.role = g.role;
+            if (g.summary) addSourceLayers(t, [{ url: src.url!, title: src.title, site: '', language: null, summary: g.summary, original_excerpt: null }], project_id);
+          }
+          for (const ref of g.shows) {
+            const subject_id = subjectRefs[ref];
+            const s = subject_id ? t.miniature_subject[subject_id] : undefined;
+            if (!s || s.deleted_at || s.project_id !== project_id) continue;
+            // An existing link (the user's tag, or an earlier suggestion) is left as it is; a removed one is not suggested again.
+            const before = Object.values(t.source_link).filter((l) => l.source_id === src!.id && l.target_type === 'subject' && l.target_id === s.id && l.use === 'evidence');
+            if (before.length) continue;
+            const id = newId();
+            t.source_link[id] = { id, source_id: src.id, target_type: 'subject', target_id: s.id, use: 'evidence', layer_id: null, deleted_at: null, suggested_by_task_id: task_id };
+            record(t, ws, 'source_link', id, 'attach', who);
+            links++;
+          }
+        }
+        return { sources: saved, links };
+      });
+    },
+
     recordContext(task_id, refs) {
       tx((t) => {
         const ts = now();
@@ -229,12 +271,15 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
       return tx((t, ws) => {
         const p = must(t.project[project_id], 'Prosjektet');
         if (p.deleted_at) throw new CommandError('Prosjektet er slettet');
-        if (focus && t.miniature_subject[focus.subject_id]?.project_id !== project_id) throw new CommandError('Miniatyren hører til et annet prosjekt');
+        const game = focus === 'game';
+        if (focus && focus !== 'game' && t.miniature_subject[focus.subject_id]?.project_id !== project_id) throw new CommandError('Miniatyren hører til et annet prosjekt');
         const id = newId();
         t.research_task[id] = { id, workspace_id: ws, status: 'open', created_at: now() };
         // System sets scope and result types in the same transaction (skjema §7).
-        t.task_scope[id] = { task_id: id, area_kind: 'new_project', work_project_id: project_id, allow_new_knowledge: false, ...(focus ? { subject_focus: { ...focus } } : {}) };
-        for (const result_type of IMPLEMENTED_TYPES) t.task_result_type.push({ task_id: id, result_type });
+        t.task_scope[id] = { task_id: id, area_kind: 'new_project', work_project_id: project_id, allow_new_knowledge: false,
+          ...(game ? { game_focus: true } : focus ? { subject_focus: { ...focus } } : {}) };
+        // The game survey only proposes pictures; it never changes the catalogue or the plans.
+        for (const result_type of game ? ['reference_selection' as const] : IMPLEMENTED_TYPES) t.task_result_type.push({ task_id: id, result_type });
         record(t, ws, 'research_task', id, 'create', { initiated_by: 'user', task_id: id });
         return id;
       });
@@ -307,7 +352,7 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
       if (!missing.length) return;
       tx((t, ws) => {
         const task = must(t.research_task[task_id], 'Oppgaven');
-        if (task.status !== 'open' || t.task_scope[task_id]?.area_kind !== 'new_project') return;
+        if (task.status !== 'open' || t.task_scope[task_id]?.area_kind !== 'new_project' || t.task_scope[task_id]?.game_focus) return;
         for (const result_type of missing) t.task_result_type.push({ task_id, result_type });
         record(t, ws, 'task_result_type', task_id, 'update', { initiated_by: 'user', task_id });
       });

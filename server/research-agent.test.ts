@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { extract } from './fetch-page.ts';
 import type { PageResult } from './fetch-page.ts';
 import { isPrivateAddress } from './net-guard.ts';
-import { GUIDE_STEPS, IDENTIFY_STEPS, MAX_IMAGE_STEPS, isRefusal, knowledgeInstructions, mergeHeld, normUrl, parseAction, researchInstructions, runResearch, verifyProposals } from './research-agent.ts';
+import { GAME_SOURCE_STEPS, GUIDE_STEPS, IDENTIFY_STEPS, MAX_IMAGE_STEPS, isRefusal, knowledgeInstructions, mergeHeld, normUrl, parseAction, researchInstructions, runResearch, verifyProposals } from './research-agent.ts';
 import type { ResearchEvent, RunHint } from './research-agent.ts';
 import { HostedToolError, hostedSearchOf, parseResponse } from './provider.ts';
 import type { ResponsesProvider } from './provider.ts';
@@ -874,5 +874,143 @@ describe('UiB og include-valget', () => {
     await provider.respond('hei igjen', { hostedSearch: 'web_search' });
     expect(bodies[2]!.include).toBeUndefined();
     expect(bodies[2]!.tools).toEqual([{ type: 'web_search' }]);
+  });
+});
+
+describe('kartlegging av hele spillet (brukerønske 11.11.2026)', () => {
+  const GALLERY: PageResult = {
+    url: 'https://forum.example/avalon-painted', title: 'My painted Avalon set', site: 'forum.example', author: 'Painter Pete', language: 'en',
+    text: 'All the heroes of Avalon, painted. Merlin, Morgana and the druids.',
+    images: [{ url: 'https://forum.example/img/merlin.jpg', alt: 'Merlin', caption: null, context: 'Merlin with his staff' },
+      { url: 'https://forum.example/img/morgana.jpg', alt: 'Morgana', caption: null, context: 'Morgana' },
+      { url: 'https://forum.example/img/group.jpg', alt: 'All of them', caption: null, context: null }],
+  };
+  const KS: PageResult = {
+    url: 'https://www.kickstarter.com/projects/x/avalon', title: 'Avalon – Kickstarter', site: 'kickstarter.com', author: null, language: 'en',
+    text: 'Meet the heroes: Merlin the Archmage and Morgana le Fay. Concept art below.',
+    images: [{ url: 'https://ks.example/merlin-art.jpg', alt: 'Merlin concept art', caption: null, context: null },
+      { url: 'https://ks.example/morgana-art.jpg', alt: 'Morgana concept art', caption: null, context: null }],
+  };
+  const pageOf = async (url: string) => (url.includes('kickstarter') ? KS : GALLERY);
+  const game = {
+    kind: 'game' as const, game: 'Avalon',
+    miniatures: [
+      { ref: 'M1', name: 'Merlin', images: 0 },
+      { ref: 'M2', name: 'Heksa', images: 1, rejected: [{ official_name: 'Nimue', image_urls: [] }] },
+      { ref: 'M3', name: 'Druide', images: 2, identity: { status: 'confirmed' as const, official_name: 'Druid of the Fen', aliases: [], edition: null, faction: null, description: 'Druide',
+        images: [{ image_url: 'https://pub.example/druid.jpg', page_url: 'https://pub.example/druid', page_title: 'Druid', site: 'pub.example', kind: 'official' as const, thumbnail_url: null }],
+        painter: null, confidence: 'high' as const, why: null, sources: [] } },
+    ],
+  };
+
+  function recorder(replies: string[]) {
+    const calls: { instructions: string; messages: unknown[] }[] = [];
+    let i = 0;
+    const prov = { respond: async (m: unknown[], o: { instructions: string }) => {
+      calls.push({ instructions: o.instructions, messages: structuredClone(m) });
+      return { text: replies[i++] ?? '{"action":"final","message":"slutt","proposals":[]}', model: 'm', usage: null, searches: [], citations: [] };
+    } } as unknown as ResponsesProvider;
+    return { prov, calls };
+  }
+
+  it('finner kilder for spillet, finner ut hvem som er hvem, og sammenligner med flere referanser', async () => {
+    const looks: { urls: string[]; refs: { label: string; image: string }[] | undefined }[] = [];
+    const events: ResearchEvent[] = [];
+    const { prov, calls } = recorder([
+      '{"action":"open","url":"https://www.kickstarter.com/projects/x/avalon"}',
+      '{"action":"identify","subject":"M1","official_name":"Merlin the Archmage","images":[{"image_url":"https://ks.example/merlin-art.jpg","kind":"concept_art"}]}',
+      '{"action":"identify","subject":"M3","official_name":"Noe annet"}',
+      '{"action":"next_phase"}',
+      '{"action":"open","url":"https://forum.example/avalon-painted"}',
+      '{"action":"identify","subject":"M2","official_name":"Nimue"}',
+      '{"action":"identify","subject":"M2","official_name":"Morgana le Fay","images":[{"image_url":"https://ks.example/morgana-art.jpg","kind":"concept_art"}]}',
+      '{"action":"identify","subject":"M9","official_name":"x"}',
+      '{"action":"look","image_urls":["https://forum.example/img/merlin.jpg","https://forum.example/img/morgana.jpg"],"compare_with":["M1","M2","M3","M9"],"question":"Hvem er hvem?"}',
+      JSON.stringify({ action: 'final', message: 'Fant Merlin og Morgana.', proposals: [
+        { type: 'reference_selection', payload: { subject: 'M1', images: [{ image_url: 'https://forum.example/img/merlin.jpg', page_url: 'https://forum.example/avalon-painted', kind: 'painted', confidence: 'high', reason: 'R1' }] } },
+        { type: 'reference_selection', payload: { subject: 'M2', images: [{ image_url: 'https://forum.example/img/morgana.jpg', page_url: 'https://forum.example/avalon-painted', kind: 'painted', confidence: 'medium' }],
+          guides: [{ url: 'https://forum.example/avalon-painted', title: 'My painted Avalon set', paints: ['Citadel Naggaroth Night'] }] } },
+        { type: 'reference_selection', payload: { subject: 'M7', images: [{ image_url: 'https://forum.example/img/group.jpg', page_url: 'https://forum.example/avalon-painted' }] } },
+      ], game_sources: [
+        { url: 'https://www.kickstarter.com/projects/x/avalon', title: 'KS', role: 'official', shows: ['M1', 'M2', 'M9'], summary: 'Kampanjen med konseptkunst av heltene.' },
+        { url: 'https://forum.example/avalon-painted', role: 'painted', shows: ['M1', 'M2'] },
+        { url: 'https://forum.example/avalon-painted', role: 'painted', shows: ['M3'] },
+        { url: 'https://www.reddit.com/r/avalon/never-seen', role: 'painted', shows: ['M1'] },
+        { url: 'https://forum.example/avalon-painted#x', role: 'weird' },
+      ] }),
+    ]);
+    await runResearch({
+      provider: prov, search: fakeSearch, openPage: pageOf,
+      lookAtImages: async (urls, _q, _ref, refs) => { looks.push({ urls, refs }); return '1 – R1 – malt; 2 – R2 – malt'; },
+      imageAsDataUrl: async (u) => `data:${u}`,
+    }, { context: {}, messages: [{ role: 'user', content: 'Kartlegg' }], result_types: ['reference_selection'], focus: game }, (e) => events.push(e));
+
+    expect(events.flatMap((e) => (e.type === 'phase' ? [e.phase] : []))).toEqual(['sources', 'match']);
+    expect(calls[0]!.instructions).toContain('OPPDRAG: KARTLEGG SPILLET «Avalon»');
+    expect(calls[0]!.instructions).toContain('FASE 1 AV 2: KILDER FOR SPILLET');
+    expect(calls[0]!.instructions).toContain('- M3 «Druide»: bekreftet av brukeren som «Druid of the Fen»');
+    expect(calls[0]!.instructions).toContain('IKKE: Nimue');
+    expect(calls.at(-1)!.instructions).toContain('FASE 2 AV 2: HVEM ER HVEM');
+    expect(calls.at(-1)!.instructions).toContain('- M1 «Merlin»: identifisert i denne kjøringen som «Merlin the Archmage»');
+    const said = JSON.stringify(calls.map((c) => c.messages));
+    expect(said).toContain('M3 er allerede bekreftet av brukeren');
+    expect(said).toContain('«Nimue» ikke er M2');
+    expect(said).toContain('må være en av miniatyrene: M1, M2, M3');
+    // «look» gets the official pictures of the miniatures asked about, labelled; unknown refs are ignored.
+    expect(looks).toHaveLength(1);
+    expect(looks[0]!.refs).toEqual([
+      { label: 'M1 «Merlin the Archmage»', image: 'data:https://ks.example/merlin-art.jpg' },
+      { label: 'M2 «Morgana le Fay»', image: 'data:https://ks.example/morgana-art.jpg' },
+      { label: 'M3 «Druid of the Fen»', image: 'data:https://pub.example/druid.jpg' },
+    ]);
+    expect(events.filter((e) => e.type === 'identity').map((e) => (e as { subject_ref?: string }).subject_ref)).toEqual(['M1', 'M2']);
+
+    const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    expect(final.identities!.map((x) => [x.subject_ref, x.identity.official_name])).toEqual([['M1', 'Merlin the Archmage'], ['M2', 'Morgana le Fay']]);
+    // One proposal per miniature; the official picture goes first; a miniature outside the project is left out.
+    const bySubject = Object.fromEntries((final.proposals as { payload: { subject: string; images: { image_url: string }[]; guides: { url: string }[] } }[]).map((p) => [p.payload.subject, p.payload]));
+    expect(Object.keys(bySubject).sort()).toEqual(['M1', 'M2']);
+    expect(bySubject.M1!.images.map((i) => i.image_url)).toEqual(['https://ks.example/merlin-art.jpg', 'https://forum.example/img/merlin.jpg']);
+    expect(bySubject.M2!.guides.map((g) => g.url)).toEqual(['https://forum.example/avalon-painted']);
+    // Sources for the game: only pages seen in this run; roles from the list; «shows» only the project's miniatures; one per page.
+    expect(final.game_sources).toEqual([
+      { url: 'https://www.kickstarter.com/projects/x/avalon', title: 'Avalon – Kickstarter', role: 'official', shows: ['M1', 'M2'], summary: 'Kampanjen med konseptkunst av heltene.', read: true },
+      { url: 'https://forum.example/avalon-painted', title: 'My painted Avalon set', role: 'painted', shows: ['M1', 'M2', 'M3'], summary: null, read: true },
+    ]);
+    expect(final.warnings.join(' ')).toContain('Fjernet 1 kilde(r) for spillet');
+  });
+
+  it('gir fase 1 egne steg, og tar vare på et tidlig svar', async () => {
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider: recorder([
+      ...Array(GAME_SOURCE_STEPS).fill('{"action":"search","query":"avalon miniatures"}'),
+      '{"action":"search","query":"for mange"}',
+      '{"action":"identify","subject":"M1","official_name":"Merlin the Archmage"}',
+    ]).prov, search: fakeSearch, openPage: pageOf }, { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: ['reference_selection'], focus: game }, (e) => events.push(e));
+    const at = events.findIndex((e) => e.type === 'phase' && e.phase === 'match');
+    expect(events.slice(0, at).filter((e) => e.type === 'search')).toHaveLength(GAME_SOURCE_STEPS);
+
+    const early: ResearchEvent[] = [];
+    await runResearch({ provider: recorder([
+      '{"action":"open","url":"https://forum.example/avalon-painted"}',
+      JSON.stringify({ action: 'final', message: 'Tidlig', proposals: [{ type: 'reference_selection', payload: { subject: 'M1', images: [{ image_url: 'https://forum.example/img/merlin.jpg', page_url: 'https://forum.example/avalon-painted' }] } }],
+        game_sources: [{ url: 'https://forum.example/avalon-painted', role: 'painted', shows: ['M1'] }] }),
+      JSON.stringify({ action: 'final', message: 'Ferdig', proposals: [{ type: 'reference_selection', payload: { subject: 'M2', images: [{ image_url: 'https://forum.example/img/morgana.jpg', page_url: 'https://forum.example/avalon-painted' }] } }] }),
+    ]).prov, search: fakeSearch, openPage: pageOf }, { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: ['reference_selection'], focus: game }, (e) => early.push(e));
+    const final = early.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    expect(final.message).toBe('Ferdig');
+    expect((final.proposals as { payload: { subject: string } }[]).map((p) => p.payload.subject).sort()).toEqual(['M1', 'M2']);
+    expect(final.game_sources!.map((g) => g.shows)).toEqual([['M1']]);
+  });
+
+  it('flere referanser i «look» vises først, merket, før kandidatene', async () => {
+    const { lookAtImages } = await import('./vision.ts');
+    let sent: { content: { type: string; text?: string; image_url?: string }[] }[] = [];
+    const prov = { respond: async (m: typeof sent) => { sent = m; return { text: '1 – R2', model: 'm', usage: null }; } } as unknown as ResponsesProvider;
+    await lookAtImages(prov, async () => ({ type: 'image/png', body: Buffer.from('x') }), ['https://a.example/1.png'], 'Hvem er hvem?', null, undefined,
+      [{ label: 'M1 «Merlin»', image: 'data:image/png;base64,AAA' }, { label: 'M2 «Morgana»', image: 'data:image/png;base64,BBB' }]);
+    const c = sent[0]!.content;
+    expect(c[0]!.text).toContain('R1 = M1 «Merlin», R2 = M2 «Morgana»');
+    expect(c.slice(1).map((x) => x.image_url)).toEqual(['data:image/png;base64,AAA', 'data:image/png;base64,BBB', 'data:image/png;base64,eA==']);
   });
 });

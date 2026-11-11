@@ -122,6 +122,23 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
     - **Feilretting:** Serveren tok ikke med `user_images` (bildene du har lagret eller limt inn) da den leste forespørselen. Agenten fikk dem derfor aldri. Nå kommer de fram, sammen med `identity`, `rejected` og `tagged_sources`. Et forslag med bare videoer gikk også tapt før, fordi bildekontrollen fjernet det. Nå bygges videoer og guider fra agentens eget svar.
     - Det er ikke testet mot UiB. Testene bruker en simulert modell. Hele kjeden fra merking i nettleseren til agenten er testet med en simulert modell bak Paintrest-serveren.
 
+34. **BRUKERØNSKE 11. november 2026: kartlegging av hele spillet.** Én kjøring fra miniatyrlisten finner kildene for spillet og hvem som er hvem. Resultatet lagres, slik at senere kjøringer bygger på det.
+    - **Egen oppgave:** `task_scope.game_focus` (PROTOTYPE). Oppgaven har bare resultattypen `reference_selection` og får ikke nye typer automatisk (`syncResultTypes`). Agentpanelet bruker den ikke.
+    - **Faser:** `sources` (høyst 18 steg) og `match`. Til sammen er grensen 50 steg. `identify` har `subject` (M1 …), og en miniatyr brukeren har bekreftet, kan ikke identifiseres på nytt. `look` kan ha `compare_with`: da viser serveren de offisielle bildene av opptil fire miniatyrer først, merket. Et `final` i fase 1 holdes og slås sammen med svaret på slutten, per miniatyr.
+    - **Serverens kontroll:**
+      - Bildeforslag godtas bare for miniatyrene i prosjektet, og bare med bilder fra åpnede sider eller bildesøk.
+      - `game_sources` godtas bare for sider som er åpnet eller sett i søk i samme kjøring. `role` er `official`, `painted`, `guide` eller `other`, og `shows` begrenses til prosjektets miniatyrer.
+    - **Lagring:**
+      - Hvem miniatyrene er, lagres som før (`identity`, `proposed`).
+      - Kildene blir `source` med `retention = draft`, også sider som bare ble sett i et søk (for eksempel Reddit).
+      - **`source.role` (PROTOTYPE):** settes bare på sider som hører til prosjektet. Det samme gjelder sammendraget (kildelag).
+      - **«Trolig figuren»:** Hvilke miniatyrer en side viser, lagres som `source_link` med `use = evidence` og `suggested_by_task_id` (PROTOTYPE). Når du bekrefter, tømmes feltet, og lenken blir ditt merke. Fjerner du den, skjules lenken, og en senere kartlegging foreslår den ikke igjen. En side et annet spill bruker, kan få lenken (unntaket i regel 1), men rolle og innhold endres ikke.
+    - **Gjenbruk:**
+      - `known_sources` i konteksten har nå `role`, `shows_confirmed` og `shows_suggested`.
+      - Bildejakten får sidene merket «Trolig figuren» (`suggested_sources`). Maleplanen får maleguidene for spillet (`game_guides`).
+    - **Synlighet:** Panelet sier hva som ble lagret («lagret N nye kilder … koblet sider til miniatyrer M ganger»), og miniatyrkortene viser navn og antall bildeforslag.
+    - **Testing:** Det er ikke testet mot UiB. Hele kjeden er kjørt i nettleseren mot en simulert modell, et simulert bildesøk og lokale sider. Kjeden går fra knappen, via kartlegging og lagring, til bildejakt og maleplan som bygger på resultatet.
+
 ## Antakelser
 
 - **Klient:** React og TypeScript som webapp med hash-ruting. Det er godkjent av brukeren 9. november 2026.

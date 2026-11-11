@@ -11,11 +11,11 @@ import type { Run } from '../../app/runs';
 import { knownSources } from '../../domain/agent';
 import type { PaintPlanPayload } from '../../domain/agent';
 import type { Id, Tables } from '../../domain/types';
-import { attachedExpansions, linkedSources, liveSubjects, subjectReferences } from '../../domain/views';
+import { attachedExpansions, linkedSources, liveSubjects, subjectReferences, suggestedSources } from '../../domain/views';
 import { Badge, Button, ErrorNote, FileImage } from '../../ui/components';
 import { LiveSteps } from '../agent/AgentPanel';
 import { runs } from '../../app/runs';
-import { ImagesTab, TagButton } from './ImagesTab';
+import { ImagesTab, TagButton, tagState } from './ImagesTab';
 import { tagPage } from './agentRuns';
 import { useApp } from '../../app/context';
 import { PaletteTab } from './PaletteTab';
@@ -45,6 +45,7 @@ function view(t: Tables, project_id: Id, subject_id: Id) {
     planSourceUrls: planSourceUrls(t, s),
     // Pages the user tagged as showing this miniature («Viser figuren»); shown first, and the agent opens them first.
     tagged: new Set(linkedSources(t, s.id, 'evidence').map((x) => x.url!)),
+    likely: new Set(suggestedSources(t, s.id).map((x) => x.url!)),
   };
 }
 
@@ -60,6 +61,9 @@ function planSourceUrls(t: Tables, s: NonNullable<Tables['miniature_subject'][st
 }
 
 const COLLAPSE_KEY = 'paintrest.ws.refsCollapsed';
+/** Tagged first, then the survey's suggestions, then the rest. */
+const TAG_ORDER = { on: 0, likely: 1, off: 2 } as const;
+const ROLE_LABEL = { official: 'Offisiell', painted: 'Malt', guide: 'Guide', other: '' } as const;
 function readCollapsed(): boolean {
   try { return localStorage.getItem(COLLAPSE_KEY) === '1'; } catch { return false; }
 }
@@ -198,17 +202,18 @@ export function Workspace() {
             <ul>
               {(tab === 'maleplan'
                 ? [...data.sources].sort((a, b) => Number(data.planSourceUrls.includes(b.source.url!)) - Number(data.planSourceUrls.includes(a.source.url!)))
-                : [...data.sources].sort((a, b) => Number(data.tagged.has(b.source.url!)) - Number(data.tagged.has(a.source.url!)))).map((k) => (
-                <li key={k.source.id} className={`${browseUrl === k.source.url ? 'on' : ''} ${data.tagged.has(k.source.url!) ? 'tagged' : ''}`}>
+                : [...data.sources].sort((a, b) => TAG_ORDER[tagState(data, a.source.url!)] - TAG_ORDER[tagState(data, b.source.url!)])).map((k) => (
+                <li key={k.source.id} className={`${browseUrl === k.source.url ? 'on' : ''} ${data.tagged.has(k.source.url!) ? 'tagged' : data.likely.has(k.source.url!) ? 'likely' : ''}`}>
                   <button type="button" onClick={() => { setBrowseUrl(k.source.url); if (tab !== 'bilder') navigate(`${base}/${s.id}/bilder`); }}
                     title={[k.source.creator, k.source.language && languageName(k.source.language), k.status === 'kept' ? `lagret, ${k.asset_count} bilder` : 'funnet av agenten', k.summary].filter(Boolean).join(' · ')}>
                     <span className="ws-src-head">
                       <strong>{k.source.title}</strong>
+                      {k.source.role && k.source.role !== 'other' && <span className="ws-src-role">{ROLE_LABEL[k.source.role]}</span>}
                       {tab === 'maleplan' && data.planSourceUrls.includes(k.source.url!) && <Badge tone="moss">I planen</Badge>}
                     </span>
                   </button>
                   <span className="ws-src-actions">
-                    {tab === 'bilder' && <TagButton on={data.tagged.has(k.source.url!)} onToggle={(on) => run(() => tagPage(app, s.id, { url: k.source.url!, title: k.source.title }, on))} />}
+                    {tab === 'bilder' && <TagButton state={tagState(data, k.source.url!)} onToggle={(on) => run(() => tagPage(app, s.id, { url: k.source.url!, title: k.source.title }, on))} />}
                     <a className="small" href={k.source.url!} target="_blank" rel="noreferrer" aria-label="Åpne siden">↗</a>
                   </span>
                 </li>
