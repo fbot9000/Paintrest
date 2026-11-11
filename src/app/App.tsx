@@ -10,6 +10,8 @@ import { AiSettingsPage } from '../features/settings/AiSettingsPage';
 import { LibraryLayout } from '../features/library/LibraryLayout';
 import { TechniquesPage } from '../features/library/TechniquesPage';
 import { TechniquePage } from '../features/library/TechniquePage';
+import { RecipesPage } from '../features/library/RecipesPage';
+import { RecipePage } from '../features/library/RecipePage';
 import { Button, Dialog } from '../ui/components';
 import { useCommand } from './context';
 import { Logo } from '../ui/Logo';
@@ -30,7 +32,8 @@ const routes = [
           { index: true, element: <Navigate to="teknikker" replace /> },
           { path: 'teknikker', element: <TechniquesPage /> },
           { path: 'teknikker/:techniqueId', element: <TechniquePage /> },
-          { path: 'oppskrifter', element: <NotYetPage title="Oppskrifter" slice="bit 7.2" /> },
+          { path: 'oppskrifter', element: <RecipesPage /> },
+          { path: 'oppskrifter/:recipeId', element: <RecipePage /> },
         ],
       },
       {

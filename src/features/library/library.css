@@ -28,7 +28,6 @@
 .tech-card-text { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .tech-badges { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 
-.lib-principle { display: grid; gap: 8px; padding: 20px 22px; border-radius: var(--r-lg); background: var(--moss-soft); }
 .restore-line { display: flex; gap: 10px; flex-wrap: wrap; }
 
 /* Teknikk: redigering */
@@ -75,12 +74,12 @@
 .tech-step-body { display: grid; gap: 8px; justify-items: start; }
 .tech-step-body .auto-field { width: 100%; }
 .tech-step-title input { font-weight: 600; }
-.tech-step-tools { display: flex; gap: 2px; }
-.tech-step-tools button {
+.row-tools { display: flex; gap: 2px; }
+.row-tools button {
   width: 40px; height: 40px; border: 1px solid transparent; background: none; border-radius: var(--r-sm); cursor: pointer; color: var(--muted); font-size: 16px;
 }
-.tech-step-tools button:hover:not(:disabled) { border-color: var(--line); background: var(--card); color: var(--ink); }
-.tech-step-tools button:disabled { opacity: .3; cursor: default; }
+.row-tools button:hover:not(:disabled) { border-color: var(--line); background: var(--card); color: var(--ink); }
+.row-tools button:disabled { opacity: .3; cursor: default; }
 
 .tech-risk { background: var(--warn-soft); border-color: var(--warn-soft); }
 .tech-risk .auto-field .eyebrow { color: var(--warn); }
@@ -90,10 +89,47 @@
 .tech-actions { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
 .tech-approve { display: grid; gap: 8px; justify-items: end; text-align: right; max-width: 420px; }
 
+/* Oppskrift */
+.recipe-strip { display: flex; gap: 3px; flex-wrap: wrap; }
+.recipe-strip-lg .swatch { border-radius: 6px; }
+.recipe-paints { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.recipe-paint {
+  display: grid; grid-template-columns: 28px minmax(0, 1.3fr) 130px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  padding: 8px 10px; border-radius: var(--r-md); background: var(--paper); border: 1px solid var(--line);
+}
+.recipe-paint-main { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+.recipe-role, .step-technique select {
+  min-height: 40px; padding: 0 8px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-sm);
+}
+.recipe-paint-note input { min-height: 40px; }
+.paint-picker { display: grid; gap: 6px; position: relative; }
+.paint-picker .eyebrow { color: var(--fore); }
+.paint-picker input {
+  min-height: var(--tap); padding: 8px 12px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-sm);
+}
+.paint-picker input:focus { outline: none; border-color: var(--fore); box-shadow: 0 0 0 3px var(--moss-soft); }
+.paint-hits { list-style: none; margin: 0; padding: 4px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--card); display: grid; gap: 2px; }
+.paint-hits button {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 4px 10px;
+  border: 0; background: none; border-radius: var(--r-sm); cursor: pointer; text-align: left;
+}
+.paint-hits button:hover { background: var(--panel); }
+.paint-new { color: var(--fore); font-weight: 500; }
+.step-paints { display: flex; flex-wrap: wrap; gap: 6px; }
+.step-paint {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 10px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--card); cursor: pointer; font-size: 13px;
+}
+.step-paint.on { background: var(--moss-soft); border-color: var(--pine); }
+.step-technique { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
 @media (max-width: 860px) {
+  .recipe-paint { grid-template-columns: 28px minmax(0, 1fr); }
+  .recipe-paint > :nth-child(n+3) { grid-column: 2; }
+
   .library { grid-template-columns: 1fr; }
   .sidebar-note { display: none; }
   .tech-step { grid-template-columns: 28px minmax(0, 1fr); }
-  .tech-step-tools { grid-column: 2; }
+  .tech-step .row-tools { grid-column: 2; }
   .tech-approve { justify-items: start; text-align: left; }
 }

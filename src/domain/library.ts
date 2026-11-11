@@ -225,3 +225,10 @@ export function recipeDetail(t: Tables, recipe_id: Id): RecipeDetail | undefined
     sources: knowledgeSources(t, 'recipe', recipe_id),
   };
 }
+
+/** Live paints in the catalogue, by name. For picking paints for a recipe. */
+export function catalogProducts(t: Tables): PaintProduct[] {
+  return Object.values(t.paint_product)
+    .filter((p) => !p.deleted_at)
+    .sort((a, b) => a.name.localeCompare(b.name, 'nb'));
+}

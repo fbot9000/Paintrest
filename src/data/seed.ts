@@ -253,6 +253,35 @@ export async function buildSampleData(persistence: Persistence): Promise<DbState
     });
   }
 
+  // Two example recipes with paints from the sample catalogue: one plain colour
+  // sequence and one with steps. Same colours as the sample plans, not researched.
+  const recipe = (name: string, tags: string[], effect: string | null,
+    paints: [string, MaterialRole][], steps: [string, number[]][]) => {
+    const id = newId();
+    const rts = now();
+    t.recipe[id] = {
+      id, workspace_id: ws, name, tags, status: 'draft', effect, note: null,
+      evidence: null, uncertainty: [], created_at: rts, updated_at: rts, deleted_at: null,
+    };
+    const paintIds = paints.map(([key, role], position) => {
+      const pid = newId();
+      t.recipe_paint[pid] = { id: pid, recipe_id: id, position, product_id: products[key]!, role, note: null };
+      return pid;
+    });
+    steps.forEach(([instruction, uses], position) => {
+      const sid = newId();
+      t.recipe_step[sid] = { id: sid, recipe_id: id, position, instruction, paint_ids: uses.map((i) => paintIds[i]!), technique_id: null };
+    });
+  };
+  recipe('Hud, varm', ['hud', 'eksempel'], null,
+    [['bugman', 'base'], ['reikland', 'shade'], ['kislev', 'layer']], []);
+  recipe('Grønn kappe', ['stoff', 'eksempel'], 'Dyp grønn kappe med tydelige folder.',
+    [['caliban', 'base'], ['nuln', 'shade'], ['warpstone', 'layer'], ['moot', 'highlight']], [
+      ['Base over hele kappen.', [0]],
+      ['Wash i foldene.', [1]],
+      ['Lag på de høye flatene, og høylys på de skarpeste kantene.', [2, 3]],
+    ]);
+
   return { schema_version: SCHEMA_VERSION, workspace_id: ws, tables: t };
 }
 

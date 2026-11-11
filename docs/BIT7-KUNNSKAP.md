@@ -1,6 +1,6 @@
 # Bit 7 Kunnskap: datamodell og byggeplan (utkast)
 
-Status: revidert 11. november 2026 etter tilbakemelding. **7.0 og 7.1 er bygget**: typer, migrering til v5, kommandoer (`src/data/knowledge-commands.ts`), lesefunksjoner (`src/domain/library.ts`), tester og biblioteksiden for teknikker (`src/features/library/`). Resten er forslag.
+Status: revidert 11. november 2026 etter tilbakemelding. **7.0–7.2 er bygget**: typer, migrering til v5, kommandoer (`src/data/knowledge-commands.ts`), lesefunksjoner (`src/domain/library.ts`), tester og bibliotekets sider for teknikker og oppskrifter (`src/features/library/`). Resten er forslag.
 
 ## Grunnlag
 
@@ -177,7 +177,7 @@ Agenten skriver ikke direkte i biblioteket (AVVIK punkt 28, sonen *Globalt*). De
 |---|---|---|---|
 | **7.0 Grunnmur** ✓ | Typene over, migrering v4→v5, kommandoer (`createTechnique`, `updateTechnique`, `setTechniqueStatus`, `setTechniqueSteps`, `deleteTechnique`/`restoreTechnique`, `recordExperience`/`deleteExperience`, og det samme for oppskrifter med `setRecipePaints` og `setRecipeSteps`) og lesefunksjoner (`libraryTechniques`, `libraryRecipes`, `libraryTags`, `techniqueDetail`, `recipeDetail`, `practicalExperience`). Tester i `knowledge-commands.test.ts`. Ingen skjerm | – | – |
 | **7.1 Bibliotek: teknikker** ✓ | «Bibliotek» i toppfeltet. `/bibliotek/teknikker` med søk, filter på merkelapper og egne erfaringer, og kort med de tre egenskapene. `/bibliotek/teknikker/:id`: alle felt lagres når du forlater dem, steg kan legges til, flyttes og fjernes, godkjenning kan slås av og på, og teknikken kan slettes og gjenopprettes. Ett eksempel i `seed.ts`, merket som eksempel. Uten bilder, agent og erfaringsregistrering (kommer senere) | 01, 04 | 7.0 |
-| **7.2 Bibliotek: oppskrifter** | `/bibliotek/oppskrifter`: fargerekke med malinger fra katalogen og valgfrie steg | ingen skisse. Enkel første versjon | 7.0 |
+| **7.2 Bibliotek: oppskrifter** ✓ | `/bibliotek/oppskrifter` med søk (også på malingsnavn) og filter. `/bibliotek/oppskrifter/:id`: effekt, merkelapper, fargerekke (søk i katalogen, eller legg til en ny ubekreftet maling, med rolle og merknad), valgfrie steg som velger malinger fra fargerekken og kan peke på en teknikk, og notat. Teknikksiden viser hvilke oppskrifter som bruker teknikken. To eksempler i `seed.ts` | ingen skisse. Enkel første versjon | 7.0 |
 | **7.3 Guide og erfaring** | Teknikkartikkel, kort verkstedguide for iPad og valgfri erfaring | 05, 06, 07 | 7.1 |
 | **7.4 Global research** | Startskjerm (idé, valgfri kilde, oppdrag), oppgave med `new_knowledge`, instruksjoner til agenten for teknikk- og oppskriftsresearch, forslagstypene `technique` og `recipe` | 02 | 7.1, 7.2 |
 | **7.5 Kildearbeid og syntese** | Kildeinspektør og sammenligning av varianter. «Lag teknikkguide →» godkjenner forslaget som et utkast | 03 | 7.4 |

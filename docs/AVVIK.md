@@ -101,5 +101,5 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 
 - Redigering av maleplanen (bit 4). «Lag maleplan» lager bare en tom versjon 1.
 - Palett og kilder. Agenten kan foreløpig ikke foreslå referanser, teknikker eller oppskrifter.
-- Biblioteket etter 7.1: oppskriftsskjerm, registrering av erfaring, bilder på teknikker og research med agenten. Teknikksiden har ikke bilder, fordi datamodellen ikke har noe felt for det ennå.
+- Biblioteket etter 7.2: registrering av erfaring, bilder på teknikker og research med agenten. Teknikksiden har ikke bilder, fordi datamodellen ikke har noe felt for det ennå.
 - Ny planversjon ved redigering. Det kommer i bit 4, og der blir problemet med fremdrift og avvik på tvers av versjoner synlig.

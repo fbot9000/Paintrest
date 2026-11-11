@@ -1,7 +1,65 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useCommand } from '../../app/context';
+import type { Commands } from '../../domain/commands';
 import type { Evidence, KnowledgeStatus } from '../../domain/types';
 import type { PracticalExperience } from '../../domain/library';
 import { Badge } from '../../ui/components';
+
+// ---------- Lagring ----------
+
+/** Runs a command and remembers whether the last save went through, for «● Lagret». */
+export function useAutosave() {
+  const { run, error, clearError, busy } = useCommand();
+  const [saved, setSaved] = useState(false);
+  const save = async (fn: (c: Commands) => Promise<unknown>): Promise<boolean> => {
+    setSaved(false);
+    const ok = await run(async (c) => { await fn(c); return true; });
+    if (ok) setSaved(true);
+    return !!ok;
+  };
+  return { save, run, error, clearError, busy, saved };
+}
+
+export function SaveState({ busy, saved }: { busy: boolean; saved: boolean }) {
+  return <span className="save-state small" aria-live="polite">{busy ? 'Lagrer …' : saved ? '● Lagret' : ''}</span>;
+}
+
+/** ↑ ↓ × for one row in an ordered list. */
+export function RowTools({ index, count, label, onMove, onRemove }:
+  { index: number; count: number; label: string; onMove: (by: -1 | 1) => void; onRemove: () => void }) {
+  return (
+    <div className="row-tools">
+      <button type="button" aria-label={`Flytt ${label} opp`} disabled={index === 0} onClick={() => onMove(-1)}>↑</button>
+      <button type="button" aria-label={`Flytt ${label} ned`} disabled={index === count - 1} onClick={() => onMove(1)}>↓</button>
+      <button type="button" aria-label={`Fjern ${label}`} onClick={onRemove}>×</button>
+    </div>
+  );
+}
+
+/** Returns a copy with item i moved by one place. */
+export function moved<T>(list: T[], i: number, by: -1 | 1): T[] {
+  const out = [...list];
+  const [item] = out.splice(i, 1);
+  out.splice(i + by, 0, item!);
+  return out;
+}
+
+export function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+  return <button type="button" className={`chip ${on ? 'on' : ''}`} aria-pressed={on} onClick={onClick}>{children}</button>;
+}
+
+export function SearchBox({ value, onChange, label, placeholder }:
+  { value: string; onChange: (v: string) => void; label: string; placeholder: string }) {
+  const id = useId();
+  return (
+    <div className="lib-search">
+      <label htmlFor={id} className="sr-only">{label}</label>
+      <span aria-hidden>⌕</span>
+      <input id={id} type="search" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+    </div>
+  );
+}
 
 // ---------- De tre egenskapene (skisse 00: «Tre egenskaper, ikke én status») ----------
 
