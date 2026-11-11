@@ -91,9 +91,9 @@ Alle sider agenten leser, lagres automatisk som kilder for spillet («Funnet av 
 | 1 Prosjekter og spill | Nytt prosjekt med en gang («Nytt spill N»), endring av navn, år, utgiver og illustrasjon, utvidelser med kobling og løsning, simulert BGG-kobling, sletting og gjenoppretting |
 | 2 (delvis) Miniatyrer | Galleri med planstatus og malefremdrift hver for seg, filtre, legge til, redigere og slette |
 | 5 Painting Mode | iPad liggende: referanser på 1/3 og plan på 2/3. Felles operasjoner og deler, steg, materialer med eierstatus, blandinger, «Finn fram malingene», avvik, delen ferdig, gruppeteller, «Marker ferdig» og historikk |
-| 7.0 Bibliotek, grunnmur | Teknikker og oppskrifter (fargerekke med valgfri fremgangsmåte) i datamodellen, kommandoer og lesefunksjoner. Ingen skjerm ennå. Se [docs/BIT7-KUNNSKAP.md](docs/BIT7-KUNNSKAP.md) |
+| 7.0–7.1 Bibliotek | Teknikker og oppskrifter (fargerekke med valgfri fremgangsmåte) i datamodellen. «Bibliotek» i toppfeltet: søk, merkelapper og redigering av teknikker, som lagres når du forlater et felt. Oppskrifter har ingen skjerm ennå. Se [docs/BIT7-KUNNSKAP.md](docs/BIT7-KUNNSKAP.md) |
 
-Neste: bit 3 (maling og palett), bit 4 (redigering av maleplanen), bit 6 (kilder), bit 7.1 og videre (skjermer for biblioteket) og bit 8 (simulert agent).
+Neste: bit 3 (maling og palett), bit 4 (redigering av maleplanen), bit 6 (kilder), bit 7.2 og videre (oppskrifter, erfaring og research i biblioteket) og bit 8 (simulert agent).
 
 ## Arkitektur
 

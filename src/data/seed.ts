@@ -226,6 +226,33 @@ export async function buildSampleData(persistence: Persistence): Promise<DbState
     ] },
   ]);
 
+  // Bibliotek (bit 7): one example technique, taken from the Figma sketches.
+  // It is marked as an example: the method has not been researched.
+  {
+    const id = newId();
+    const ts = now();
+    t.technique[id] = {
+      id, workspace_id: ws, name: 'Tekstur med svamp og oljemaling', tags: ['tekstur', 'eksempel'], status: 'draft',
+      desired_result: 'Myke, organiske overganger og tekstur uten avansert penselarbeid.',
+      use_area: 'Slitasje, grove flater og variasjon i fargeoverganger.',
+      materials: ['Finporet svamp', 'Oljemaling', 'Testunderlag', 'Egnet rengjøring'],
+      variants: 'A · Svamp for tekstur: små mengder i uregelmessige pass.\nB · Svamp for overganger: gradvise overganger. Resultatet påvirkes av underlaget.',
+      risk_note: 'Verifiser tørking, håndtering og rengjøring mot produktene du faktisk bruker.',
+      evidence: 'unresolved',
+      uncertainty: [{ path: '', reason: 'Eksempel fra skissene. Metoden er ikke researchet.' }],
+      created_at: ts, updated_at: ts, deleted_at: null,
+    };
+    [
+      ['Forbered underlaget', 'Bruk en testflate før du arbeider på miniatyren.'],
+      ['Prøv svampen', 'Ta lite maling og test ønsket avtrykk.'],
+      ['Bygg teksturen', 'Arbeid i små, kontrollerte pass.'],
+      ['Vurder resultatet', 'Kontroller overgang og tørking.'],
+    ].forEach(([title, instruction], position) => {
+      const sid = newId();
+      t.technique_step[sid] = { id: sid, technique_id: id, position, title: title!, instruction: instruction!, basis: null };
+    });
+  }
+
   return { schema_version: SCHEMA_VERSION, workspace_id: ws, tables: t };
 }
 

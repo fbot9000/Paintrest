@@ -330,6 +330,8 @@ describe('kontekst og migrering', () => {
     const s = await buildSampleData(p);
     const v1 = { ...s, schema_version: 1, tables: { ...s.tables } } as typeof s;
     delete (v1.tables as Partial<typeof s.tables>).research_task;
+    delete (v1.tables as Partial<typeof s.tables>).technique;
+    delete (v1.tables as Partial<typeof s.tables>).recipe_step;
     const m = migrate(v1)!;
     expect(m.schema_version).toBe(SCHEMA_VERSION);
     expect(m.tables.agent_change_set).toEqual({});

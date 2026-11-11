@@ -75,6 +75,7 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
     - **Kildegrunnlaget kan være tomt** (`evidence: null`). Det betyr ikke vurdert, for eksempel brukerens egen kunnskap. Det samme gjelder `basis` på teknikkens steg.
     - **Praktisk erfaring lagres ikke.** Den regnes ut fra `technique_experience`: ingen erfaringer gir uprøvd, minst én gir prøvd, og minst én «fungerte» gir vellykket.
     - **`plan_step.technique_version_id` og `recipe_version_id` peker på `technique.id` og `recipe.id`** så lenge det ikke finnes versjoner. Kolonnenavnene er beholdt, slik at versjoner kan innføres senere.
+    - **Hovednavigasjon (7.1):** Toppfeltet har «Prosjekter» og «Bibliotek». Skissene har også «Research» og «Malinger», men de sidene finnes ikke ennå. På smale skjermer vises bare logoen, uten navnet.
     - **Dokumentene bør oppdateres:** datamodell v3 og skjema §6 om teknikk og oppskrift. Dokumentene er ikke lest, så det er ikke kjent hvor mye dette avviker fra dem.
 
 ## Antakelser
@@ -100,5 +101,5 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 
 - Redigering av maleplanen (bit 4). «Lag maleplan» lager bare en tom versjon 1.
 - Palett og kilder. Agenten kan foreløpig ikke foreslå referanser, teknikker eller oppskrifter.
-- Skjermer for biblioteket (bit 7.1 og videre). Datamodell, kommandoer og lesefunksjoner er på plass (7.0).
+- Biblioteket etter 7.1: oppskriftsskjerm, registrering av erfaring, bilder på teknikker og research med agenten. Teknikksiden har ikke bilder, fordi datamodellen ikke har noe felt for det ennå.
 - Ny planversjon ved redigering. Det kommer i bit 4, og der blir problemet med fremdrift og avvik på tvers av versjoner synlig.

@@ -1,4 +1,4 @@
-import { createHashRouter, createMemoryRouter, Link, Navigate, Outlet, RouterProvider, useNavigate } from 'react-router';
+import { createHashRouter, createMemoryRouter, Link, Navigate, NavLink, Outlet, RouterProvider, useMatch, useNavigate } from 'react-router';
 import { useState } from 'react';
 import { ProjectsPage } from '../features/projects/ProjectsPage';
 import { ProjectLayout } from '../features/projects/ProjectLayout';
@@ -7,6 +7,9 @@ import { MiniaturesPage } from '../features/miniatures/MiniaturesPage';
 import { PaintingMode } from '../features/painting/PaintingMode';
 import { NotYetPage } from '../features/projects/NotYetPage';
 import { AiSettingsPage } from '../features/settings/AiSettingsPage';
+import { LibraryLayout } from '../features/library/LibraryLayout';
+import { TechniquesPage } from '../features/library/TechniquesPage';
+import { TechniquePage } from '../features/library/TechniquePage';
 import { Button, Dialog } from '../ui/components';
 import { useCommand } from './context';
 import { Logo } from '../ui/Logo';
@@ -20,6 +23,16 @@ const routes = [
     children: [
       { index: true, element: <ProjectsPage /> },
       { path: 'innstillinger', element: <AiSettingsPage /> },
+      {
+        path: 'bibliotek',
+        element: <LibraryLayout />,
+        children: [
+          { index: true, element: <Navigate to="teknikker" replace /> },
+          { path: 'teknikker', element: <TechniquesPage /> },
+          { path: 'teknikker/:techniqueId', element: <TechniquePage /> },
+          { path: 'oppskrifter', element: <NotYetPage title="Oppskrifter" slice="bit 7.2" /> },
+        ],
+      },
       {
         path: 'p/:projectId',
         element: <ProjectLayout />,
@@ -56,12 +69,17 @@ function TopBar() {
   const [confirm, setConfirm] = useState(false);
   const { run } = useCommand();
   const navigate = useNavigate();
+  const inProject = useMatch('/p/*');
   return (
     <header className="topbar">
       <Link to="/" className="brand" aria-label="Paintrest – til prosjektene">
         <Logo />
         <span>Paintrest</span>
       </Link>
+      <nav className="topnav" aria-label="Hovedmeny">
+        <NavLink to="/" end className={({ isActive }) => (isActive || inProject ? 'active' : '')}>Prosjekter</NavLink>
+        <NavLink to="/bibliotek">Bibliotek</NavLink>
+      </nav>
       <span className="topbar-proto">Prototype · data lagres bare på denne enheten</span>
       <div className="topbar-menu">
         <button type="button" className="avatar" aria-expanded={menu} aria-haspopup="menu" onClick={() => setMenu((m) => !m)}>
