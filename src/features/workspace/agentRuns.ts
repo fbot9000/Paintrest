@@ -115,11 +115,15 @@ export async function tagPage(app: App, subject_id: Id, page: { url: string; tit
  * Game survey, from the miniature list: one run finds the sources for the whole game and works out which
  * miniature is which. Its own task, so it never shares a conversation with the panel or the workspace.
  */
+/** Which miniature each ref (M1 …) of a running survey is, so the list can show who is identified as it happens. */
+export const surveyRefs = new Map<Id, Record<string, Id>>();
+
 export function startGameSurvey(app: App, project_id: Id, game: string) {
   runs.start(project_id, 'game', async (onEvent, signal) => {
     const task = gameTask(app.store.getTables(), project_id)?.id ?? await app.research.startTask(project_id, 'game');
     const t = app.store.getTables();
     const refs = buildAgentContext(t, task).subjectRefs;
+    surveyRefs.set(project_id, refs);
     const miniatures = liveSubjects(t, project_id).flatMap((s) => {
       const ref = Object.entries(refs).find(([, id]) => id === s.id)?.[0];
       return ref ? [{ ref, name: s.name, images: subjectReferences(t, s).length, identity: s.identity ?? null, rejected: s.identity_rejected ?? [] }] : [];

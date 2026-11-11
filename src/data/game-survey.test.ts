@@ -205,3 +205,36 @@ describe('miniatyrer som mangler i listen', () => {
     expect(JSON.stringify(group.uncertainty)).toContain('Utvidelsen «Finnes ikke» er ikke med i prosjektet');
   });
 });
+
+describe('gjennomgang av det som venter', () => {
+  it('tar med miniatyrene som har noe som venter, i listens rekkefølge, og slipper dem når de er gjennomgått', async () => {
+    const { store, research, agent, cmd, project, subject } = await setup();
+    const { reviewQueue } = await import('../domain/review');
+    const task = await research.startTask(project.id, 'game');
+    const refs = buildAgentContext(store.getTables(), task).subjectRefs;
+    const ref = (name: string) => Object.entries(refs).find(([, id]) => id === subject(name).id)![0];
+    const merlin = subject('Merlin');
+    const druid = subject('Druid Mistwalker');
+    expect(reviewQueue(store.getTables(), project.id)).toEqual([]);
+    const w = agent.writeProposal(task, { result_type: 'reference_selection', update_of: null, evidence: 'documented', uncertainty: [], payload: { subject_id: merlin.id, note: null, images: [
+      { image_url: 'https://x.example/low.jpg', page_url: 'https://x.example/', page_title: 'x', site: 'x.example', creator: null, caption: null, kind: 'painted', confidence: 'low' },
+      { image_url: 'https://x.example/high.jpg', page_url: 'https://x.example/', page_title: 'x', site: 'x.example', creator: null, caption: null, kind: 'painted', confidence: 'high', thumbnail_url: 'https://t.example/high.jpg' },
+    ] } }, 'uib', 'm');
+    expect(w.ok).toBe(true);
+    agent.recordIdentity(task, druid.id, { official_name: 'Mistwalker', aliases: [], edition: null, faction: null, description: 'Druide', images: [], painter: null, confidence: null, why: null, sources: [] });
+    agent.recordGameSources(task, [{ url: 'https://forum.example/avalon', title: 'Avalon', role: 'painted', shows: [ref('Druid Mistwalker')], summary: null, read: true }], refs);
+
+    const q = reviewQueue(store.getTables(), project.id);
+    const { liveSubjects } = await import('../domain/views');
+    const order = liveSubjects(store.getTables(), project.id).map((s) => s.id);
+    expect(q.map((x) => x.subject_id).sort((a, b) => order.indexOf(a) - order.indexOf(b))).toEqual(q.map((x) => x.subject_id));
+    expect(q.find((x) => x.subject_id === merlin.id)).toMatchObject({ images: 2, identity: false, likely: 0, preview: { image_url: 'https://x.example/high.jpg', thumbnail_url: 'https://t.example/high.jpg' } });
+    expect(q.find((x) => x.subject_id === druid.id)).toMatchObject({ images: 0, identity: true, likely: 1 });
+
+    // Gone through: the pictures chosen, the figure confirmed, the page confirmed.
+    await research.rejectProposal(w.ok ? w.id : '');
+    await cmd.confirmIdentity(druid.id);
+    await cmd.tagSource(druid.id, { url: 'https://forum.example/avalon', title: 'Avalon' }, true);
+    expect(reviewQueue(store.getTables(), project.id)).toEqual([]);
+  });
+});

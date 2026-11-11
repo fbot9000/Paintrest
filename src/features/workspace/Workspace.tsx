@@ -4,7 +4,7 @@
  * Right: what the agent is doing and the sources found for the game.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Link, NavLink, useNavigate, useParams } from 'react-router';
+import { Link, NavLink, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useCommand, useView } from '../../app/context';
 import { useRuns } from '../../app/runs';
 import type { Run } from '../../app/runs';
@@ -16,6 +16,8 @@ import { Badge, Button, ErrorNote, FileImage } from '../../ui/components';
 import { LiveSteps } from '../agent/AgentPanel';
 import { runs } from '../../app/runs';
 import { ImagesTab, TagButton, tagState } from './ImagesTab';
+import { reviewQueue } from '../../domain/review';
+import type { ReviewItem } from '../../domain/review';
 import { tagPage } from './agentRuns';
 import { useApp } from '../../app/context';
 import { PaletteTab } from './PaletteTab';
@@ -46,6 +48,8 @@ function view(t: Tables, project_id: Id, subject_id: Id) {
     // Pages the user tagged as showing this miniature («Viser figuren»); shown first, and the agent opens them first.
     tagged: new Set(linkedSources(t, s.id, 'evidence').map((x) => x.url!)),
     likely: new Set(suggestedSources(t, s.id).map((x) => x.url!)),
+    queue: reviewQueue(t, project_id),
+    order: siblings.map((x) => x.id),
   };
 }
 
@@ -73,6 +77,8 @@ export function Workspace() {
   const tab: Tab = tabParam === 'maleplan' || tabParam === 'palett' ? tabParam : 'bilder';
   const data = useView((t) => view(t, projectId, subjectId), [projectId, subjectId]);
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const reviewing = params.has('gjennomgang');
   const app = useApp();
   const { run, error, clearError } = useCommand();
   const imagesRun = useRuns((r) => r.get(subjectId, 'images'));
@@ -102,6 +108,9 @@ export function Workspace() {
   }
   const { s } = data;
   const base = `/p/${projectId}/m`;
+  // In a walkthrough the walkthrough follows along, also with the header's previous and next.
+  const to = (id: Id, t: Tab = tab) => `${base}/${id}/${t}${reviewing ? '?gjennomgang=1' : ''}`;
+  const review = reviewing ? reviewPosition(data.queue, data.order, s.id) : null;
   const activeRun = [imagesRun, planRun].filter((r): r is Run => !!r).sort((a, b) => b.started_at.localeCompare(a.started_at))[0] ?? null;
   // The right column belongs to finding pictures; elsewhere it shows only while the agent works, or when asked for.
   const sideShown = tab === 'bilder' || activeRun?.status === 'running' || showSide;
@@ -115,18 +124,24 @@ export function Workspace() {
           <h1>{s.name}{s.grouping === 'group' && <span className="ws-count"> ×{s.physical_count}</span>}</h1>
         </div>
         <nav className="ws-tabs" aria-label="Arbeid med miniatyren">
-          <NavLink to={`${base}/${s.id}/bilder`} className={tab === 'bilder' ? 'active' : ''}>Bilder {imagesRun?.status === 'running' && <span className="ws-dot" aria-label="agenten jobber" />}</NavLink>
+          <NavLink to={to(s.id, 'bilder')} className={tab === 'bilder' ? 'active' : ''}>Bilder {imagesRun?.status === 'running' && <span className="ws-dot" aria-label="agenten jobber" />}</NavLink>
           <NavLink to={`${base}/${s.id}/maleplan`} className={tab === 'maleplan' ? 'active' : ''}>Maleplan {planRun?.status === 'running' && <span className="ws-dot" aria-label="agenten jobber" />}</NavLink>
           <NavLink to={`${base}/${s.id}/palett`} className={tab === 'palett' ? 'active' : ''}>Palett</NavLink>
         </nav>
         <div className="ws-head-actions">
-          <Button variant="ghost" disabled={!data.prev} onClick={() => data.prev && navigate(`${base}/${data.prev.id}/${tab}`)} aria-label="Forrige miniatyr">‹ {data.prev?.name ?? ''}</Button>
-          <Button variant="ghost" disabled={!data.next} onClick={() => data.next && navigate(`${base}/${data.next.id}/${tab}`)} aria-label="Neste miniatyr">{data.next?.name ?? ''} ›</Button>
+          <Button variant="ghost" disabled={!data.prev} onClick={() => data.prev && navigate(to(data.prev.id))} aria-label="Forrige miniatyr">‹ {data.prev?.name ?? ''}</Button>
+          <Button variant="ghost" disabled={!data.next} onClick={() => data.next && navigate(to(data.next.id))} aria-label="Neste miniatyr">{data.next?.name ?? ''} ›</Button>
           {s.current_plan_version_id && <Button variant="primary" onClick={() => navigate(`/male/${s.id}`)} title="Åpne planen i Painting Mode">Mal</Button>}
           <Button className={`ws-side-toggle ${tab !== 'bilder' ? 'always' : ''}`} onClick={() => setShowSide((v) => !v)} aria-expanded={sideShown}>Kilder</Button>
         </div>
       </header>
       <ErrorNote error={error} onClose={clearError} />
+      {review && (
+        <ReviewBar review={review} name={s.name}
+          onGo={(id) => navigate(`${base}/${id}/bilder?gjennomgang=1`)}
+          onEnd={() => navigate(`${base}/${s.id}/${tab}`)}
+          onList={() => navigate(`/p/${projectId}/miniatyrer`)} />
+      )}
 
       <div className={`ws-body ${showSide ? 'side-open' : ''} ${sideShown ? '' : 'side-hidden'} ${collapsed ? 'refs-collapsed' : ''} ${data.refs.length ? '' : 'no-refs'}`}>
         {data.refs.length > 0 && <aside className="ws-refs" aria-label="Bilder av miniatyren">
@@ -184,7 +199,8 @@ export function Workspace() {
         </aside>}
 
         <main className="ws-main">
-          {tab === 'bilder' && <ImagesTab subject={s} game={data.game} run={imagesRun} browseUrl={browseUrl} setBrowseUrl={setBrowseUrl} referenceFileId={data.refs.find((r) => r.cover)?.file_id ?? data.refs[0]?.file_id ?? null} />}
+          {tab === 'bilder' && <ImagesTab subject={s} game={data.game} run={imagesRun} browseUrl={browseUrl} setBrowseUrl={setBrowseUrl} referenceFileId={data.refs.find((r) => r.cover)?.file_id ?? data.refs[0]?.file_id ?? null}
+            review={review ? { next: review.next ? () => navigate(`${base}/${review.next!.subject_id}/bilder?gjennomgang=1`) : () => navigate(`/p/${projectId}/miniatyrer`), nextName: review.next?.name ?? null } : null} />}
           {tab === 'maleplan' && <PlanTab subject={s} game={data.game} run={planRun} planFileIds={data.refs.filter((r) => planRefs.has(r.asset.id)).map((r) => r.file_id)} />}
           {tab === 'palett' && <PaletteTab subject={s} />}
         </main>
@@ -229,6 +245,54 @@ export function Workspace() {
           <button type="button" className="pm-zoom-close">Lukk</button>
         </div>
       )}
+    </div>
+  );
+}
+
+interface ReviewPos {
+  /** This miniature's place in the walkthrough (1-based), or null when nothing waits here any more. */
+  index: number | null;
+  total: number;
+  current: ReviewItem | null;
+  prev: ReviewItem | null;
+  next: ReviewItem | null;
+}
+
+/** Where this miniature is in the walkthrough. A miniature that is done stays in place, so «Neste» goes on from here. */
+function reviewPosition(queue: ReviewItem[], order: Id[], id: Id): ReviewPos {
+  const at = (sid: Id) => order.indexOf(sid);
+  const here = at(id);
+  const i = queue.findIndex((q) => q.subject_id === id);
+  return {
+    index: i >= 0 ? i + 1 : null, total: queue.length, current: i >= 0 ? queue[i]! : null,
+    prev: [...queue].reverse().find((q) => at(q.subject_id) < here) ?? null,
+    next: queue.find((q) => at(q.subject_id) > here) ?? queue.find((q) => q.subject_id !== id && at(q.subject_id) < here) ?? null,
+  };
+}
+
+/** «Gjennomgang»: what waits here, and the way on to the next miniature with something waiting. */
+function ReviewBar({ review: r, name, onGo, onEnd, onList }: { review: ReviewPos; name: string; onGo: (id: Id) => void; onEnd: () => void; onList: () => void }) {
+  const waiting = r.current ? [
+    r.current.images ? `${r.current.images} bildeforslag` : '',
+    r.current.identity ? 'figuren venter på «Riktig figur»' : '',
+    r.current.likely ? `${r.current.likely} ${r.current.likely === 1 ? 'side' : 'sider'} «Trolig figuren»` : '',
+  ].filter(Boolean).join(' · ') : '';
+  return (
+    <div className={`ws-review ${r.current ? '' : 'done'}`} role="region" aria-label="Gjennomgang">
+      <span className="ws-review-pos">
+        <strong>Gjennomgang</strong>
+        {r.index ? ` ${r.index} av ${r.total}` : r.total ? ` · ${r.total} igjen` : ''}
+      </span>
+      <span className="ws-review-what">
+        {r.current ? waiting : r.total ? `Ferdig med ${name}.` : 'Alt er gjennomgått.'}
+      </span>
+      <span className="ws-review-actions">
+        {r.prev && <Button variant="ghost" onClick={() => onGo(r.prev!.subject_id)}>‹ {r.prev.name}</Button>}
+        {r.next
+          ? <Button variant={r.current ? undefined : 'primary'} onClick={() => onGo(r.next!.subject_id)}>{r.current ? 'Hopp over' : 'Neste'}: {r.next.name} ›</Button>
+          : !r.current && <Button variant="primary" onClick={onList}>Til miniatyrlisten</Button>}
+        <button type="button" className="link small" onClick={onEnd}>Avslutt</button>
+      </span>
     </div>
   );
 }

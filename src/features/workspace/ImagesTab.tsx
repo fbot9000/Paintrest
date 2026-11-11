@@ -41,8 +41,10 @@ function view(t: Tables, s: MiniatureSubject) {
   return { proposals, suggested, saved, read, videos, savedVideos, guides, savedGuides, tagged, likely };
 }
 
-export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, referenceFileId }: {
+export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, referenceFileId, review = null }: {
   subject: MiniatureSubject; game: string; run: Run | null; browseUrl: string | null; setBrowseUrl: (u: string | null) => void; referenceFileId: Id | null;
+  /** «Gjennomgang»: the pictures the agent is sure of are ticked in advance, and saving can go straight on to the next miniature. */
+  review?: { next: () => void; nextName: string | null } | null;
 }) {
   const app = useApp();
   const { run: cmdRun, error, clearError } = useCommand();
@@ -55,7 +57,9 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
   const [localError, setLocalError] = useState<string | null>(null);
   const [page, setPage] = useState<{ url: string; title: string; candidates: Candidate[] } | null>(null);
 
-  useEffect(() => { setSelected(new Map()); setCover(null); }, [s.id]);
+  // In a walkthrough: what the agent is sure of is ticked once per miniature, and the user removes what is wrong.
+  const [preselected, setPreselected] = useState<Id | null>(null);
+  useEffect(() => { setSelected(new Map()); setCover(null); setPreselected(null); }, [s.id]);
 
   useEffect(() => {
     if (!browseUrl) { setPage(null); return; }
@@ -89,7 +93,7 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
     if (!on && cover === c.image_url) setCover(null);
   };
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     setBusy('save'); setLocalError(null);
     try {
       const chosen = [...selected.values()];
@@ -105,10 +109,12 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
       if (direct.length) await app.cmd.attachWebImages(s.id, direct, cover && direct.some((c) => c.image_url === cover) ? cover : undefined);
       removePasted(s.id, chosen.map((c) => c.image_url));
       setSelected(new Map()); setCover(null);
+      return true;
     } catch (e) {
       const pastedFailed = [...selected.values()].some((c) => pasted.some((p) => p.image_url === c.image_url));
       setLocalError((e instanceof Error ? e.message : String(e))
         + (pastedFailed ? ' Stenger nettstedet for lenken (vanlig på Instagram og Facebook), høyreklikk bildet i Google og velg «Kopier bilde», og lim det inn i stedet.' : ''));
+      return false;
     } finally {
       setBusy(null);
     }
@@ -174,6 +180,15 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
   const idCandidates = allIdCandidates.filter((c) => !broken.has(c.image_url));
   const rest = dedupe(data.suggested).filter((c) => !idUrls.has(c.image_url));
   const guides = dedupeGuides(data.guides);
+  useEffect(() => {
+    if (!review || running || preselected === s.id) return;
+    const sure = [...idCandidates, ...rest.filter((c) => c.confidence === 'high')].filter((c) => !data.saved.has(c.image_url));
+    if (!sure.length && !rest.length) return;
+    setPreselected(s.id);
+    setSelected(new Map(sure.map((c) => [c.image_url, c])));
+    // No illustration yet: the official picture (or the surest painted one) is suggested as it.
+    if (!s.official_asset_id && sure[0]) setCover(sure[0].image_url);
+  });
   const tag = (page: { url: string; title: string }, on: boolean) => cmdRun(() => tagPage(app, s.id, page, on));
   // The page being browsed may have moved (redirect); a tag on either address counts.
   const marked = (u: string) => data.tagged.has(u) || data.likely.has(u);
@@ -369,10 +384,18 @@ export function ImagesTab({ subject: s, game, run, browseUrl, setBrowseUrl, refe
 
       {selected.size > 0 && (
         <div className="ws-savebar">
-          <span>{selected.size} valgt{cover ? ` · illustrasjon: ${selected.get(cover)?.caption ?? 'valgt bilde'}` : ''}</span>
+          <span>
+            {selected.size} valgt{cover ? ` · illustrasjon: ${selected.get(cover)?.caption ?? 'valgt bilde'}` : ''}
+            {review && preselected === s.id && <span className="small muted"> · Forhåndsvalgt: det agenten er sikker på. Fjern det som ikke stemmer.</span>}
+          </span>
           <span className="ws-savebar-actions">
             <Button onClick={() => { setSelected(new Map()); setCover(null); }}>Fjern valg</Button>
-            <Button variant="primary" onClick={save} disabled={busy === 'save'}>{busy === 'save' ? 'Henter og lagrer …' : `Lagre ${selected.size} ${selected.size === 1 ? 'bilde' : 'bilder'}`}</Button>
+            <Button variant={review ? undefined : 'primary'} onClick={save} disabled={busy === 'save'}>{busy === 'save' ? 'Henter og lagrer …' : `Lagre ${selected.size} ${selected.size === 1 ? 'bilde' : 'bilder'}`}</Button>
+            {review && (
+              <Button variant="primary" disabled={busy === 'save'} onClick={async () => { if (await save()) review.next(); }}>
+                {review.nextName ? `Lagre og neste: ${review.nextName} ›` : 'Lagre og avslutt'}
+              </Button>
+            )}
           </span>
         </div>
       )}

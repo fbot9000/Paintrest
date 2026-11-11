@@ -65,6 +65,9 @@ npm test   # også serveren: kryptering, at nøkkelen ikke lekker, feilmeldinger
 
 Panelet til høyre i hvert prosjekt. Det bruker nøkkelen og standardmodellen fra innstillingene.
 
+- Panelet er kompakt. Modell og nettsøk står på én linje, og arbeidskonteksten er brettet sammen. Paintrest sine egne meldinger (lagrede kilder, avviste forslag) viser første linje, og resten får du med ett trykk. Usikkerhet på et forslag ligger bak «Usikkerhet (N)».
+- Bildeforslag vises som én rad per miniatyr, med små bilder. Trykk på raden for å velge bilder i verkstedets gjennomgang, eller × for å avvise.
+
 - Agenten leser prosjektet, miniatyrene, maleplanene og malingene dine. Den lager **utkast**: nye miniatyrer (`catalog_subject`) og maleplaner (`paint_plan`).
 - En godkjent plan kan agenten bare foreslå ny versjon av når du har trykket «Revider planen med agenten» på miniatyren. Det åpner planen som revisjonsmål (`plan_revision`).
 - Hvert forslag godkjennes for seg i én transaksjon. Maling som ikke finnes i katalogen, må du koble til et produkt eller opprette som ubekreftet før planen kan godkjennes. Er planen endret siden forslaget ble laget, stopper godkjenningen.
@@ -159,6 +162,12 @@ Sider som bygges med skript (typisk kampanjesider), har ofte bildene i sidedata 
 - En figur du legger til, får med seg identifiseringen (som forslag du bekrefter) og sidene som trolig viser den («Trolig figuren»).
 - Figurer fra utvidelser som ikke er i prosjektet, nevnes bare i meldingen.
 - Et forslag med samme navn eller offisielle navn som en miniatyr i prosjektet, eller som et forslag som allerede venter, avvises, og panelet sier hvorfor. Det gjelder også forslag fra agentpanelet.
+
+**Gjennomgang.** Mens kartleggingen pågår, viser kortene «Identifisert» etter hvert som agenten finner ut hvem miniatyrene er. Etterpå viser kort uten eget bilde det beste forslaget, merket «Forslag». «Gå gjennom forslag» (øverst på listen og i kartleggingens oppsummering) åpner verkstedet i gjennomgang:
+- Én miniatyr om gangen, i listens rekkefølge. En linje øverst viser hvor langt du er kommet og hva som venter: bildeforslag, en figur å bekrefte, og sider merket «Trolig figuren».
+- Bildene agenten er sikker på (offisielle bilder og forslag med høy sikkerhet), er forhåndsvalgt. Mangler miniatyren illustrasjon, foreslås det første av dem som illustrasjon. Fjern det som ikke stemmer.
+- «Lagre og neste» lagrer og går videre. «Hopp over» går videre uten å lagre. «Avslutt» går ut av gjennomgangen.
+- Miniatyrer med bildeforslag eller en figur som skal bekreftes, er med. Sider merket «Trolig figuren» vises, men holder ikke en miniatyr i gjennomgangen alene.
 
 **Senere kjøringer bygger på kartleggingen:**
 - Bildejakten for en miniatyr åpner sidene merket «Trolig figuren» tidlig.

@@ -12,7 +12,9 @@ import { Badge, Button, Dialog, ErrorNote, Field, FileImage, ImagePicker, Segmen
 import { runs, useRuns } from '../../app/runs';
 import type { Run } from '../../app/runs';
 import { LiveSteps } from '../agent/AgentPanel';
-import { startGameSurvey } from '../workspace/agentRuns';
+import { startGameSurvey, surveyRefs } from '../workspace/agentRuns';
+import { reviewQueue } from '../../domain/review';
+import type { ReviewItem } from '../../domain/review';
 import './miniatures.css';
 
 /** Miniatures the game survey found missing from the list, waiting for the user. */
@@ -51,10 +53,19 @@ export function MiniaturesPage() {
     game: t.game[t.project[projectId]?.game_id ?? '']?.primary_name ?? '',
     pending: pendingImages(t, projectId),
     missing: missingMiniatures(t, projectId),
+    queue: reviewQueue(t, projectId),
   }), [projectId]);
   const app = useApp();
   const survey = useRuns((r) => r.get(projectId, 'game'));
   const surveying = survey?.status === 'running';
+  // While the survey works: the miniatures it has identified so far.
+  const identifiedNow = new Set(surveying ? survey!.events.flatMap((e) => (e.type === 'identity' && e.subject_ref ? [surveyRefs.get(projectId)?.[e.subject_ref]] : []))
+    .filter((x): x is string => !!x) : []);
+  const queueBy = new Map(data.queue.map((q) => [q.subject_id, q]));
+  const startReview = (id?: Id) => {
+    const first = id ?? data.queue[0]?.subject_id;
+    if (first) navigate(`/p/${projectId}/m/${first}/bilder?gjennomgang=1`);
+  };
   const { run, error, clearError } = useCommand();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('all');
@@ -73,7 +84,7 @@ export function MiniaturesPage() {
   const ready = data.subjects.filter((x) => x.s.plan_state === 'approved').length;
 
   return (
-    <main className="page">
+    <main className="page page-wide">
       <div className="page-head">
         <div>
           <h1>Miniatyrer</h1>
@@ -84,17 +95,23 @@ export function MiniaturesPage() {
           </p>
         </div>
         <div className="page-head-actions">
+          {data.queue.length > 0 && !surveying && (
+            <Button variant="primary" onClick={() => startReview()}
+              title="Gå gjennom miniatyrene som har noe som venter på deg: bildeforslag, en identifisering å bekrefte, eller sider som trolig viser figuren. Én om gangen.">
+              Gå gjennom forslag ({data.queue.length})
+            </Button>
+          )}
           {data.subjects.length > 0 && (
             <Button onClick={() => startGameSurvey(app, projectId, data.game)} disabled={surveying}
               title="Én kjøring for hele spillet: agenten finner de beste kildene (offisielle sider, gallerier med malte figurer og maleguider), finner ut hvem hver miniatyr er, og foreslår bilder til hver. Det lagres for spillet, så senere bildejakt og maleplaner bygger på det.">
               {surveying ? 'Kartlegger …' : '✦ Kartlegg spillet med AI'}
             </Button>
           )}
-          <Button variant="primary" onClick={() => setEditing('new')} icon="+">Legg til miniatyr</Button>
+          <Button variant={data.queue.length > 0 && !surveying ? undefined : 'primary'} onClick={() => setEditing('new')} icon="+">Legg til miniatyr</Button>
         </div>
       </div>
       <ErrorNote error={error} onClose={clearError} />
-      {survey && <SurveyPanel run={survey} missing={data.missing.length} onStop={() => runs.stop(projectId, 'game')} onClose={() => runs.dismiss(projectId, 'game')} />}
+      {survey && <SurveyPanel run={survey} missing={data.missing.length} queue={data.queue.length} onReview={() => startReview()} onStop={() => runs.stop(projectId, 'game')} onClose={() => runs.dismiss(projectId, 'game')} />}
       {data.missing.length > 0 && (
         <MissingList items={data.missing} imageUrl={(u) => app.ai.imageProxyUrl(u)}
           onAdd={(id) => run(() => app.research.approveProposal(id))}
@@ -134,6 +151,10 @@ export function MiniaturesPage() {
               onImages={() => navigate(`/p/${projectId}/m/${s.id}/bilder`)}
               working={working.has(s.id)}
               pending={data.pending.get(s.id) ?? 0}
+              review={queueBy.get(s.id) ?? null}
+              identifiedNow={identifiedNow.has(s.id)}
+              previewUrl={(u) => app.ai.imageProxyUrl(u)}
+              onReview={() => startReview(s.id)}
               onAgent={() => navigate(`/p/${projectId}/m/${s.id}/maleplan`)}
               onPaint={async () => {
                 if (!s.current_plan_version_id) await run((c) => c.createEmptyPlan(s.id));
@@ -241,7 +262,9 @@ function hostOf(u: string): string {
 }
 
 /** The game survey's progress while it works, and what it found when it is done. */
-function SurveyPanel({ run, missing, onStop, onClose }: { run: Run; missing: number; onStop: () => void; onClose: () => void }) {
+function SurveyPanel({ run, missing, queue, onReview, onStop, onClose }: {
+  run: Run; missing: number; queue: number; onReview: () => void; onStop: () => void; onClose: () => void;
+}) {
   const final = [...run.events].reverse().find((e) => e.type === 'final');
   const found = run.events.filter((e) => e.type === 'identity').length;
   return (
@@ -257,8 +280,13 @@ function SurveyPanel({ run, missing, onStop, onClose }: { run: Run; missing: num
             <p className="small">
               {found} {found === 1 ? 'miniatyr' : 'miniatyrer'} identifisert · {final.game_sources?.length ?? 0} kilder for spillet
               {missing > 0 ? ` · ${missing} mangler i listen (se under)` : ''}.
-              {' '}Bildeforslagene ligger i Bilder-fanen til hver miniatyr, og kildene merket «Trolig figuren» bekrefter du der.
             </p>
+          )}
+          {queue > 0 && (
+            <div className="survey-next">
+              <Button variant="moss" onClick={onReview}>Gå gjennom forslagene ({queue} {queue === 1 ? 'miniatyr' : 'miniatyrer'})</Button>
+              <span className="small">Én miniatyr om gangen: bekreft figuren, velg bilder (de sikre er forhåndsvalgt) og gå videre.</span>
+            </div>
           )}
           {final && final.type === 'final' && final.warnings.filter((w) => !w.startsWith('Fjernet')).map((w, i) => <p key={i} className="small survey-warn">{w}</p>)}
           {run.error && <p className="small survey-warn">{run.error}</p>}
@@ -268,16 +296,21 @@ function SurveyPanel({ run, missing, onStop, onClose }: { run: Run; missing: num
   );
 }
 
-function MiniCard({ s, status, fileId, expansion, onEdit, onPaint, onAgent, onImages, working, pending }: {
+function MiniCard({ s, status, fileId, expansion, onEdit, onPaint, onAgent, onImages, working, pending, review, identifiedNow, previewUrl, onReview }: {
   s: MiniatureSubject; status: PhysicalStatus; fileId: string | null; expansion?: Expansion; onEdit: () => void; onPaint: () => void; onAgent: () => void; onImages: () => void; working: boolean;
-  pending: number;
+  pending: number; review: ReviewItem | null; identifiedNow: boolean; previewUrl: (u: string) => string; onReview: () => void;
 }) {
+  // No picture of its own yet, but the agent has found one: shown as a suggestion, so the list fills up after a survey.
+  const preview = !fileId && review?.preview ? review.preview : null;
   return (
     <article className={`mini-card status-${status}`}>
-      <button type="button" className="mini-img-wrap" onClick={onImages} aria-label={`Åpne verkstedet for ${s.name}`}>
-        <FileImage fileId={fileId} alt={s.name} className="mini-img" fallback={<span>Ingen bilde · trykk for å finne</span>} />
-        <span className="mini-img-hint">Åpne verkstedet</span>
+      <button type="button" className="mini-img-wrap" onClick={review ? onReview : onImages} aria-label={`Åpne verkstedet for ${s.name}`}>
+        {preview
+          ? <><img className="mini-img mini-preview" src={previewUrl(preview.thumbnail_url ?? preview.image_url)} alt="" loading="lazy" /><span className="mini-suggest">Forslag</span></>
+          : <FileImage fileId={fileId} alt={s.name} className="mini-img" fallback={<span>Ingen bilde · trykk for å finne</span>} />}
+        <span className="mini-img-hint">{review ? 'Gå gjennom' : 'Åpne verkstedet'}</span>
         {working && <span className="mini-working">Agenten jobber …</span>}
+        {identifiedNow && !working && <span className="mini-working">Identifisert</span>}
         <span className={`mini-status`}>{STATUS_LABEL[status]}</span>
       </button>
       <div className="mini-body">
@@ -289,12 +322,12 @@ function MiniCard({ s, status, fileId, expansion, onEdit, onPaint, onAgent, onIm
         {(s.identity || pending > 0) && (
           <p className="mini-found small">
             {s.identity && (
-              <button type="button" className="link" onClick={onImages}
+              <button type="button" className="link" onClick={review ? onReview : onImages}
                 title={s.identity.status === 'confirmed' ? 'Bekreftet av deg' : 'Forslag fra agenten. Bekreft eller avvis i Bilder-fanen.'}>
                 {s.identity.status === 'confirmed' ? '✓ ' : ''}{s.identity.official_name ?? 'Identifisert'}{s.identity.status === 'proposed' ? '?' : ''}
               </button>
             )}
-            {pending > 0 && <button type="button" className="link" onClick={onImages}>{pending} bildeforslag</button>}
+            {pending > 0 && <button type="button" className="link" onClick={onReview}>{pending} bildeforslag</button>}
           </p>
         )}
         <div className="mini-meta">
