@@ -74,6 +74,9 @@ export function httpAiGateway(): AiGateway {
       if (!final) throw new Error('Agenten avsluttet uten svar');
       return final;
     },
+    async sendHint(run_id, hint) {
+      return (await request<{ delivered: boolean }>('POST', '/api/agent/hint', { run_id, hint })).delivered;
+    },
     imageProxyUrl(url) {
       return `/api/research/image?${new URLSearchParams({ url })}`;
     },

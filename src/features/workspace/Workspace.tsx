@@ -11,11 +11,13 @@ import type { Run } from '../../app/runs';
 import { knownSources } from '../../domain/agent';
 import type { PaintPlanPayload } from '../../domain/agent';
 import type { Id, Tables } from '../../domain/types';
-import { attachedExpansions, liveSubjects, subjectReferences } from '../../domain/views';
+import { attachedExpansions, linkedSources, liveSubjects, subjectReferences } from '../../domain/views';
 import { Badge, Button, ErrorNote, FileImage } from '../../ui/components';
 import { LiveSteps } from '../agent/AgentPanel';
 import { runs } from '../../app/runs';
-import { ImagesTab } from './ImagesTab';
+import { ImagesTab, TagButton } from './ImagesTab';
+import { tagPage } from './agentRuns';
+import { useApp } from '../../app/context';
 import { PaletteTab } from './PaletteTab';
 import { PlanTab } from './PlanTab';
 import { closeMenu } from './PlanDoc';
@@ -41,6 +43,8 @@ function view(t: Tables, project_id: Id, subject_id: Id) {
     refs,
     sources: knownSources(t, project_id),
     planSourceUrls: planSourceUrls(t, s),
+    // Pages the user tagged as showing this miniature («Viser figuren»); shown first, and the agent opens them first.
+    tagged: new Set(linkedSources(t, s.id, 'evidence').map((x) => x.url!)),
   };
 }
 
@@ -65,6 +69,7 @@ export function Workspace() {
   const tab: Tab = tabParam === 'maleplan' || tabParam === 'palett' ? tabParam : 'bilder';
   const data = useView((t) => view(t, projectId, subjectId), [projectId, subjectId]);
   const navigate = useNavigate();
+  const app = useApp();
   const { run, error, clearError } = useCommand();
   const imagesRun = useRuns((r) => r.get(subjectId, 'images'));
   const planRun = useRuns((r) => r.get(subjectId, 'plan'));
@@ -191,8 +196,10 @@ export function Workspace() {
           <section className="ws-sources">
             <h2 className="eyebrow">Kilder ({data.sources.length})</h2>
             <ul>
-              {(tab === 'maleplan' ? [...data.sources].sort((a, b) => Number(data.planSourceUrls.includes(b.source.url!)) - Number(data.planSourceUrls.includes(a.source.url!))) : data.sources).map((k) => (
-                <li key={k.source.id} className={browseUrl === k.source.url ? 'on' : ''}>
+              {(tab === 'maleplan'
+                ? [...data.sources].sort((a, b) => Number(data.planSourceUrls.includes(b.source.url!)) - Number(data.planSourceUrls.includes(a.source.url!)))
+                : [...data.sources].sort((a, b) => Number(data.tagged.has(b.source.url!)) - Number(data.tagged.has(a.source.url!)))).map((k) => (
+                <li key={k.source.id} className={`${browseUrl === k.source.url ? 'on' : ''} ${data.tagged.has(k.source.url!) ? 'tagged' : ''}`}>
                   <button type="button" onClick={() => { setBrowseUrl(k.source.url); if (tab !== 'bilder') navigate(`${base}/${s.id}/bilder`); }}
                     title={[k.source.creator, k.source.language && languageName(k.source.language), k.status === 'kept' ? `lagret, ${k.asset_count} bilder` : 'funnet av agenten', k.summary].filter(Boolean).join(' · ')}>
                     <span className="ws-src-head">
@@ -200,7 +207,10 @@ export function Workspace() {
                       {tab === 'maleplan' && data.planSourceUrls.includes(k.source.url!) && <Badge tone="moss">I planen</Badge>}
                     </span>
                   </button>
-                  <a className="small" href={k.source.url!} target="_blank" rel="noreferrer" aria-label="Åpne siden">↗</a>
+                  <span className="ws-src-actions">
+                    {tab === 'bilder' && <TagButton on={data.tagged.has(k.source.url!)} onToggle={(on) => run(() => tagPage(app, s.id, { url: k.source.url!, title: k.source.title }, on))} />}
+                    <a className="small" href={k.source.url!} target="_blank" rel="noreferrer" aria-label="Åpne siden">↗</a>
+                  </span>
                 </li>
               ))}
             </ul>

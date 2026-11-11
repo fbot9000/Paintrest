@@ -3,7 +3,7 @@
  * allowed context, the gateway calls the model, and the agent's reply and
  * drafts are written through the agent's own command set (skjema §7).
  */
-import { buildAgentContext, normaliseProposal } from '../domain/agent';
+import { buildAgentContext, normaliseIdentity, normaliseProposal } from '../domain/agent';
 import type { SourceRead } from '../domain/agent';
 import type { AgentTurnInput, AiGateway, ResearchEvent } from '../domain/ai';
 import type { AgentCommands, ResearchCommands } from '../domain/research';
@@ -29,7 +29,9 @@ export async function runAgentTurn(deps: {
   research: ResearchCommands;
   agent: AgentCommands;
   ai: AiGateway;
-}, task_id: Id, text: string, onEvent: (e: ResearchEvent) => void = () => {}, signal?: AbortSignal, focus: AgentTurnInput['focus'] = null): Promise<TurnSummary> {
+}, task_id: Id, text: string, onEvent: (e: ResearchEvent) => void = () => {}, signal?: AbortSignal, focus: AgentTurnInput['focus'] = null,
+/** Lets the view pass the user's actions (tagged sources) to this run while it works. */
+run_id: string | null = null): Promise<TurnSummary> {
   const { store, research, agent, ai } = deps;
   await research.syncResultTypes(task_id);
   await research.addUserMessage(task_id, text);
@@ -64,7 +66,7 @@ export async function runAgentTurn(deps: {
 
   let r;
   try {
-    r = await ai.runAgent({ context: ctx.data, messages, result_types: ctx.allowedTypes, focus, direct_apply: !focus }, onEvent, signal);
+    r = await ai.runAgent({ context: ctx.data, messages, result_types: ctx.allowedTypes, focus, direct_apply: !focus, ...(run_id ? { run_id } : {}) }, onEvent, signal);
   } catch (e) {
     const aborted = e instanceof Error && e.name === 'AbortError';
     agent.addSystemMessage(task_id, aborted ? 'Du stoppet agenten.' : `Agenten svarte ikke: ${e instanceof Error ? e.message : String(e)}`);
@@ -79,6 +81,10 @@ export async function runAgentTurn(deps: {
     return Array.isArray(sr) ? (sr as SourceRead[]) : [];
   });
   const newSources = agent.recordSources(task_id, r.pages ?? [], read);
+  // Image hunt: who the figure is, kept on the miniature as «proposed» until the user confirms it.
+  const identity = focus?.kind === 'images' ? normaliseIdentity(r.identity) : null;
+  const subject_id = focus?.kind === 'images' ? ctx.subjectRefs[focus.subject_ref] : undefined;
+  const identified = identity && subject_id ? agent.recordIdentity(task_id, subject_id, identity) : null;
 
   const summary: TurnSummary = { created: [], updated: [], refused: [], change_set_id: null };
   const written: Id[] = [];
@@ -112,6 +118,7 @@ export async function runAgentTurn(deps: {
     ...(library && (summary.created.length || summary.updated.length)
       ? [focus?.kind === 'knowledge' && focus.revision ? 'Endringen er ikke tatt i bruk før du godtar den.' : 'Utkastet er ikke lagret i biblioteket før du godkjenner det.']
       : []),
+    ...(identified ? [`Agenten identifiserte figuren som «${identified}». Si om det stemmer i Bilder-fanen («Riktig figur» eller «Feil figur»).`] : []),
     // Nothing is stored out of sight: say which pages were kept as sources for the game.
     ...(newSources.length ? [`Lagret ${newSources.length} ${newSources.length === 1 ? 'side' : 'sider'} som kilder for ${library ? 'biblioteket' : 'spillet'}: ${newSources.slice(0, 5).join(' · ')}${newSources.length > 5 ? ' …' : ''}`] : []),
   ].filter(Boolean);

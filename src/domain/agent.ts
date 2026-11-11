@@ -4,7 +4,7 @@
  * Pure functions only; writes live in data/agent-commands.ts and data/research-commands.ts.
  */
 import type {
-  ElementKind, Evidence, Grouping, Id, MaterialRole, PaintChoice, PaintProduct, ResultType, StepBasis, Tables, Uncertainty,
+  ElementKind, Evidence, Grouping, Id, MaterialRole, PaintChoice, PaintProduct, ResultType, StepBasis, SubjectIdentity, Tables, Uncertainty,
 } from './types';
 import { attachedExpansions, liveSubjects, ownershipOf } from './views';
 
@@ -75,17 +75,17 @@ export interface SourceRead {
   original_excerpt: string | null;
 }
 
-/** Image hunt, phase 1: the best official picture, checked by the agent, that the rest is compared with. */
-export interface HuntAnchor {
-  image_url: string | null;
-  page_url: string | null;
-  page_title: string | null;
-  site: string | null;
-  kind: 'official' | 'concept_art' | 'painted' | null;
-  /** The painter the publisher or campaign credits, when named. */
-  painter: string | null;
-  description: string | null;
+/** A painting guide found in phase 3 of an image hunt (server/research-agent.ts GuideFound). */
+export interface GuideRef {
+  url: string;
+  title: string;
+  site: string;
+  /** True when the agent read the page; false when it only saw it in a search. */
+  read: boolean;
   why: string | null;
+  /** Paints the guide names, as written there. */
+  paints: string[];
+  language: string | null;
 }
 
 /** A YouTube video found in an image hunt. Confirmed by YouTube or the search; nobody has watched it. */
@@ -103,8 +103,8 @@ export interface ReferenceSelectionPayload {
   note: string | null;
   images: ReferenceImage[];
   sources_read?: SourceRead[];
-  anchor?: HuntAnchor | null;
   videos?: VideoRef[];
+  guides?: GuideRef[];
 }
 
 export interface CatalogSubjectPayload {
@@ -485,10 +485,10 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
       }];
     });
     const videos = videoRefs(o.videos);
-    const anchor = huntAnchor(o.anchor);
-    if (!images.length && !videos.length) return { ok: false, reason: 'Bildeutvalget har ingen gyldige bilder' };
+    const guides = guideRefs(o.guides);
+    if (!images.length && !videos.length && !guides.length) return { ok: false, reason: 'Bildeutvalget har ingen gyldige bilder' };
     const sources_read = sourcesRead(o.sources_read);
-    return { ok: true, value: { ...common, result_type: 'reference_selection', payload: { subject_id, images, note: str(o.note).trim() || null, sources_read, anchor, videos } } };
+    return { ok: true, value: { ...common, result_type: 'reference_selection', payload: { subject_id, images, note: str(o.note).trim() || null, sources_read, videos, guides } } };
   }
 
   return { ok: false, reason: `Ukjent forslagstype (${String(raw.type)})` };
@@ -562,6 +562,11 @@ export function buildAgentContext(t: Tables, task_id: Id): AgentContext {
       physical_count: s.physical_count,
       expansion: expansions.find((e) => e.id === s.expansion_id)?.name ?? null,
       category: s.category_label,
+      // Who the figure is, from an image hunt; «confirmed» means the user said it is right.
+      ...(s.identity ? { identity: {
+        status: s.identity.status, official_name: s.identity.official_name, aliases: s.identity.aliases,
+        edition: s.identity.edition, description: s.identity.description,
+      } } : {}),
       reference_images: Object.values(t.source_link).filter((l) => !l.deleted_at && l.target_type === 'subject' && l.target_id === s.id && l.use === 'visual_reference').length
         + (s.official_asset_id ? 1 : 0),
       plan: pv
@@ -773,17 +778,40 @@ function fullName(p: PaintProduct): string {
 
 // ---------- små hjelpere ----------
 
-function huntAnchor(v: unknown): HuntAnchor | null {
+function guideRefs(v: unknown): GuideRef[] {
+  return arr(v).flatMap((x) => {
+    const o = obj(x);
+    const url = str(o.url).trim();
+    if (!/^https?:\/\//.test(url)) return [];
+    return [{
+      url, title: str(o.title).trim() || url, site: str(o.site).trim() || hostOf(url), read: o.read === true, why: str(o.why).trim() || null,
+      paints: arr(o.paints).map((p) => str(p).trim()).filter(Boolean).slice(0, 20), language: str(o.language).trim() || null,
+    }];
+  }).slice(0, 8);
+}
+
+/** The identification from an image hunt's final event, checked for shape (the server has checked the sources). */
+export function normaliseIdentity(v: unknown): SubjectIdentity | null {
   if (!v || typeof v !== 'object') return null;
   const o = obj(v);
-  const s = (x: unknown) => str(x).trim() || null;
-  const url = (x: unknown) => (/^https?:\/\//.test(str(x)) ? str(x) : null);
-  const image_url = url(o.image_url);
-  return {
-    image_url, page_url: image_url ? url(o.page_url) : null, page_title: s(o.page_title), site: s(o.site),
-    kind: (['official', 'concept_art', 'painted'] as const).find((k) => k === o.kind) ?? null,
-    painter: s(o.painter), description: s(o.description), why: s(o.why),
+  const s = (x: unknown, n: number) => str(x).trim().slice(0, n) || null;
+  const http = (x: unknown) => /^https?:\/\//.test(str(x));
+  const images = arr(o.images).flatMap((x) => {
+    const i = obj(x);
+    if (!http(i.image_url) || !http(i.page_url)) return [];
+    return [{
+      image_url: str(i.image_url), page_url: str(i.page_url), page_title: s(i.page_title, 200), site: s(i.site, 120),
+      kind: i.kind === 'concept_art' ? 'concept_art' as const : i.kind === 'render' ? 'render' as const : 'official' as const,
+      thumbnail_url: http(i.thumbnail_url) ? str(i.thumbnail_url) : null,
+    }];
+  }).slice(0, 3);
+  const id: SubjectIdentity = {
+    official_name: s(o.official_name, 160), aliases: arr(o.aliases).map((a) => str(a).trim().slice(0, 120)).filter(Boolean).slice(0, 8),
+    edition: s(o.edition, 200), faction: s(o.faction, 160), description: s(o.description, 800), images, painter: s(o.painter, 120),
+    confidence: (['high', 'medium', 'low'] as const).find((c) => c === o.confidence) ?? null, why: s(o.why, 600),
+    sources: arr(o.sources).flatMap((x) => { const q = obj(x); return http(q.url) ? [{ url: str(q.url), title: str(q.title).trim() || str(q.url) }] : []; }).slice(0, 10),
   };
+  return id.official_name || id.description || id.images.length ? id : null;
 }
 
 function videoRefs(v: unknown): VideoRef[] {

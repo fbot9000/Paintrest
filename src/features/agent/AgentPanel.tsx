@@ -583,8 +583,10 @@ export function Message({ m }: { m: ResearchMessage }) {
             <ol>
               {m.trace.map((s, i) => (
                 <li key={i}>
-                  <span className="mono">{s.action === 'search' ? 'Søk' : s.action === 'image_search' ? 'Bildesøk' : s.action === 'look' ? 'Se' : s.action === 'anchor' ? 'Anker' : 'Les'}</span>{' '}
-                  {s.action === 'open' ? <a href={s.target} target="_blank" rel="noreferrer">{shortUrl(s.target)}</a> : s.action === 'look' || s.action === 'anchor' ? <em>{shortUrl(s.target)}</em> : <em>«{s.target}»</em>}
+                  <span className="mono">{s.action === 'search' ? 'Søk' : s.action === 'image_search' ? 'Bildesøk' : s.action === 'look' ? 'Se' : s.action === 'anchor' ? 'Anker'
+                    : s.action === 'identify' ? 'Identifisert' : s.action === 'hint' ? 'Fra deg' : 'Les'}</span>{' '}
+                  {s.action === 'open' || s.action === 'hint' ? <a href={s.target} target="_blank" rel="noreferrer">{shortUrl(s.target)}</a>
+                    : s.action === 'look' || s.action === 'anchor' ? <em>{shortUrl(s.target)}</em> : <em>«{s.target}»</em>}
                   <span className="trace-res"> — {s.result}</span>
                 </li>
               ))}
@@ -618,9 +620,9 @@ export function LiveSteps({ events, onStop }: { events: ResearchEvent[]; onStop:
       case 'look': return [{ key: 'l' + e.count + (e.why ?? ''), text: <>Ser på {e.count} {e.count === 1 ? 'bilde' : 'bilder'}</>, state: 'run' }];
       case 'look_done': return [{ key: 'ld' + e.summary.slice(0, 20), text: <span title={e.summary}>{short(e.summary)}</span>, state: 'ok' }];
       case 'phase': return [{ key: 'p' + e.phase, text: <strong>{e.text}</strong>, state: 'ok' }];
-      case 'anchor': return [{ key: 'a' + (e.anchor.image_url ?? ''), text: e.anchor.image_url
-        ? <>Offisielt anker valgt{e.anchor.site ? ` fra ${e.anchor.site}` : ''}{e.anchor.painter ? `, malt av ${e.anchor.painter}` : ''}</>
-        : <>Fant ikke noe offisielt bilde; leter videre uten anker</>, state: 'ok' }];
+      case 'identity': return [{ key: 'id' + (e.identity.official_name ?? ''), text: <>Identifisert: <strong>{e.identity.official_name ?? 'uten navn'}</strong>
+        {e.identity.images.length ? ` · ${e.identity.images.length} offisielle ${e.identity.images.length === 1 ? 'bilde' : 'bilder'}` : ' · ingen offisielle bilder'}</>, state: 'ok' }];
+      case 'hint': return [{ key: 'h' + e.text, text: e.text, state: 'ok' }];
       case 'tool_error': return [{ key: 'e' + e.target, text: <>{e.action === 'search' ? 'Søk' : 'Lesing'} feilet: {e.error}</>, state: 'err' }];
       default: return [];
     }

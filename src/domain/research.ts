@@ -8,7 +8,7 @@
 import type { NormalisedProposal } from './agent';
 import type { CatalogSubjectPayload, PaintPlanPayload, SourceRead } from './agent';
 import type { PageSeen } from './ai';
-import type { Id, PaintChoice, SubjectFocus } from './types';
+import type { Id, PaintChoice, SubjectFocus, SubjectIdentity } from './types';
 
 export interface ApproveOptions {
   /** productKey → existing product id, or 'create' to create an unconfirmed product. */
@@ -73,7 +73,7 @@ export interface ResearchCommands {
 export type ProposalWrite = { ok: true; id: Id; ref: string; updated: boolean } | { ok: false; reason: string };
 
 export interface AgentCommands {
-  addAssistantMessage(task_id: Id, body: string, model_id: string | null, trace?: { action: 'search' | 'open' | 'look' | 'anchor' | 'image_search'; target: string; result: string }[]): Id;
+  addAssistantMessage(task_id: Id, body: string, model_id: string | null, trace?: { action: 'search' | 'open' | 'look' | 'anchor' | 'identify' | 'image_search' | 'hint'; target: string; result: string }[]): Id;
   addSystemMessage(task_id: Id, body: string): Id;
   /** Creates a draft, or updates the agent's own pending draft when `update_of` names one. */
   writeProposal(task_id: Id, p: NormalisedProposal, provider: string, model_id: string): ProposalWrite;
@@ -84,4 +84,9 @@ export interface AgentCommands {
    */
   /** Returns the titles of the sources it created, so the panel can say so. */
   recordSources(task_id: Id, pages: PageSeen[], read: SourceRead[]): string[];
+  /**
+   * Image hunt: keeps who the figure is on the miniature, as «proposed» (PROTOTYPE, brukerønske 11.11.2026).
+   * A confirmed identity is left alone. Returns the name it was stored under, or null when nothing was stored.
+   */
+  recordIdentity(task_id: Id, subject_id: Id, identity: SubjectIdentity): string | null;
 }

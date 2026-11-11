@@ -133,6 +133,46 @@ export interface MiniatureSubject {
   uncertainty: unknown[] | null;
   current_plan_version_id: Id | null;
   deleted_at: Timestamp | null;
+  /**
+   * PROTOTYPE (brukerønske 11.11.2026): who the figure is, from phase 1 of an image hunt.
+   * «proposed» until the user confirms it; a confirmed identity is used by later hunts (phase 1 is skipped) and by the paint plan.
+   */
+  identity?: SubjectIdentityRecord | null;
+  /** PROTOTYPE: identifications the user said were wrong («Feil figur»), so the agent does not pick them again. */
+  identity_rejected?: { official_name: string | null; image_urls: string[] }[];
+}
+
+/** An official picture of the figure (concept art, the publisher's photo, or a render). */
+export interface IdentityImage {
+  image_url: string;
+  page_url: string;
+  page_title: string | null;
+  site: string | null;
+  kind: 'concept_art' | 'official' | 'render';
+  thumbnail_url: string | null;
+}
+
+/** Who the figure is, as the image hunt found it (server/research-agent.ts SubjectIdentity). */
+export interface SubjectIdentity {
+  official_name: string | null;
+  /** Other names: card name, Kickstarter name, sculpt name, translations. */
+  aliases: string[];
+  /** Base game, expansion, Kickstarter add-on or promo. */
+  edition: string | null;
+  faction: string | null;
+  /** What the figure looks like. */
+  description: string | null;
+  images: IdentityImage[];
+  painter: string | null;
+  confidence: 'high' | 'medium' | 'low' | null;
+  why: string | null;
+  sources: { url: string; title: string }[];
+}
+
+export interface SubjectIdentityRecord extends SubjectIdentity {
+  status: 'proposed' | 'confirmed';
+  found_by_task_id: Id | null;
+  updated_at: Timestamp;
 }
 
 export type ScopeKind = 'project' | 'expansion' | 'category' | 'subjects';
@@ -578,7 +618,7 @@ export interface ResearchMessage {
   /** PROTOTYPE: which model answered (skjema stores provider/model on proposals only). */
   model_id?: string | null;
   /** PROTOTYPE: the searches and pages behind an answer, shown as «Slik fant agenten dette». */
-  trace?: { action: 'search' | 'open' | 'look' | 'anchor' | 'image_search'; target: string; result: string }[];
+  trace?: { action: 'search' | 'open' | 'look' | 'anchor' | 'identify' | 'image_search' | 'hint'; target: string; result: string }[];
 }
 
 export type Evidence = 'documented' | 'synthesized' | 'unresolved';

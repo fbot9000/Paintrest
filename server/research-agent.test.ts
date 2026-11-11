@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { extract } from './fetch-page.ts';
 import type { PageResult } from './fetch-page.ts';
 import { isPrivateAddress } from './net-guard.ts';
-import { MAX_IMAGE_STEPS, OFFICIAL_STEPS, isRefusal, knowledgeInstructions, normUrl, parseAction, researchInstructions, runResearch, verifyProposals } from './research-agent.ts';
-import type { ResearchEvent } from './research-agent.ts';
+import { GUIDE_STEPS, IDENTIFY_STEPS, MAX_IMAGE_STEPS, isRefusal, knowledgeInstructions, mergeHeld, normUrl, parseAction, researchInstructions, runResearch, verifyProposals } from './research-agent.ts';
+import type { ResearchEvent, RunHint } from './research-agent.ts';
 import { HostedToolError, hostedSearchOf, parseResponse } from './provider.ts';
 import type { ResponsesProvider } from './provider.ts';
 import { parseBrave, parseTavily } from './search.ts';
@@ -196,6 +196,17 @@ describe('bildejakt', () => {
     return { respond: async () => ({ text: replies[i++] ?? '{"action":"final","message":"slutt","proposals":[]}', model: 'm', usage: null, searches: [], citations: [] }) } as unknown as ResponsesProvider;
   }
 
+  /** Records the instructions and messages of every model call. */
+  function recorder(replies: string[]) {
+    const calls: { instructions: string; messages: { role: string; content: unknown }[] }[] = [];
+    let i = 0;
+    const prov = { respond: async (m: { role: string; content: unknown }[], o: { instructions: string }) => {
+      calls.push({ instructions: o.instructions, messages: structuredClone(m) });
+      return { text: replies[i++] ?? '{"action":"final","message":"slutt","proposals":[]}', model: 'm', usage: null, searches: [], citations: [] };
+    } } as unknown as ResponsesProvider;
+    return { prov, calls };
+  }
+
   it('ser på bilder fra åpnede sider, med referanse, og beholder begrunnelse og oversettelse', async () => {
     const looks: { urls: string[]; ref: string | null }[] = [];
     const events: ResearchEvent[] = [];
@@ -203,7 +214,8 @@ describe('bildejakt', () => {
       provider: provider([
         '{"action":"open","url":"https://example.com/gallery"}',
         '{"action":"look","image_urls":["https://example.com/img/merlin-front.jpg","https://elsewhere.example/x.jpg"],"question":"Er dette Balor?"}',
-        '{"action":"anchor","image_url":null,"description":"Stor demon med pisk","why":"Fant ikke utgiverens bilde"}',
+        '{"action":"identify","official_name":null,"images":[],"description":"Stor demon med pisk","why":"Fant ikke utgiverens bilde"}',
+        '{"action":"next_phase"}',
         JSON.stringify({ action: 'final', message: 'Fant ett bilde', proposals: [{ type: 'reference_selection', payload: { subject: 'M1',
           images: [{ image_url: 'https://example.com/img/merlin-front.jpg', page_url: 'https://example.com/gallery', confidence: 'medium', reason: 'Teksten sier «Balor ferdig malt».', original_text: '발로르 도색 완료' }],
           sources_read: [{ url: 'https://example.com/gallery', language: 'ko', summary: 'Koreansk maleblogg om Avalon.', original_excerpt: '아발론' }, { url: 'https://never-opened.example' }] } }] }),
@@ -218,6 +230,7 @@ describe('bildejakt', () => {
     const payload = (final.proposals[0] as { payload: { images: Record<string, unknown>[]; sources_read: Record<string, unknown>[] } }).payload;
     expect(payload.images[0]).toMatchObject({ confidence: 'medium', reason: 'Teksten sier «Balor ferdig malt».', original_text: '발로르 도색 완료', page_language: 'en' });
     expect(payload.sources_read).toEqual([{ url: 'https://example.com/gallery', title: 'Druid gallery', site: 'example.com', language: 'ko', summary: 'Koreansk maleblogg om Avalon.', original_excerpt: '아발론' }]);
+    expect(final.identity).toMatchObject({ official_name: null, description: 'Stor demon med pisk', images: [] });
   });
 
   it('slår av bildevisning når modellen ikke godtar bilder', async () => {
@@ -237,43 +250,54 @@ describe('bildejakt', () => {
     expect(events.filter((e) => e.type === 'tool_error' && e.action === 'look')).toHaveLength(1);
   });
 
-  it('gir fase 1 egne steg og bildejakten flere steg enn vanlig research', async () => {
+  it('har tre faser med egne steg: identifisering, malt av andre og maleguider', async () => {
     const events: ResearchEvent[] = [];
-    await runResearch({ provider: provider(Array(60).fill('{"action":"search","query":"q"}')), search: fakeSearch, openPage: async () => PAGE },
+    await runResearch({ provider: provider(Array(80).fill('{"action":"search","query":"q"}')), search: fakeSearch, openPage: async () => PAGE },
       { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: [], focus }, (e) => events.push(e));
     const phases = events.flatMap((e) => (e.type === 'phase' ? [e.phase] : []));
-    expect(phases).toEqual(['official', 'broad']);
-    const firstBroad = events.findIndex((e) => e.type === 'phase' && e.phase === 'broad');
-    expect(events.slice(0, firstBroad).filter((e) => e.type === 'search')).toHaveLength(OFFICIAL_STEPS);
+    expect(phases).toEqual(['identify', 'painted', 'guides']);
+    const at = (p: string) => events.findIndex((e) => e.type === 'phase' && e.phase === p);
+    const searchesBetween = (a: number, b: number) => events.slice(a, b).filter((e) => e.type === 'search').length;
+    expect(searchesBetween(0, at('painted'))).toBe(IDENTIFY_STEPS);
+    expect(searchesBetween(at('guides'), events.length)).toBe(GUIDE_STEPS);
     expect(events.filter((e) => e.type === 'search')).toHaveLength(MAX_IMAGE_STEPS);
-    expect(events.find((e) => e.type === 'anchor')).toMatchObject({ anchor: { image_url: null } });
+    // Nothing was identified, so there is nothing to show or keep.
+    expect(events.some((e) => e.type === 'identity')).toBe(false);
+    expect((events.at(-1) as Extract<ResearchEvent, { type: 'final' }>).trace.some((t) => t.action === 'identify' && t.target === 'ikke identifisert')).toBe(true);
   });
 
   const OFFICIAL: PageResult = {
     url: 'https://publisher.example/avalon/balor', title: 'Balor – Avalon add-on', site: 'publisher.example', author: 'Publisher', language: 'en',
     text: 'Balor, the demon of the mist. Miniatures painted by Studio Nine.',
-    images: [{ url: 'https://publisher.example/img/balor-painted.jpg', alt: 'Balor painted', caption: 'Painted by Studio Nine', context: null }],
+    images: [{ url: 'https://publisher.example/img/balor-painted.jpg', alt: 'Balor painted', caption: 'Painted by Studio Nine', context: null },
+      { url: 'https://publisher.example/img/balor-art.jpg', alt: 'Balor concept art', caption: null, context: null }],
   };
   const pages = async (url: string) => (url.includes('publisher') ? OFFICIAL : PAGE);
 
-  it('finner et kontrollert anker i fase 1 og bruker det som referanse i fase 2', async () => {
+  it('identifiserer figuren i fase 1, og bruker navn, beskrivelse og bilde i resten av jakten', async () => {
     const noRef = { ...focus, reference_image: null };
     const looks: (string | null)[] = [];
     const events: ResearchEvent[] = [];
-    let instructionsSeen: string[] = [];
-    const replies = [
+    const { prov, calls } = recorder([
       '{"action":"open","url":"https://publisher.example/avalon/balor"}',
       '{"action":"final","message":"for tidlig","proposals":[]}',
-      '{"action":"anchor","image_url":"https://elsewhere.example/fake.jpg","page_url":"https://publisher.example/avalon/balor"}',
-      '{"action":"anchor","image_url":"https://publisher.example/img/balor-painted.jpg","page_url":"https://publisher.example/avalon/balor","kind":"official","painter":"Studio Nine","description":"Bevinget demon med pisk","why":"Utgiverens produktside"}',
+      '{"action":"identify","official_name":"Balor","images":[{"image_url":"https://elsewhere.example/fake.jpg","page_url":"https://publisher.example/avalon/balor"}]}',
+      JSON.stringify({ action: 'identify', official_name: 'Balor, Demon of the Mist', aliases: ['Balor', 'Mist Demon'], edition: 'Avalon: Myths & Monsters', faction: 'Demoner',
+        description: 'Bevinget demon med pisk', painter: 'Studio Nine', confidence: 'high', why: 'Utgiverens produktside',
+        images: [{ image_url: 'https://publisher.example/img/balor-art.jpg', page_url: 'https://publisher.example/avalon/balor', kind: 'concept_art' },
+          { image_url: 'https://publisher.example/img/balor-painted.jpg', page_url: 'https://publisher.example/avalon/balor', kind: 'official' },
+          { image_url: 'https://elsewhere.example/fake.jpg', kind: 'official' }],
+        sources: [{ url: 'https://publisher.example/avalon/balor', title: 'Balor' }, { url: 'https://invented.example/' }] }),
       '{"action":"open","url":"https://example.com/gallery"}',
       '{"action":"look","image_urls":["https://example.com/img/merlin-front.jpg"]}',
+      '{"action":"next_phase","why":"nok bilder"}',
+      '{"action":"search","query":"Balor Demon of the Mist painting guide"}',
       JSON.stringify({ action: 'final', message: 'ferdig', proposals: [{ type: 'reference_selection', payload: { subject: 'M1',
         images: [{ image_url: 'https://example.com/img/merlin-front.jpg', page_url: 'https://example.com/gallery', kind: 'painted', confidence: 'low' }],
-        videos: [{ url: 'https://youtu.be/abcdefghijk', why: 'Malevideo' }, { url: 'https://www.youtube.com/watch?v=zzzzzzzzzzz' }, { url: 'https://vimeo.com/1' }] } }] }),
-    ];
-    let i = 0;
-    const prov = { respond: async (_m: unknown, o: { instructions: string }) => { instructionsSeen.push(o.instructions); return { text: replies[i++] ?? '{"action":"final","message":"slutt","proposals":[]}', model: 'm', usage: null, searches: [], citations: [] }; } } as unknown as ResponsesProvider;
+        videos: [{ url: 'https://youtu.be/abcdefghijk', why: 'Malevideo' }, { url: 'https://www.youtube.com/watch?v=zzzzzzzzzzz' }, { url: 'https://vimeo.com/1' }],
+        guides: [{ url: 'https://example.com/gallery', title: 'Druid gallery', why: 'Viser malingene', paints: ['Citadel Mephiston Red'] },
+          { url: 'https://never-seen.example/guide', title: 'Oppdiktet' }] } }] }),
+    ]);
     await runResearch({
       provider: prov, search: fakeSearch, openPage: pages,
       lookAtImages: async (_u, _q, ref) => { looks.push(ref); return 'ja'; },
@@ -284,32 +308,167 @@ describe('bildejakt', () => {
       },
     }, { context: {}, messages: [{ role: 'user', content: 'Finn Balor' }], result_types: ['reference_selection'], focus: noRef }, (e) => events.push(e));
 
-    expect(instructionsSeen[0]).toContain('FASE 1 AV 2');
-    expect(instructionsSeen.at(-1)).toContain('FASE 2 AV 2');
-    expect(instructionsSeen.at(-1)).toContain('Studio Nine');
+    expect(calls[0]!.instructions).toContain('FASE 1 AV 3: IDENTIFISER FIGUREN');
+    const phase2 = calls.find((c) => c.instructions.includes('FASE 2 AV 3'))!.instructions;
+    expect(phase2).toContain('Offisielt navn: Balor, Demon of the Mist (også kalt: Balor, Mist Demon)');
+    expect(phase2).toContain('Bevinget demon med pisk');
+    expect(phase2).toContain('Studio Nine');
+    expect(phase2).toContain('«Avalon Balor, Demon of the Mist painted»');
+    expect(calls.at(-1)!.instructions).toContain('FASE 3 AV 3: MALEGUIDER');
+    // «look» compares with the miniature itself (the official photo), not the concept art.
     expect(looks).toEqual([`data:image/jpeg;base64,${Buffer.from('https://publisher.example/img/balor-painted.jpg').toString('base64')}`]);
+    expect(events.find((e) => e.type === 'identity')).toMatchObject({ identity: { official_name: 'Balor, Demon of the Mist' } });
     const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
-    const payload = (final.proposals[0] as { payload: { images: Record<string, unknown>[]; anchor: Record<string, unknown>; videos: Record<string, unknown>[] } }).payload;
-    expect(payload.anchor).toMatchObject({ image_url: 'https://publisher.example/img/balor-painted.jpg', painter: 'Studio Nine', kind: 'official' });
-    expect(payload.images.map((x) => x.image_url)).toEqual(['https://publisher.example/img/balor-painted.jpg', 'https://example.com/img/merlin-front.jpg']);
-    expect(payload.images[0]).toMatchObject({ confidence: 'high', kind: 'official' });
+    expect(final.identity).toMatchObject({
+      official_name: 'Balor, Demon of the Mist', aliases: ['Balor', 'Mist Demon'], edition: 'Avalon: Myths & Monsters', painter: 'Studio Nine', confidence: 'high',
+      images: [{ image_url: 'https://publisher.example/img/balor-art.jpg', kind: 'concept_art', site: 'publisher.example' }, { image_url: 'https://publisher.example/img/balor-painted.jpg', kind: 'official' }],
+      sources: [{ url: 'https://publisher.example/avalon/balor', title: 'Balor – Avalon add-on' }],
+    });
+    expect(final.identity!.images).toHaveLength(2);
+    const payload = (final.proposals[0] as { payload: { images: Record<string, unknown>[]; videos: Record<string, unknown>[]; guides: Record<string, unknown>[] } }).payload;
+    expect(payload.images.map((x) => x.image_url)).toEqual(['https://publisher.example/img/balor-art.jpg', 'https://publisher.example/img/balor-painted.jpg', 'https://example.com/img/merlin-front.jpg']);
+    expect(payload.images[0]).toMatchObject({ confidence: 'high', kind: 'concept_art' });
     expect(payload.videos).toEqual([{ url: 'https://www.youtube.com/watch?v=abcdefghijk', video_id: 'abcdefghijk', title: 'Painting Balor', channel: 'Mini Channel', thumbnail_url: 'https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg', why: 'Malevideo' }]);
+    expect(payload.guides).toEqual([{ url: 'https://example.com/gallery', title: 'Druid gallery', site: 'example.com', read: true, why: 'Viser malingene', paints: ['Citadel Mephiston Red'], language: 'en' }]);
     expect(final.warnings.join(' ')).toContain('Fjernet 2 video');
+    expect(final.warnings.join(' ')).toContain('Fjernet 1 maleguide');
   });
 
-  it('lager et bildeforslag med ankeret selv om agenten ikke foreslår noe', async () => {
+  it('lager et bildeforslag med de offisielle bildene selv om agenten ikke foreslår noe', async () => {
     const events: ResearchEvent[] = [];
     await runResearch({
       provider: provider([
         '{"action":"open","url":"https://publisher.example/avalon/balor"}',
         '{"action":"anchor","image_url":"https://publisher.example/img/balor-painted.jpg","page_url":"https://publisher.example/avalon/balor"}',
         '{"action":"final","message":"Fant ingen malte","proposals":[]}',
+        '{"action":"final","message":"Fant ingen guider","proposals":[]}',
       ]),
       search: fakeSearch, openPage: pages,
     }, { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: ['reference_selection'], focus }, (e) => events.push(e));
     const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    expect(final.message).toBe('Fant ingen guider');
     expect(final.proposals).toHaveLength(1);
-    expect(final.proposals[0]).toMatchObject({ type: 'reference_selection', payload: { subject: 'M1', images: [{ image_url: 'https://publisher.example/img/balor-painted.jpg' }], videos: [] } });
+    expect(final.proposals[0]).toMatchObject({ type: 'reference_selection', payload: { subject: 'M1', images: [{ image_url: 'https://publisher.example/img/balor-painted.jpg' }], videos: [], guides: [] } });
+  });
+
+  it('tar vare på svaret fra fase 2 og slår det sammen med svaret etter maleguidene', async () => {
+    const events: ResearchEvent[] = [];
+    await runResearch({
+      provider: provider([
+        '{"action":"identify","official_name":"Balor","images":[]}',
+        '{"action":"open","url":"https://example.com/gallery"}',
+        JSON.stringify({ action: 'final', message: 'Fant ett bilde', proposals: [{ type: 'reference_selection', payload: { subject: 'M1',
+          images: [{ image_url: 'https://example.com/img/merlin-front.jpg', page_url: 'https://example.com/gallery', confidence: 'high' }] } }] }),
+        JSON.stringify({ action: 'final', message: 'Og en guide', proposals: [{ type: 'reference_selection', payload: { subject: 'M1', images: [],
+          guides: [{ url: 'https://example.com/gallery', title: 'Druid gallery' }] } }] }),
+      ]),
+      search: fakeSearch, openPage: async () => PAGE,
+    }, { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: ['reference_selection'], focus }, (e) => events.push(e));
+    expect(events.flatMap((e) => (e.type === 'phase' ? [e.phase] : []))).toEqual(['identify', 'painted', 'guides']);
+    const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    const payload = (final.proposals[0] as { payload: { images: Record<string, unknown>[]; guides: Record<string, unknown>[] } }).payload;
+    expect(payload.images.map((x) => x.image_url)).toEqual(['https://example.com/img/merlin-front.jpg']);
+    expect(payload.guides.map((x) => x.url)).toEqual(['https://example.com/gallery']);
+    expect(mergeHeld([], [{ type: 'reference_selection', payload: { images: [1] } }])).toHaveLength(1);
+  });
+
+  it('beholder et forslag med bare videoer (før ble det fjernet sammen med bildene)', async () => {
+    const events: ResearchEvent[] = [];
+    await runResearch({
+      provider: provider([
+        '{"action":"identify","official_name":null,"images":[]}',
+        '{"action":"next_phase"}',
+        JSON.stringify({ action: 'final', message: 'Bare en video', proposals: [{ type: 'reference_selection', payload: { subject: 'M1', images: [],
+          videos: [{ url: 'https://youtu.be/abcdefghijk', why: 'Malevideo' }] } }] }),
+      ]),
+      search: fakeSearch, openPage: async () => PAGE,
+      videoInfo: async () => ({ url: 'https://www.youtube.com/watch?v=abcdefghijk', video_id: 'abcdefghijk', title: 'Painting Balor', channel: 'C', channel_url: null, thumbnail_url: null }),
+    }, { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: ['reference_selection'], focus }, (e) => events.push(e));
+    const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    expect(final.proposals).toHaveLength(1);
+    expect(final.proposals[0]).toMatchObject({ type: 'reference_selection', payload: { images: [], videos: [{ video_id: 'abcdefghijk', why: 'Malevideo' }], guides: [] } });
+  });
+
+  const KNOWN = {
+    official_name: 'Balor, Demon of the Mist', aliases: ['Balor'], edition: 'Myths & Monsters', faction: null, description: 'Bevinget demon med pisk',
+    images: [{ image_url: 'https://publisher.example/img/balor-painted.jpg', page_url: 'https://publisher.example/avalon/balor', page_title: 'Balor', site: 'publisher.example', kind: 'official' as const, thumbnail_url: null }],
+    painter: 'Studio Nine', confidence: 'high' as const, why: 'Utgiverens side', sources: [{ url: 'https://publisher.example/avalon/balor', title: 'Balor' }],
+  };
+
+  it('hopper over fase 1 når brukeren har bekreftet figuren, og sammenligner med bildet', async () => {
+    const looks: (string | null)[] = [];
+    const events: ResearchEvent[] = [];
+    const { prov, calls } = recorder([
+      '{"action":"open","url":"https://example.com/gallery"}',
+      '{"action":"look","image_urls":["https://example.com/img/merlin-front.jpg"]}',
+      '{"action":"identify","official_name":"Noe annet"}',
+      '{"action":"next_phase"}',
+      JSON.stringify({ action: 'final', message: 'ok', proposals: [{ type: 'reference_selection', payload: { subject: 'M1',
+        images: [{ image_url: 'https://example.com/img/merlin-front.jpg', page_url: 'https://example.com/gallery' }] } }] }),
+    ]);
+    await runResearch({
+      provider: prov, search: fakeSearch, openPage: async () => PAGE,
+      lookAtImages: async (_u, _q, ref) => { looks.push(ref); return 'ja'; },
+      imageAsDataUrl: async (u) => `data:image/jpeg;base64,${Buffer.from(u).toString('base64')}`,
+    }, { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: ['reference_selection'],
+      focus: { ...focus, reference_image: null, identity: { ...KNOWN, status: 'confirmed' } } }, (e) => events.push(e));
+    expect(events.flatMap((e) => (e.type === 'phase' ? [e.phase] : []))).toEqual(['painted', 'guides']);
+    expect(calls[0]!.instructions).toContain('FASE 2 AV 3');
+    expect(calls[0]!.instructions).toContain('Figuren er identifisert (bekreftet av brukeren)');
+    expect(calls[0]!.instructions).not.toContain('FASE 1 AV 3');
+    expect(looks).toEqual([`data:image/jpeg;base64,${Buffer.from('https://publisher.example/img/balor-painted.jpg').toString('base64')}`]);
+    // «identify» after phase 1 is refused, and nothing new is reported as found.
+    expect(JSON.stringify(calls[3]!.messages)).toContain('Figuren er allerede identifisert');
+    const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    expect(final.identity).toBeNull();
+    const images = (final.proposals[0] as { payload: { images: Record<string, unknown>[] } }).payload.images;
+    expect(images.map((x) => x.image_url)).toEqual(['https://publisher.example/img/balor-painted.jpg', 'https://example.com/img/merlin-front.jpg']);
+  });
+
+  it('kontrollerer en foreslått figur i fase 1, og velger ikke en avvist figur igjen', async () => {
+    const events: ResearchEvent[] = [];
+    const { prov, calls } = recorder([
+      '{"action":"identify","official_name":"Merlin","images":[]}',
+      '{"action":"identify","official_name":"Balor, Demon of the Mist","images":[{"image_url":"https://publisher.example/img/balor-painted.jpg"},{"image_url":"https://rejected.example/merlin.jpg"}]}',
+    ]);
+    await runResearch({ provider: prov, search: fakeSearch, openPage: async () => PAGE },
+      { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: ['reference_selection'],
+        focus: { ...focus, identity: { ...KNOWN, status: 'proposed' }, rejected: [{ official_name: 'Merlin', image_urls: ['https://rejected.example/merlin.jpg'] }] } },
+      (e) => events.push(e));
+    expect(calls[0]!.instructions).toContain('En tidligere jakt foreslo dette, men brukeren har ikke bekreftet det');
+    expect(calls[0]!.instructions).toContain('Brukeren har sagt at dette IKKE er figuren');
+    expect(JSON.stringify(calls[1]!.messages)).toContain('«Merlin» ikke er figuren');
+    // The picture from the earlier identification counts as seen; the rejected one is left out.
+    expect(events.find((e) => e.type === 'identity')).toMatchObject({ identity: { official_name: 'Balor, Demon of the Mist',
+      images: [{ image_url: 'https://publisher.example/img/balor-painted.jpg' }] } });
+    expect((events.find((e) => e.type === 'identity') as Extract<ResearchEvent, { type: 'identity' }>).identity.images).toHaveLength(1);
+  });
+
+  it('åpner merkede sider først, og gir agenten nye merker mens den jobber', async () => {
+    const events: ResearchEvent[] = [];
+    const queue: RunHint[][] = [[], [{ kind: 'tagged_source', url: 'https://www.reddit.com/r/avalon/balor', title: 'My Balor' }], [], [{ kind: 'untagged_source', url: 'https://example.com/gallery', title: 'Druid gallery' }]];
+    const { prov, calls } = recorder([
+      '{"action":"open","url":"https://example.com/gallery"}',
+      '{"action":"search","query":"Balor"}',
+      '{"action":"identify","official_name":"Balor","sources":[{"url":"https://www.reddit.com/r/avalon/balor","title":"My Balor"}]}',
+    ]);
+    await runResearch({ provider: prov, search: fakeSearch, openPage: async () => PAGE, takeHints: () => queue.shift() ?? [] },
+      { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: ['reference_selection'],
+        focus: { ...focus, tagged_sources: [{ url: 'https://example.com/gallery', title: 'Druid gallery', summary: 'Galleri med Balor' }] } },
+      (e) => events.push(e));
+    expect(calls[0]!.instructions).toContain('Brukeren har merket denne siden som at de viser figuren');
+    expect(calls[0]!.instructions).toContain('https://example.com/gallery — Druid gallery (Galleri med Balor)');
+    expect(calls[0]!.instructions).toContain('Åpne dem FØRST');
+    // The tag arrives with the next step: in the messages and in the rebuilt instructions.
+    expect(JSON.stringify(calls[1]!.messages)).toContain('Brukeren har nå merket denne siden som at den viser figuren: https://www.reddit.com/r/avalon/balor');
+    expect(JSON.stringify(calls[1]!.messages)).toContain('(My Balor). Åpne den med');
+    expect(calls[1]!.instructions).toContain('https://www.reddit.com/r/avalon/balor — My Balor');
+    expect(JSON.stringify(calls[3]!.messages)).toContain('Brukeren har fjernet merket fra https://example.com/gallery');
+    expect(calls[3]!.instructions).not.toContain('https://example.com/gallery — Druid gallery');
+    expect(events.filter((e) => e.type === 'hint').map((e) => (e as { text: string }).text)).toEqual([
+      'Agenten fikk beskjed: «My Balor» viser figuren', 'Agenten fikk beskjed: «Druid gallery» viser ikke figuren']);
+    // A tagged page counts as found, so it can be a source of the identification.
+    expect(events.find((e) => e.type === 'identity')).toMatchObject({ identity: { sources: [{ url: 'https://www.reddit.com/r/avalon/balor' }] } });
   });
 });
 
@@ -566,7 +725,7 @@ describe('brukerens egne bilder', () => {
     expect(seen[0]).toContain('Brukeren har allerede funnet dette bildet');
     expect(seen[0]).toContain('https://www.reddit.com/r/dune/9');
     expect(looked).toEqual([['https://i.redd.it/mine.jpg']]);
-    expect(events.find((e) => e.type === 'anchor')).toMatchObject({ anchor: { image_url: 'https://i.redd.it/mine.jpg' } });
+    expect(events.find((e) => e.type === 'identity')).toMatchObject({ identity: { images: [{ image_url: 'https://i.redd.it/mine.jpg' }] } });
     const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
     const images = (final.proposals[0] as { payload: { images: unknown[] } } | undefined)?.payload.images ?? [];
     expect(images).toEqual([]);

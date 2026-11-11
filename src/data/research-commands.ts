@@ -185,6 +185,23 @@ export function createAgentCommands(store: Store): AgentCommands {
       });
     },
 
+    recordIdentity(task_id, subject_id, identity) {
+      return tx((t, ws) => {
+        const s = t.miniature_subject[subject_id];
+        const project_id = t.task_scope[task_id]?.work_project_id;
+        // Only a miniature in the task's own project (open zone), and never over what the user confirmed.
+        if (!s || s.deleted_at || !project_id || s.project_id !== project_id) return null;
+        if (s.identity?.status === 'confirmed') return null;
+        const name = identity.official_name ?? s.name;
+        const wrong = (s.identity_rejected ?? []).some((r) => (r.official_name && identity.official_name && r.official_name.trim().toLowerCase() === identity.official_name.trim().toLowerCase())
+          || identity.images.some((i) => r.image_urls.includes(i.image_url)));
+        if (wrong) return null;
+        s.identity = { ...structuredClone(identity), status: 'proposed', found_by_task_id: task_id, updated_at: now() };
+        record(t, ws, 'miniature_subject', subject_id, 'update', { initiated_by: 'agent', task_id });
+        return name;
+      });
+    },
+
     recordContext(task_id, refs) {
       tx((t) => {
         const ts = now();

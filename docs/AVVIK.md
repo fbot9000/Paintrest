@@ -71,7 +71,7 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
     - **Samtidighet med revisjon, ikke sammenslåing.** En lagring som bygger på en gammel revisjon, avvises (409), og appen ber brukeren laste inn på nytt. Endringer fra den fanen etter konflikten lagres ikke. Skjemaets `content_revision` per rad er uendret.
     - **Bilder slettes aldri.** Fjernede bilder flyttes til `files/trash/`. Skjemaet har ingen regel for opprydding.
 
-30. **Bildejakt i to faser med offisielt anker og videoer.** Fase 1 velger et offisielt anker (handlingen `anchor`, høyst 10 steg), og fase 2 leter bredt. Til sammen er grensen 30 steg, ikke 24 (jf. avvik 23). Forslaget (`reference_selection`) får `anchor` og `videos` i nyttelasten. Ankerbildet legges først blant bildene. Et forslag kan nå ha bare videoer og ingen bilder. Videoer lagres som `source` med `kind = video` og `source_link.use = method`, uten fil. Skjemaet har typen `video`, men ingen regel for hvordan videoer kommer inn.
+30. **Bildejakt i to faser med offisielt anker og videoer** (fasene er erstattet av avvik 33). Fase 1 velger et offisielt anker (handlingen `anchor`, høyst 10 steg), og fase 2 leter bredt. Til sammen er grensen 30 steg, ikke 24 (jf. avvik 23). Forslaget (`reference_selection`) får `anchor` og `videos` i nyttelasten. Ankerbildet legges først blant bildene. Et forslag kan nå ha bare videoer og ingen bilder. Videoer lagres som `source` med `kind = video` og `source_link.use = method`, uten fil. Skjemaet har typen `video`, men ingen regel for hvordan videoer kommer inn.
 
 31. **Bildesøk og bilder uten åpnet side.** Agenten har handlingen `image_search` (Brave Image Search, eller bilder per resultat fra Tavily). Et bilde fra bildesøket kan foreslås og lagres uten at siden er åpnet. Kilden blir siden bildet kom fra, slik søketjenesten oppga den. Det er en oppmykning av kildekravet fra avvik 23: før måtte bildet stå på en side agenten hadde lest. Serveren sjekker fortsatt at hvert bilde faktisk kom fra et søk eller en åpnet side i samme runde. Forslaget kan ha `thumbnail_url` (søketjenestens lille kopi), som brukes når originalen ikke kan hentes.
 
@@ -106,6 +106,21 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
     - **Agentpanelet i prosjektet:** Agenten følger det du skriver.
     - **Tolkning:** Research til biblioteket bruker den vanlige betydningen av korte forespørsler (for eksempel «flammer» = ild), og sier hva den antok. Er det fortsatt uklart, spør den før den lager utkast. Katalogen, eierstatus og tidligere utkast skal ikke avgjøre hva du mener.
     - **Kilder:** YouTube-adresser i ulike former (`youtu.be/…`, `watch?v=…&t=…`, `/shorts/…`) regnes som samme side, slik at en åpnet video ikke fjernes som kilde.
+
+33. **BRUKERØNSKE 11. november 2026: bildejakt i tre faser, figuren huskes, og du kan merke kilder.** Dette erstatter fasene i avvik 30.
+    - **Faser:** 1 identifiser figuren (handlingen `identify`, høyst 10 steg), 2 malt av andre, og 3 maleguider (de siste 8 av 30 steg). Agenten går fra fase 2 til 3 med `next_phase`, eller automatisk. Svarer agenten med `final` i fase 2, holder serveren svaret og slår det sammen med svaret etter fase 3. `anchor` fra før tolkes som `identify` med ett bilde.
+    - **`miniature_subject.identity` (PROTOTYPE, ikke i skjemaet):**
+      - **Innhold:** offisielt navn, andre navn, utgave, rolle eller fraksjon, beskrivelse, opptil tre offisielle bilder (`concept_art`, `official` eller `render`), maler, sikkerhet, begrunnelse og kilder.
+      - **Status:** `proposed` eller `confirmed`.
+      - **Hvem skriver:** Agenten skriver den som `proposed` etter en bildejakt, med `change_record` (`initiated_by = agent`) og en melding i samtalen. Den skriver aldri over en bekreftet figur, og den kan ikke skrive i et annet prosjekt.
+      - **Brukerens valg:** «Riktig figur» setter `confirmed`. «Feil figur» flytter navn og bilder til `identity_rejected` (høyst 5), som agenten får beskjed om å unngå.
+      - **Bruk:** En bekreftet figur gjør at jakten hopper over fase 1. Maleplanen og agentpanelets kontekst får den også.
+    - **Merking «Viser figuren»:** lagres som `source_link` med `use = evidence` til miniatyren, og kilden blir `kept`. Å fjerne merket skjuler lenken. Kildene til en godkjent `catalog_subject` har samme slags lenke og vises derfor også som merket.
+      - Merkede sider sendes med til bildejakten og maleplanen, og agenten åpner dem først.
+      - **Beskjed underveis (`POST /api/agent/hint`):** Klienten gir hver bildejakt en `run_id`. Merker du en side mens jakten går, legger serveren beskjeden i en kø for kjøringen. Agenten får den før neste steg. Køen finnes bare mens kjøringen går, og bare i serverens minne.
+    - **Maleguider:** `reference_selection` har `guides` (adresse, tittel, om siden er lest, begrunnelse, malinger og språk). Serveren beholder bare guider som er åpnet eller funnet i et søk i samme kjøring. YouTube-adresser blir videoer. «Lagre» lager en `source` med `kind = guide` og `use = method`. Lagrede guider sendes med til maleplanen. Et forslag kan ha bare guider.
+    - **Feilretting:** Serveren tok ikke med `user_images` (bildene du har lagret eller limt inn) da den leste forespørselen. Agenten fikk dem derfor aldri. Nå kommer de fram, sammen med `identity`, `rejected` og `tagged_sources`. Et forslag med bare videoer gikk også tapt før, fordi bildekontrollen fjernet det. Nå bygges videoer og guider fra agentens eget svar.
+    - Det er ikke testet mot UiB. Testene bruker en simulert modell. Hele kjeden fra merking i nettleseren til agenten er testet med en simulert modell bak Paintrest-serveren.
 
 ## Antakelser
 

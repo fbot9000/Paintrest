@@ -51,16 +51,41 @@ export interface AgentTurnInput {
   model?: string;
   /** Open zone: changes in the project are applied directly (the agent is told so). */
   direct_apply?: boolean;
+  /** Lets the user's actions during the run (tagged sources) reach the agent through AiGateway.sendHint. */
+  run_id?: string | null;
   /** Image hunt for one miniature (own strategy, more steps, may look at images). */
   focus?:
     | { kind: 'images'; subject_ref: string; subject_name: string; game: string; reference_image?: string | null;
         /** Pictures the user found themselves (for example from Google Images), with their pages. */
-        user_images?: { image_url: string; page_url: string; title: string }[] }
-    | { kind: 'plan'; subject_ref: string; subject_name: string; game: string; reference_images: string[]; revision: boolean; paints?: 'owned' | 'best' | null }
+        user_images?: { image_url: string; page_url: string; title: string }[];
+        /** Who the figure is, from an earlier hunt. Confirmed: phase 1 is skipped. */
+        identity?: SubjectIdentityRecord | null;
+        /** Identifications the user said were wrong. */
+        rejected?: { official_name: string | null; image_urls: string[] }[];
+        /** Pages the user tagged as showing the figure («Viser figuren»). */
+        tagged_sources?: TaggedSourceRef[] }
+    | { kind: 'plan'; subject_ref: string; subject_name: string; game: string; reference_images: string[]; revision: boolean; paints?: 'owned' | 'best' | null;
+        /** Who the figure is, when the user has confirmed it. */
+        identity?: SubjectIdentityRecord | null;
+        /** Painting guides and videos saved for the miniature. */
+        guides?: TaggedSourceRef[];
+        tagged_sources?: TaggedSourceRef[] }
     /** Library research (bit 7.4): a technique or recipe for the user's own library. */
     | { kind: 'knowledge'; target: 'technique' | 'recipe'; revision?: { name: string } | null; paints?: 'both' | 'owned' | 'best' | null }
     | null;
 }
+
+/** A page the user tagged or saved for the miniature, as the agent gets it. */
+export interface TaggedSourceRef {
+  url: string;
+  title: string;
+  summary?: string | null;
+}
+
+/** What the user did while a run was going; the server hands it to the agent before its next step. */
+export type RunHint =
+  | { kind: 'tagged_source'; url: string; title: string }
+  | { kind: 'untagged_source'; url: string; title: string };
 
 export interface PageSeen {
   url: string;
@@ -72,7 +97,8 @@ export interface PageSeen {
 }
 
 export interface TraceStep {
-  action: 'search' | 'open' | 'look' | 'anchor' | 'image_search';
+  /** 'anchor' is from hunts before the three phases (stored messages keep it). */
+  action: 'search' | 'open' | 'look' | 'anchor' | 'identify' | 'image_search' | 'hint';
   target: string;
   result: string;
 }
@@ -89,13 +115,17 @@ export type ResearchEvent =
   | { type: 'image_search_done'; query: string; images: ImageHit[] }
   | { type: 'look'; count: number; why: string | null }
   | { type: 'look_done'; summary: string }
-  | { type: 'phase'; phase: 'official' | 'broad'; text: string }
-  | { type: 'anchor'; anchor: HuntAnchor }
+  | { type: 'phase'; phase: 'identify' | 'painted' | 'guides'; text: string }
+  | { type: 'identity'; identity: SubjectIdentity }
+  /** The agent was told about something the user did while it worked (a tagged source). */
+  | { type: 'hint'; text: string }
   | { type: 'tool_error'; action: string; target: string; error: string }
-  | { type: 'final'; message: string; proposals: unknown[]; model: string; warnings: string[]; trace: TraceStep[]; pages?: PageSeen[] }
+  | { type: 'final'; message: string; proposals: unknown[]; model: string; warnings: string[]; trace: TraceStep[]; pages?: PageSeen[];
+      /** Image hunt: who the figure is, found in phase 1 of this run. */
+      identity?: SubjectIdentity | null }
   | { type: 'error'; error: string };
 
-import type { HuntAnchor } from './agent';
+import type { SubjectIdentity, SubjectIdentityRecord } from './types';
 
 /** One picture from an image search, with the page it was found on. */
 export interface ImageHit {
@@ -126,6 +156,8 @@ export interface AiGateway {
   testHostedSearch(model?: string, tool?: HostedSearchSetting): Promise<HostedSearchTest>;
   /** Runs one research turn; `onEvent` receives each step as it happens. */
   runAgent(input: AgentTurnInput, onEvent: (e: ResearchEvent) => void, signal?: AbortSignal): Promise<FinalEvent>;
+  /** Passes something the user did to a running turn (by its run_id). False when that run has ended. */
+  sendHint(run_id: string, hint: RunHint): Promise<boolean>;
   /** Address the browser can use to show an image found on the web (fetched by the server). */
   imageProxyUrl(url: string): string;
   fetchImage(url: string): Promise<Blob>;

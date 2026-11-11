@@ -94,15 +94,30 @@ Agenten bruker først **nettsøket som er bygget inn i UiB sitt API** (OpenAIs `
 
 Panelet viser hvert søk og hver side mens agenten jobber, og du kan stoppe den. Under svaret kan du se hvordan agenten fant det. Serveren fjerner bilder og kilder agenten ikke faktisk har åpnet, og sier fra i panelet.
 
-## Bildejakt i to faser
+## Bildejakt i tre faser
 
-«Let etter bilder med AI» i verkstedet går i to faser. Paintrest styrer overgangen, og fasen vises mens agenten jobber.
+«Let etter bilder med AI» i verkstedet går i tre faser. Paintrest styrer overgangen, og fasen vises mens agenten jobber. Det agenten finner i fase 1, bruker den i fase 2 og 3.
 
-1. **Offisielt anker (høyst 10 steg).** Agenten leter hos utgiveren (nettside og nettbutikk), på Kickstarter- eller Gamefound-kampanjen (også oppdateringer og tillegg) og på BoardGameGeek. Den velger det beste offisielle bildet av figuren: helst offisielt malt, ellers render, ellers konseptkunst. Den noterer også maleren kampanjen oppgir. Serveren sjekker at bildet finnes på en side agenten har åpnet. Finner agenten ikke noe, går jakten videre uten anker og sier det.
-2. **Bredt søk (resten av de 30 stegene).** Agenten leter etter malte versjoner: maleren fra kampanjen, blogger og forum på flere språk, Reddit og BGG. Når den bruker «look», viser Paintrest ankeret først som referanse, slik at kandidatene sammenlignes med det (form og positur, ikke farger). Har miniatyren allerede en illustrasjon, brukes den som referanse i stedet.
-3. **Malevideoer.** Agenten foreslår YouTube-videoer, men kan ikke se dem. Paintrest henter tittel, kanal og miniatyrbilde fra YouTube (oEmbed). Videoer som verken YouTube eller søket bekrefter, fjernes. «Lagre som kilde» lagrer en lenke på miniatyren, uten å laste ned noe.
+1. **Identifiser figuren (høyst 10 steg).** Navnet i Paintrest er ditt eget og kan være kort, uoffisielt eller på norsk. Agenten finner derfor først:
+   - hvilken utgave, utvidelse eller hvilket Kickstarter-tillegg figuren hører til
+   - figurens offisielle navn og andre navn: på kortet, i kampanjen, på skulpturen og i oversettelser
+   - en beskrivelse av rolle og utseende: positur, våpen, klær og base
+   - opptil tre offisielle bilder: helst konseptkunst, gjerne også et bilde av selve miniaturen
+   
+   Agenten leter i denne rekkefølgen: sider du har merket, utgiveren, Kickstarter eller Gamefound, BoardGameGeek og wikier. Den noterer også maleren kampanjen oppgir. Serveren sjekker at bildene finnes på en side agenten har åpnet eller i et bildesøk, og at kildene er søkt fram eller åpnet.
+2. **Malt av andre.** Agenten søker med det offisielle navnet og de andre navnene, ikke bare med ditt. Den leter på flere språk, i blogger, forum, Reddit og BGG, og hos maleren fra kampanjen. Når den bruker «look», viser Paintrest et offisielt bilde av selve miniaturen først som referanse, ellers konseptkunsten. Kandidatene sammenlignes med form og positur, ikke farger. Har miniatyren en illustrasjon, brukes den som referanse i stedet. Agenten går videre med `next_phase`, eller automatisk når det er 8 steg igjen.
+3. **Maleguider (de siste 8 stegene).** Agenten finner skrevne guider og malerapporter, og YouTube-videoer, for figuren, fraksjonen eller spillet. Den åpner de beste og noterer malingene de bruker. Guider må være åpnet eller funnet i et søk. Videoer må bekreftes av YouTube (oEmbed) eller søket. Agenten kan ikke se videoene.
 
-Bilder-fanen viser ankeret øverst, deretter forslagene delt i «Offisielle bilder og konseptkunst» og «Malt av andre», og så videoene.
+Svarer agenten med et ferdig forslag allerede i fase 2, tar Paintrest vare på det og sender agenten videre til maleguidene. De to svarene slås sammen.
+
+**Figuren lagres og brukes videre.** Identifiseringen lagres på miniatyren som et forslag, og panelet sier fra. I Bilder-fanen står den øverst under «Figuren», med navn, andre navn, beskrivelse, offisielle bilder og kilder.
+- **«Riktig figur»** bekrefter den. Neste bildejakt hopper da over fase 1 og bruker figuren direkte. Maleplanen og agentpanelet får også navnet og beskrivelsen.
+- **«Feil figur»** fjerner den. Agenten får beskjed om å ikke velge den igjen, verken navnet eller bildene.
+- Er figuren ikke bekreftet, får neste jakt den med som et forslag å kontrollere.
+
+**«Viser figuren»: hjelp agenten.** Viser en kilde riktig miniatyr, trykker du «Viser figuren?» på den. Det går i kildelisten til høyre, på sidene agenten leser, og på en side du åpner. Kilden lagres, og agenten åpner merkede sider først. Merker du en side mens agenten jobber, får agenten beskjed før neste steg, og panelet viser «Agenten fikk beskjed …». Fjerner du merket, får agenten også vite det.
+
+Bilder-fanen viser figuren øverst. Deretter kommer forslagene, delt i «Offisielle og konsept» og «Malt av andre», så videoene og maleguidene. «Lagre» på en video eller guide lagrer en lenke på miniatyren, uten å laste ned noe. Lagrede guider leser agenten først når den lager maleplan.
 
 **Lim inn fra Google Bilder.** Feltet øverst i Bilder-fanen tar imot det du kopierer fra Google Bilder eller andre steder. Du kan også lime inn hvor som helst i fanen.
 - **Kopiert bilde** («Kopier bilde» i nettleseren): lagres med en gang. Det virker også for bilder fra Instagram og Facebook, der Paintrest ikke kan hente bildet selv.
@@ -142,7 +157,7 @@ Trykk på bildet eller navnet på et miniatyrkort. Da åpnes verkstedet for mini
     - Uten forslag vises den gjeldende planen.
   - **Palett:** malingene miniatyren males med, gruppert per del. Du kan legge til malinger, endre rolle og del, og fjerne rader.
 - **Bildekolonnen kan skjules** med ‹ øverst. Da står bare små bilder igjen, og valget huskes. «I planen» vises bare i Maleplan-fanen.
-- **Høyre: agenten og kildene.** I Maleplan-fanen vises kildene kort, og de planen bygger på står først. Her ser du hva agenten gjør akkurat nå, med «Stopp», og resultatet når den er ferdig. Under ligger alle kildene for spillet, både lagrede og funnet av agenten, med språk og norsk sammendrag. Trykk på en kilde for å hente bilder fra den.
+- **Høyre: agenten og kildene.** I Maleplan-fanen vises kildene kort, og de planen bygger på står først. Her ser du hva agenten gjør akkurat nå, med «Stopp», og resultatet når den er ferdig. Under ligger alle kildene for spillet, både lagrede og funnet av agenten, med språk og norsk sammendrag. Trykk på en kilde for å hente bilder fra den. I Bilder-fanen merker du med «Viser figuren?» kilder som viser miniatyren. De står da først, og agenten åpner dem først.
 - **Forrige og neste** øverst flytter deg mellom miniatyrene i prosjektet og beholder fanen du står på.
 - **Agenten fortsetter mens du gjør noe annet.** Du kan bytte fane eller gå tilbake til galleriet. Miniatyrkortet viser «Agenten jobber …». Kjøringen lever i nettleserfanen, så laster du siden på nytt, stopper den.
 - **På iPad** ligger agent og kilder bak knappen «Agent og kilder».

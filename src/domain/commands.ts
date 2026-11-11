@@ -155,6 +155,17 @@ export interface Commands extends KnowledgeCommands {
   detachSubjectImage(subject_id: Id, asset_id: Id): Promise<void>;
   /** Keeps a video (from an image hunt) as a source for the miniature: a link, nothing is downloaded. */
   saveVideoSource(subject_id: Id, video: { url: string; title: string; channel: string | null }): Promise<void>;
+  /** Keeps a painting guide (from an image hunt) as a method source for the miniature: a link, nothing is downloaded. */
+  saveGuideSource(subject_id: Id, guide: { url: string; title: string; site: string | null }): Promise<void>;
+  /**
+   * «Viser figuren»: the user says this page shows the miniature (on) or not (off). On keeps the page
+   * as a source with an evidence link to the miniature; off removes that link. The agent opens tagged pages first.
+   */
+  tagSource(subject_id: Id, page: { url: string; title: string }, on: boolean): Promise<void>;
+  /** «Riktig figur»: the agent's identification is right; later hunts and the paint plan build on it. */
+  confirmIdentity(subject_id: Id): Promise<void>;
+  /** «Feil figur»: the identification is wrong; it is removed and the agent is told not to choose it again. */
+  rejectIdentity(subject_id: Id): Promise<void>;
 
   // Palett (datamodell v3 §8)
   /** Adds a paint to one miniature's palette. */
