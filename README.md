@@ -24,7 +24,24 @@ npm test          # kommandolaget: versjoner, avvik, ferdigstilling, BGG-kobling
 npm run build     # typesjekk og produksjonsbygg til dist/
 ```
 
-Ved første start får appen eksempeldata: prosjektet Avalon med fire figurer og ferdige maleplaner for Merlin og Druid Champions. «⋯ → Tilbakestill eksempeldata» setter dataene tilbake. Du må skrive «tilbakestill» for å bekrefte, og serveren tar en sikkerhetskopi først.
+Ved første start får appen eksempeldata: prosjektet Avalon med fire figurer og maleplaner for Merlin og Druid Champions. Eksempeldataene har ingen malinger: malingssamlingen er din egen (se «Malingssamlingen» under). «⋯ → Tilbakestill eksempeldata» setter dataene tilbake, men beholder malingssamlingen. Du må skrive «tilbakestill» for å bekrefte, og serveren tar en sikkerhetskopi først.
+
+## Malingssamlingen
+
+«Malinger» i toppfeltet viser alle malingene i katalogen og om du har dem («Har», «Har ikke», «Ukjent»). Agenten bruker listen når den lager maleplaner og oppskrifter.
+
+- **Eksempelmalingene fra testdataene** (14 Citadel-malinger og «Grønn glasur fra hylla») vises med et eget varsel og knappen «Fjern eksempelmalingene». De skjules, og eierstatusen fjernes. Planer og oppskrifter som bruker dem, beholder dem. Legger du inn den samme malingen selv senere, tas den skjulte raden i bruk igjen, og planene peker da på din.
+- **En og en:** «Legg til maling». Produsent, serie, navn, kode, type, finish, farge og om du har den. Produsent, serie og type blir stående til neste maling. «Fyll ut med AI» fyller inn tomme felt (også en omtrentlig farge), og feltene AI-en fylte inn er merket til du endrer dem. Finnes malingen fra før, sier skjemaet det, og du får ingen dobbel.
+- **Rediger og skjul:** trykk på en maling. Eierstatus endres rett i listen. Skjulte malinger kan gjenopprettes.
+- **Import av en liste:** «Importer en liste». Lim inn tekst eller last opp en fil (tekst, CSV/TSV, Excel .xlsx, JSON eller HTML). Fra PDF eller e-post: kopier teksten og lim den inn.
+  1. AI-en leser listen i deler på opptil 40 linjer, to om gangen, og foreslår hver maling med produsent, serie, navn, kode, type, finish og omtrentlig farge. Du kan stoppe og fortsette.
+  2. Felt AI-en har fylt inn selv, og som ikke står i teksten din, er merket. Serveren merker dem også når modellen glemmer det. Hver rad viser linjen den kom fra.
+  3. Linjer som verken ble en maling eller ble hoppet over med en grunn, vises som «ikke brukt», og du kan be AI-en lese dem på nytt. Ingenting forsvinner uten at du ser det.
+  4. AI-en stiller spørsmål når noe er uklart. Svar med knappene eller med eget svar, eller gi en beskjed («alle Vallejo er Game Color»). AI-en endrer listen, og radene den endret, er markert.
+  5. Rett, kryss av og fjern rader selv. Listen viser hva lagringen vil gjøre med hver rad: ny, finnes fra før (tomme felt fylles inn), tas i bruk igjen (skjult) eller dobbel.
+  6. «Legg inn i samlingen» lagrer alt i én transaksjon. Rader uten produsent eller med tvil lagres som ubekreftet.
+- **Uten AI:** «Les uten AI» tar ett navn per linje, eller et regneark med kolonnenavn (Produsent, Serie, Navn, Kode, Type, Har). Du kan be AI-en om hjelp med resten etterpå.
+- Utkastet av importen ligger i nettleseren (localStorage) til du lagrer eller forkaster det. Det tåler at du laster siden på nytt, men følger ikke med til en annen maskin.
 
 ## Lagring: datamappen ~/Paintrest
 
@@ -225,9 +242,10 @@ Alle sider agenten leser, lagres automatisk som kilder for spillet («Funnet av 
 | 1 Prosjekter og spill | Nytt prosjekt med en gang («Nytt spill N»), endring av navn, år, utgiver og illustrasjon, utvidelser med kobling og løsning, simulert BGG-kobling, sletting og gjenoppretting |
 | 2 (delvis) Miniatyrer | Galleri med planstatus og malefremdrift hver for seg, filtre, legge til, redigere og slette |
 | 5 Painting Mode | iPad liggende: referanser på 1/3 og plan på 2/3. Felles operasjoner og deler, steg, materialer med eierstatus, blandinger, «Finn fram malingene», avvik, delen ferdig, gruppeteller, «Marker ferdig» og historikk |
+| Malingssamlingen | «Malinger» i toppfeltet: samlingen med søk og filtre, legg til en og en (med «Fyll ut med AI»), rediger og skjul, fjern eksempelmalingene, og AI-assistert import av en liste eller fil med spørsmål og svar. Se «Malingssamlingen» over |
 | 7.0–7.6 Bibliotek | Teknikker og oppskrifter (fargerekke med valgfri fremgangsmåte) i datamodellen. «Bibliotek» i toppfeltet: søk, merkelapper og redigering av teknikker og oppskrifter, som lagres når du forlater et felt. Teknikken som artikkel, verkstedguide for iPad og registrering av erfaring. Research med agenten gir utkast til teknikker og oppskrifter, som du godkjenner inn i biblioteket. Se [docs/BIT7-KUNNSKAP.md](docs/BIT7-KUNNSKAP.md) |
 
-Neste: bit 3 (maling og palett), bit 4 (redigering av maleplanen), bit 6 (kilder), bit 7.7 (bruk i prosjekt, etter bit 4) og bit 8 (simulert agent).
+Neste: produktbilder og malekjeder (base, layer, highlight, shade, effekter) for malingene, bit 3 (palett), bit 4 (redigering av maleplanen), bit 6 (kilder), bit 7.7 (bruk i prosjekt, etter bit 4) og bit 8 (simulert agent).
 
 ## Arkitektur
 

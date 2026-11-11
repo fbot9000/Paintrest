@@ -1,16 +1,37 @@
-import type { BggCandidate, Commands, LinkBggResult, SubjectPatch } from '../domain/commands';
+import type { BggCandidate, Commands, ImportSummary, LinkBggResult, SubjectPatch } from '../domain/commands';
 import { CommandError } from '../domain/commands';
 import { newId, now } from '../domain/ids';
 import { AUTO, isAutoName, nextAutoName } from '../domain/naming';
+import { bySpecificity, findProduct, sampleProducts } from '../domain/paints';
 import type {
-  Id, LocalDeviation, MiniatureSubject,
+  Id, LocalDeviation, MiniatureSubject, Ownership, OwnershipSource, Tables,
 } from '../domain/types';
-import { currentPlanVersion, liveExpansionsOfGame } from '../domain/views';
+import { currentPlanVersion, liveExpansionsOfGame, ownershipOf } from '../domain/views';
 import type { Store } from './store';
 import { buildSampleData } from './seed';
 import { attachImages, downloadImages, setCover, sourceFor } from './images-tx';
 import { must, record } from './tx-helpers';
 import { createKnowledgeCommands } from './knowledge-commands';
+
+function clean(v: string | null | undefined): string | null {
+  return v?.trim() || null;
+}
+
+function hex(v: string | null | undefined): string | null {
+  return v && /^#[0-9a-f]{6}$/i.test(v.trim()) ? v.trim().toLowerCase() : null;
+}
+
+/** One inventory row per paint (skjema §6, inventory_entry). */
+function setOwn(t: Tables, ws: string, product_id: string, ownership: Ownership, source: OwnershipSource): void {
+  const e = t.inventory_entry.find((x) => x.product_id === product_id && x.workspace_id === ws);
+  if (e) {
+    e.ownership = ownership;
+    e.ownership_source = source;
+    e.updated_at = now();
+  } else {
+    t.inventory_entry.push({ workspace_id: ws, product_id, ownership, ownership_source: source, updated_at: now() });
+  }
+}
 
 function normaliseSubject(s: MiniatureSubject): void {
   if (!Number.isInteger(s.physical_count) || s.physical_count < 1) {
@@ -514,42 +535,147 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
       });
     },
 
-    // ---------- Katalog ----------
+    // ---------- Katalog og malingssamling ----------
     async createProduct(input) {
       return tx((t, ws) => {
         const taken = Object.values(t.paint_product).filter((p) => !p.deleted_at).map((p) => p.name);
         const id = newId();
+        const manufacturer = clean(input?.manufacturer);
+        const name = input?.name?.trim() || nextAutoName(AUTO.product, taken);
         t.paint_product[id] = {
           id, workspace_id: ws,
-          manufacturer: input?.manufacturer?.trim() || null,
-          range_name: input?.range_name?.trim() || null,
-          name: input?.name?.trim() || nextAutoName(AUTO.product, taken),
+          manufacturer,
+          range_name: clean(input?.range_name),
+          name,
           product_kind: input?.product_kind ?? 'other',
-          coverage: null, finish: null,
-          identity_status: 'unconfirmed',
-          swatch_hex: input?.swatch_hex ?? null,
+          coverage: null, finish: clean(input?.finish),
+          // The user entering maker and name in the collection is the confirmation (spesifikasjon §1: exact identity).
+          identity_status: input?.confirmed && manufacturer && input.name?.trim() ? 'confirmed' : 'unconfirmed',
+          swatch_hex: hex(input?.swatch_hex),
+          swatch_estimated: !!hex(input?.swatch_hex) && !!input?.swatch_estimated,
+          product_code: clean(input?.product_code),
           created_at: now(), deleted_at: null,
         };
-        if (input?.owns) {
-          t.inventory_entry.push({ workspace_id: ws, product_id: id, ownership: 'owns', ownership_source: 'manual', updated_at: now() });
-        }
+        const ownership = input?.ownership ?? (input?.owns ? 'owns' : null);
+        if (ownership) setOwn(t, ws, id, ownership, 'manual');
         record(t, ws, { target_type: 'paint_product', target_id: id, action: 'create' });
         return id;
+      });
+    },
+
+    async updateProduct(product_id, patch) {
+      tx((t, ws) => {
+        const p = must(t.paint_product[product_id], 'Malingen');
+        if (patch.name !== undefined) {
+          if (!patch.name.trim()) throw new CommandError('Navnet kan ikke være tomt');
+          p.name = patch.name.trim();
+        }
+        if (patch.manufacturer !== undefined) p.manufacturer = clean(patch.manufacturer);
+        if (patch.range_name !== undefined) p.range_name = clean(patch.range_name);
+        if (patch.product_code !== undefined) p.product_code = clean(patch.product_code);
+        if (patch.finish !== undefined) p.finish = clean(patch.finish);
+        if (patch.product_kind !== undefined) p.product_kind = patch.product_kind;
+        if (patch.swatch_hex !== undefined) {
+          p.swatch_hex = hex(patch.swatch_hex);
+          p.swatch_estimated = !!p.swatch_hex && !!patch.swatch_estimated;
+        }
+        if (patch.identity_status !== undefined) p.identity_status = patch.identity_status;
+        record(t, ws, { target_type: 'paint_product', target_id: product_id, action: 'update' });
+      });
+    },
+
+    async deleteProduct(product_id) {
+      tx((t, ws) => {
+        must(t.paint_product[product_id], 'Malingen').deleted_at = now();
+        record(t, ws, { target_type: 'paint_product', target_id: product_id, action: 'delete' });
+      });
+    },
+
+    async restoreProduct(product_id) {
+      tx((t, ws) => {
+        must(t.paint_product[product_id], 'Malingen').deleted_at = null;
+        record(t, ws, { target_type: 'paint_product', target_id: product_id, action: 'restore' });
       });
     },
 
     async setOwnership(product_id, ownership) {
       tx((t, ws) => {
         must(t.paint_product[product_id], 'Malingen');
-        const e = t.inventory_entry.find((x) => x.product_id === product_id && x.workspace_id === ws);
-        if (e) {
-          e.ownership = ownership;
-          e.ownership_source = 'manual';
-          e.updated_at = now();
-        } else {
-          t.inventory_entry.push({ workspace_id: ws, product_id, ownership, ownership_source: 'manual', updated_at: now() });
-        }
+        setOwn(t, ws, product_id, ownership, 'manual');
         record(t, ws, { target_type: 'inventory_entry', target_id: product_id, action: 'update' });
+      });
+    },
+
+    async importProducts(paints, opts) {
+      const source = opts?.source ?? 'import';
+      return tx((t, ws) => {
+        const sum: ImportSummary = { created: 0, updated: 0, restored: 0, duplicates: 0 };
+        const touched = new Set<Id>();
+        for (const x of bySpecificity(paints)) {
+          const name = x.name.trim();
+          if (!name) continue;
+          const input = { ...x, name, manufacturer: clean(x.manufacturer), range_name: clean(x.range_name), product_code: clean(x.product_code), finish: clean(x.finish) };
+          // Earlier rows in the same import are in t already, so a second copy of a paint matches the first.
+          const m = findProduct(t.paint_product, input);
+          if (m && touched.has(m.id)) { sum.duplicates++; continue; }
+          if (m && !m.deleted_at) {
+            // Known paint: fill in what is missing, never overwrite what is there.
+            m.manufacturer ??= input.manufacturer;
+            m.range_name ??= input.range_name;
+            m.product_code ??= input.product_code;
+            m.finish ??= input.finish;
+            if (m.product_kind === 'other') m.product_kind = input.product_kind;
+            if (!m.swatch_hex && hex(input.swatch_hex)) { m.swatch_hex = hex(input.swatch_hex); m.swatch_estimated = input.swatch_estimated; }
+            if (input.confirmed && m.manufacturer) m.identity_status = 'confirmed';
+            // Owning wins: a wish list does not undo a paint you have.
+            if (input.ownership === 'owns' || (input.ownership === 'not_owned' && ownershipOf(t, m.id) !== 'owns')) setOwn(t, ws, m.id, input.ownership, source);
+            record(t, ws, { target_type: 'paint_product', target_id: m.id, action: 'update' });
+            touched.add(m.id);
+            sum.updated++;
+          } else if (m) {
+            // A hidden paint (for example from the old sample data) comes back as the user's own,
+            // so plans and recipes that use it point to it again.
+            Object.assign(m, {
+              manufacturer: input.manufacturer ?? m.manufacturer, range_name: input.range_name ?? m.range_name, name: input.name,
+              product_code: input.product_code ?? m.product_code ?? null, product_kind: input.product_kind, finish: input.finish ?? m.finish,
+              identity_status: input.confirmed && (input.manufacturer ?? m.manufacturer) ? 'confirmed' : 'unconfirmed',
+              deleted_at: null,
+            });
+            if (hex(input.swatch_hex)) { m.swatch_hex = hex(input.swatch_hex); m.swatch_estimated = input.swatch_estimated; }
+            setOwn(t, ws, m.id, input.ownership, source);
+            record(t, ws, { target_type: 'paint_product', target_id: m.id, action: 'restore' });
+            touched.add(m.id);
+            sum.restored++;
+          } else {
+            const id = newId();
+            t.paint_product[id] = {
+              id, workspace_id: ws, manufacturer: input.manufacturer, range_name: input.range_name, name: input.name,
+              product_kind: input.product_kind, coverage: null, finish: input.finish,
+              identity_status: input.confirmed && input.manufacturer ? 'confirmed' : 'unconfirmed',
+              swatch_hex: hex(input.swatch_hex), swatch_estimated: !!hex(input.swatch_hex) && input.swatch_estimated,
+              product_code: input.product_code, created_at: now(), deleted_at: null,
+            };
+            if (input.ownership !== 'unknown') setOwn(t, ws, id, input.ownership, source);
+            record(t, ws, { target_type: 'paint_product', target_id: id, action: 'create' });
+            touched.add(id);
+            sum.created++;
+          }
+        }
+        return sum;
+      });
+    },
+
+    async removeSampleProducts() {
+      return tx((t, ws) => {
+        const ids = new Set(sampleProducts(t).map((p) => p.id));
+        const ts = now();
+        for (const id of ids) {
+          t.paint_product[id]!.deleted_at = ts;
+          record(t, ws, { target_type: 'paint_product', target_id: id, action: 'delete' });
+        }
+        // The sample said «you own this»; that was never true for the user.
+        t.inventory_entry = t.inventory_entry.filter((e) => !ids.has(e.product_id));
+        return ids.size;
       });
     },
 
@@ -695,6 +821,21 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
       // Snapshot of the data folder first, so even this can be undone from backups/.
       await blobs.backup?.('before-reset');
       const state = await buildSampleData(blobs);
+      // The paint collection is the user's own, not sample data: it stays (paints from the old sample data do not).
+      const old = store.getTables();
+      const samples = new Set(sampleProducts(old).map((p) => p.id));
+      const ws = state.workspace_id;
+      for (const p of Object.values(old.paint_product)) {
+        if (samples.has(p.id)) continue;
+        state.tables.paint_product[p.id] = { ...p, workspace_id: ws };
+      }
+      state.tables.inventory_entry = old.inventory_entry
+        .filter((e) => state.tables.paint_product[e.product_id])
+        .map((e) => ({ ...e, workspace_id: ws }));
+      // Their history comes along too (it also tells them apart from sample paints).
+      for (const r of Object.values(old.change_record)) {
+        if (state.tables.paint_product[r.target_id]) state.tables.change_record[r.id] = { ...r, workspace_id: ws };
+      }
       urlCache.forEach((u) => URL.revokeObjectURL(u));
       urlCache.clear();
       store.replace(state);

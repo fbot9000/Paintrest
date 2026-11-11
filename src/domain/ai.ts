@@ -158,6 +158,62 @@ export interface SearchCredentialView {
   updated_at: string;
 }
 
+// ---------- Import av malinger (server/paint-import.ts) ----------
+
+/** One paint as the AI describes it. `guessed` lists wire field names filled in from the AI's own knowledge. */
+export interface PaintWire {
+  /** The AI's own short id in a read answer (p1, p2 …), so questions can point to it. */
+  id: string | null;
+  lines: number[];
+  maker: string | null;
+  range: string | null;
+  name: string;
+  code: string | null;
+  kind: string;
+  finish: string | null;
+  hex: string | null;
+  own: 'owns' | 'not_owned';
+  guessed: string[];
+  unsure: string | null;
+}
+
+export interface PaintQuestionWire {
+  text: string;
+  /** Paint ids (read) or row refs (discuss) the question is about. */
+  refs: string[];
+  options: string[];
+}
+
+export type PaintChangeWire =
+  | { op: 'update'; ref: string; set: Partial<Record<'maker' | 'range' | 'name' | 'code' | 'kind' | 'finish' | 'hex' | 'own', string | null>>;
+      guessed: string[]; unsure?: string | null; include?: boolean }
+  | { op: 'add'; paint: PaintWire }
+  | { op: 'remove'; ref: string; reason: string | null };
+
+export type PaintInterpretRequest =
+  | { mode: 'read'; lines: { n: number; text: string }[]; context: { n: number; text: string }[]; note: string }
+  | { mode: 'discuss'; table: string; unused_lines: { n: number; text: string }[]; questions: { id: string; text: string }[];
+      history: { role: 'user' | 'assistant'; text: string }[]; message: string; note: string };
+
+export interface PaintReadResult {
+  mode: 'read';
+  message: string;
+  paints: PaintWire[];
+  skipped: { line: number; reason: string }[];
+  questions: PaintQuestionWire[];
+  model: string;
+}
+
+export interface PaintDiscussResult {
+  mode: 'discuss';
+  message: string;
+  changes: PaintChangeWire[];
+  /** Question ids the user's message answered. */
+  answered: string[];
+  questions: PaintQuestionWire[];
+  model: string;
+}
+
 export interface AiGateway {
   /** `unavailable` when the app runs without its server (e.g. a static preview). */
   getCredential(): Promise<{ status: 'ok'; credential: AiCredentialView | null } | { status: 'unavailable' }>;
@@ -181,4 +237,9 @@ export interface AiGateway {
   saveSearchCredential(input: { provider: 'tavily' | 'brave'; api_key?: string }): Promise<SearchCredentialView>;
   deleteSearchCredential(): Promise<void>;
   testSearch(query?: string): Promise<{ count: number; first: { title: string; url: string } | null; latency_ms: number }>;
+
+  /** Reads part of a paint list (one AI call, no web). */
+  readPaints(req: Extract<PaintInterpretRequest, { mode: 'read' }>, signal?: AbortSignal): Promise<PaintReadResult>;
+  /** One dialog turn about the draft list: answers to questions or an instruction from the user. */
+  discussPaints(req: Extract<PaintInterpretRequest, { mode: 'discuss' }>, signal?: AbortSignal): Promise<PaintDiscussResult>;
 }

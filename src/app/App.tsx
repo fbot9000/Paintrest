@@ -18,6 +18,8 @@ import { ResearchTaskPage } from '../features/library/ResearchTaskPage';
 import { RecipesPage } from '../features/library/RecipesPage';
 import { RecipePage } from '../features/library/RecipePage';
 import { Workspace } from '../features/workspace/Workspace';
+import { PaintsPage } from '../features/paints/PaintsPage';
+import { ImportPage } from '../features/paints/ImportPage';
 import { Button, Dialog } from '../ui/components';
 import { useCommand } from './context';
 import { useSaveStatus } from './saveStatus';
@@ -33,6 +35,8 @@ const routes = [
     children: [
       { index: true, element: <ProjectsPage /> },
       { path: 'innstillinger', element: <AiSettingsPage /> },
+      { path: 'malinger', element: <PaintsPage /> },
+      { path: 'malinger/import', element: <ImportPage /> },
       { path: 'p/:projectId/m/:subjectId', element: <Workspace /> },
       { path: 'p/:projectId/m/:subjectId/:tab', element: <Workspace /> },
       {
@@ -97,6 +101,7 @@ function TopBar() {
       </Link>
       <nav className="topnav" aria-label="Hovedmeny">
         <NavLink to="/" end className={({ isActive }) => (isActive || inProject ? 'active' : '')}>Prosjekter</NavLink>
+        <NavLink to="/malinger">Malinger</NavLink>
         <NavLink to="/bibliotek">Bibliotek</NavLink>
       </nav>
       <RunIndicator />
@@ -130,7 +135,8 @@ function TopBar() {
           }}>Tilbakestill</Button>
         </>}
       >
-        <p>Alt du har lagt inn erstattes av eksempelprosjektet: prosjekter, miniatyrer, planer, kilder og historikk.</p>
+        <p>Alt du har lagt inn erstattes av eksempelprosjektet: prosjekter, miniatyrer, planer, kilder, biblioteket og historikk.</p>
+        <p>Malingssamlingen din beholdes. Eksempeldataene har ingen malinger.</p>
         <p className="small muted">Det tas en sikkerhetskopi først når dataene ligger i datamappen. Skriv «tilbakestill» for å bekrefte.</p>
         <input aria-label="Skriv tilbakestill" className="reset-input" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="tilbakestill" />
       </Dialog>

@@ -7,7 +7,7 @@
  * the call sites.
  */
 import type {
-  DeviationKind, DeviationPayload, Evidence, ExperienceOutcome, Grouping, Id, KnowledgeStatus,
+  DeviationKind, DeviationPayload, Evidence, ExperienceOutcome, Grouping, Id, IdentityStatus, KnowledgeStatus,
   MaterialRole, Ownership, ProductKind, StepBasis, Uncertainty,
 } from './types';
 import type { ReferenceImage } from './agent';
@@ -44,8 +44,54 @@ export interface ProductInput {
   range_name?: string | null;
   product_kind?: ProductKind;
   swatch_hex?: string | null;
+  product_code?: string | null;
+  finish?: string | null;
+  /** The colour is the AI's estimate. */
+  swatch_estimated?: boolean;
   /** Set inventory to `owns` in the same command (skjema §6, inventory_entry). */
   owns?: boolean;
+  /** Ownership to record (wins over `owns`). Unset = no inventory row. */
+  ownership?: Ownership;
+  /** The user entered the exact product (maker and name) in the paint collection. Default: unconfirmed. */
+  confirmed?: boolean;
+}
+
+export interface ProductPatch {
+  name?: string;
+  manufacturer?: string | null;
+  range_name?: string | null;
+  product_kind?: ProductKind;
+  /** A colour the user sets is no longer an estimate (unless swatch_estimated says so). */
+  swatch_hex?: string | null;
+  swatch_estimated?: boolean;
+  product_code?: string | null;
+  finish?: string | null;
+  identity_status?: IdentityStatus;
+}
+
+/** One paint from an import, after the user checked the list. */
+export interface ImportPaintInput {
+  manufacturer: string | null;
+  range_name: string | null;
+  name: string;
+  product_code: string | null;
+  product_kind: ProductKind;
+  finish: string | null;
+  swatch_hex: string | null;
+  /** The colour is the AI's estimate. */
+  swatch_estimated: boolean;
+  ownership: Ownership;
+  confirmed: boolean;
+}
+
+export interface ImportSummary {
+  created: number;
+  /** Already in the catalogue: missing fields filled in, ownership set. */
+  updated: number;
+  /** Hidden paints taken into use again (plans and recipes that use them follow). */
+  restored: number;
+  /** The same paint twice in the list: saved once. */
+  duplicates: number;
 }
 
 // ---------- Bibliotek (bit 7) ----------
@@ -174,9 +220,17 @@ export interface Commands extends KnowledgeCommands {
   /** Hides the entry (restorable); plans that use the paint are not changed. */
   removePaletteEntry(entry_id: Id): Promise<void>;
 
-  // Katalog
+  // Katalog og malingssamling
   createProduct(input?: ProductInput): Promise<Id>;
+  updateProduct(product_id: Id, patch: ProductPatch): Promise<void>;
+  /** Hides the paint from the catalogue. Plans, recipes and palettes that use it keep it. */
+  deleteProduct(product_id: Id): Promise<void>;
+  restoreProduct(product_id: Id): Promise<void>;
   setOwnership(product_id: Id, ownership: Ownership): Promise<void>;
+  /** Saves a checked import list in one transaction (matching existing and hidden paints). */
+  importProducts(paints: ImportPaintInput[], opts?: { source?: 'manual' | 'import' }): Promise<ImportSummary>;
+  /** Hides the paints from the old sample data and clears their ownership. Returns how many. */
+  removeSampleProducts(): Promise<number>;
 
   // Plan og malevisning
   createEmptyPlan(subject_id: Id): Promise<Id>;
