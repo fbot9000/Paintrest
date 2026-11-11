@@ -94,7 +94,6 @@
 .tech-head-row .btn { text-decoration: none; }
 .tech-lead { font-size: 17px; color: var(--muted); max-width: 60ch; }
 .pre-line { white-space: pre-line; }
-.article-top { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(220px, 1fr); gap: 16px; align-items: stretch; }
 .article-block { display: grid; gap: 6px; }
 .article-block .eyebrow, .tech-section > .eyebrow, .tech-head-row .eyebrow { color: var(--fore); }
 .article-materials { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
@@ -227,6 +226,22 @@
 .field-label { font-weight: 600; font-size: 14px; }
 .research-choice { display: grid; gap: 4px; padding: 14px 16px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--card); }
 
+/* Teknikkartikkel: to kolonner på store skjermer (steg til venstre, resten til høyre). */
+.project-main .page.article-page { max-width: 1400px; }
+.article-layout { display: grid; gap: 20px; grid-template-areas: "top" "main" "bottom"; }
+.article-side-top { grid-area: top; display: grid; gap: 16px; align-content: start; }
+.article-main { grid-area: main; display: grid; gap: 20px; align-content: start; min-width: 0; }
+.article-side-bottom { grid-area: bottom; display: grid; gap: 16px; align-content: start; }
+.article-main .article-steps p, .article-main .pre-line { max-width: 75ch; }
+@media (min-width: 1280px) {
+  .article-layout {
+    grid-template-columns: minmax(0, 1fr) 380px;
+    grid-template-rows: auto 1fr;
+    grid-template-areas: "main top" "main bottom";
+    align-items: start;
+  }
+}
+
 /* Oppskrift */
 .recipe-strip { display: flex; gap: 3px; flex-wrap: wrap; }
 .recipe-strip-lg .swatch { border-radius: 6px; }
@@ -263,7 +278,6 @@
 
 @media (max-width: 860px) {
   .change-row { grid-template-columns: 1fr; }
-  .article-top { grid-template-columns: 1fr; }
   .recipe-paint { grid-template-columns: 28px minmax(0, 1fr); }
   .recipe-paint > :nth-child(n+3) { grid-column: 2; }
 

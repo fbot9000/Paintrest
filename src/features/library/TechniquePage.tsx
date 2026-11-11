@@ -34,7 +34,7 @@ export function TechniquePage() {
   };
 
   return (
-    <main className="page tech-page">
+    <main className="page tech-page article-page">
       <div className="tech-head">
         <div className="tech-head-row">
           <span className="eyebrow"><Link to="/bibliotek/teknikker">Teknikker</Link></span>
@@ -70,7 +70,14 @@ export function TechniquePage() {
             </div>
           )}
 
-          <div className="article-top">
+          <div className="article-layout">
+            <div className="article-side-top">
+            <div className="article-workshop">
+              <span className="eyebrow">Ved malebordet</span>
+              <p>Kort guide med bare stegene, laget for iPad.</p>
+              <Link className="btn btn-primary" to="verksted">Åpne verkstedguiden →</Link>
+              <Button onClick={() => setExperienceOpen(true)}>Registrer erfaring</Button>
+            </div>
             <Card className="tech-section">
               {x.use_area && (
                 <div className="article-block">
@@ -86,14 +93,8 @@ export function TechniquePage() {
                 <p className="small muted">Bestemte malinger velges i oppskriften du bruker teknikken med.</p>
               </div>
             </Card>
-            <div className="article-workshop">
-              <span className="eyebrow">Ved malebordet</span>
-              <p>Kort guide med bare stegene, laget for iPad.</p>
-              <Link className="btn btn-primary" to="verksted">Åpne verkstedguiden →</Link>
-              <Button onClick={() => setExperienceOpen(true)}>Registrer erfaring</Button>
             </div>
-          </div>
-
+            <div className="article-main">
           <Card className="tech-section">
             <span className="eyebrow">Slik gjør du</span>
             {d.steps.length === 0
@@ -127,6 +128,8 @@ export function TechniquePage() {
             </div>
           )}
 
+            </div>
+            <div className="article-side-bottom">
           <Card className="tech-section">
             <div className="tech-head-row">
               <span className="eyebrow">Erfaringer</span>
@@ -169,6 +172,8 @@ export function TechniquePage() {
               </ul>
             </Card>
           )}
+            </div>
+          </div>
         </>
       )}
 
