@@ -299,7 +299,8 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
       </div>
 
       <ErrorNote error={error} onClose={() => setError(null)} />
-      <ErrorNote error={run?.status === 'error' ? run.error ?? 'Agenten feilet.' : null} onClose={() => runs.dismiss(projectId, 'project')} />
+      {/* Errors the agent wrote into the conversation are not shown twice; only those that happened before it got that far. */}
+      <ErrorNote error={run?.status === 'error' && !run.error_reported ? run.error ?? 'Agenten feilet.' : null} onClose={() => runs.dismiss(projectId, 'project')} />
 
       <form className="agent-input" onSubmit={(e) => { e.preventDefault(); send(ctl.draft); }}>
         {ai === 'ready' && !busy && !view?.messages.length && (

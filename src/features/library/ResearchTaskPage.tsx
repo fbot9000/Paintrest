@@ -55,7 +55,8 @@ export function ResearchTaskPage() {
         <h1>{view.title}</h1>
       </div>
       <AiStatusNote status={status} />
-      <ErrorNote error={run?.status === 'error' ? run.error ?? 'Agenten feilet.' : null} onClose={() => runs.dismiss(taskId, 'knowledge')} />
+      {/* Errors the agent wrote into the conversation are not shown twice; only those that happened before it got that far. */}
+      <ErrorNote error={run?.status === 'error' && !run.error_reported ? run.error ?? 'Agenten feilet.' : null} onClose={() => runs.dismiss(taskId, 'knowledge')} />
 
       {pending.map((p) => <DraftCard key={p.id} p={p} messages={view.messages} revisionOf={view.revision_of?.id ?? null} />)}
 

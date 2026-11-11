@@ -100,4 +100,12 @@ describe('kjøringer som overlever navigasjon', () => {
     runs.stop('s5', 'images');
     await new Promise((r) => setTimeout(r, 0));
   });
+
+  it('husker om feilen allerede er vist i samtalen', async () => {
+    runs.start('task-5', 'knowledge', async () => { throw Object.assign(new Error('UiB svarte ikke'), { reported: true }); });
+    runs.start('task-6', 'knowledge', async () => { throw new Error('Oppgaven er lukket'); });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(runs.get('task-5', 'knowledge')).toMatchObject({ status: 'error', error: 'UiB svarte ikke', error_reported: true });
+    expect(runs.get('task-6', 'knowledge')).toMatchObject({ status: 'error', error: 'Oppgaven er lukket', error_reported: false });
+  });
 });

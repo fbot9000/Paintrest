@@ -18,6 +18,12 @@ export interface TurnSummary {
   change_set_id: Id | null;
 }
 
+/** An error the turn already wrote into the conversation as a system message. */
+export function markReported(e: unknown): Error & { reported: true } {
+  const err = e instanceof Error ? e : new Error(String(e));
+  return Object.assign(err, { reported: true as const });
+}
+
 export async function runAgentTurn(deps: {
   store: Store;
   research: ResearchCommands;
@@ -62,7 +68,8 @@ export async function runAgentTurn(deps: {
   } catch (e) {
     const aborted = e instanceof Error && e.name === 'AbortError';
     agent.addSystemMessage(task_id, aborted ? 'Du stoppet agenten.' : `Agenten svarte ikke: ${e instanceof Error ? e.message : String(e)}`);
-    throw e;
+    // The conversation now says what happened; views need not show it a second time.
+    throw markReported(e);
   }
 
   agent.addAssistantMessage(task_id, r.message || 'Agenten ga et tomt svar.', r.model, r.trace);

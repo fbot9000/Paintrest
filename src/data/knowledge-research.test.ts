@@ -63,6 +63,21 @@ describe('research til biblioteket (bit 7.4)', () => {
     expect(() => checkScope(store.getTables(), ptask, { result_type: 'technique', payload: {} })).toThrow('teknikker');
   });
 
+  it('en feil fra modellen skrives i samtalen én gang og merkes som vist; en feil før modellen merkes ikke', async () => {
+    const { store, research, agent } = await setup();
+    const task = await research.startKnowledgeTask('technique');
+    const failing = { async runAgent() { throw new Error('UiB svarte ikke'); } } as unknown as Parameters<typeof runAgentTurn>[0]['ai'];
+    const err = await runAgentTurn({ store, research, agent, ai: failing }, task, 'Kantlys').catch((e: unknown) => e);
+    expect(err).toMatchObject({ message: 'UiB svarte ikke', reported: true });
+    const system = Object.values(store.getTables().research_message).filter((m) => m.task_id === task && m.role === 'system');
+    expect(system.map((m) => m.body)).toEqual(['Agenten svarte ikke: UiB svarte ikke']);
+    // Before the model is called (closed task): nothing in the conversation, so the view must show it.
+    await research.closeTask(task);
+    const early = await runAgentTurn({ store, research, agent, ai: failing }, task, 'Mer').catch((e: unknown) => e);
+    expect(early).toMatchObject({ message: 'Oppgaven er lukket' });
+    expect((early as { reported?: boolean }).reported).toBeUndefined();
+  });
+
   it('agenten får biblioteket og katalogen, ikke prosjektene, og endrer ingenting selv', async () => {
     const { store, research, agent } = await setup();
     const task = await research.startKnowledgeTask('technique');

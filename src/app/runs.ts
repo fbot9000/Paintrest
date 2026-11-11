@@ -49,6 +49,8 @@ export interface Run {
   /** Pages read in this run, with their images, as they arrive. */
   pages: LivePage[];
   error: string | null;
+  /** True when the work already showed the error elsewhere (the agent wrote it into the conversation). */
+  error_reported: boolean;
   started_at: string;
   finished_at: string | null;
 }
@@ -87,7 +89,7 @@ class RunRegistry {
     if (this.runs.get(key)?.status === 'running') return;
     const ac = new AbortController();
     this.controllers.set(key, ac);
-    this.set({ key, id, kind, label: meta?.label ?? null, href: meta?.href ?? null, status: 'running', events: [], pages: [], error: null, started_at: new Date().toISOString(), finished_at: null });
+    this.set({ key, id, kind, label: meta?.label ?? null, href: meta?.href ?? null, status: 'running', events: [], pages: [], error: null, error_reported: false, started_at: new Date().toISOString(), finished_at: null });
     const onEvent = (e: ResearchEvent) => {
       const cur = this.runs.get(key)!;
       const pages = e.type === 'open_done'
@@ -104,10 +106,11 @@ class RunRegistry {
       this.set({ ...cur, events: [...cur.events, e], pages });
     };
     work(onEvent, ac.signal)
-      .then(() => this.finish(key, 'done', null))
+      .then(() => this.finish(key, 'done', null, false))
       .catch((err: unknown) => {
         const aborted = err instanceof Error && err.name === 'AbortError';
-        this.finish(key, aborted ? 'stopped' : 'error', aborted ? null : err instanceof Error ? err.message : String(err));
+        const reported = typeof err === 'object' && err !== null && (err as { reported?: unknown }).reported === true;
+        this.finish(key, aborted ? 'stopped' : 'error', aborted ? null : err instanceof Error ? err.message : String(err), reported);
       });
   }
 
@@ -125,11 +128,11 @@ class RunRegistry {
     this.listeners.forEach((l) => l());
   }
 
-  private finish(key: string, status: Run['status'], error: string | null) {
+  private finish(key: string, status: Run['status'], error: string | null, error_reported: boolean) {
     const cur = this.runs.get(key);
     if (!cur) return;
     this.controllers.delete(key);
-    this.set({ ...cur, status, error, finished_at: new Date().toISOString() });
+    this.set({ ...cur, status, error, error_reported, finished_at: new Date().toISOString() });
   }
 }
 
