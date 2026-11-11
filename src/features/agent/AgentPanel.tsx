@@ -13,6 +13,7 @@ import type { ResearchEvent } from '../../domain/ai';
 import { runs, useRuns } from '../../app/runs';
 import type { AgentChangeSet, Id, ResearchMessage, ResearchProposal, Tables } from '../../domain/types';
 import { ownershipOf, projectSummary } from '../../domain/views';
+import { panelTask } from '../../domain/tasks';
 import { runAgentTurn } from '../../data/agent-runner';
 import { Badge, Button, Dialog, ErrorNote, Field, OwnershipFlag, ProductName, Segmented, Stepper, Swatch } from '../../ui/components';
 import './agent.css';
@@ -76,9 +77,8 @@ export function useAgentActions(projectId: Id) {
 // ---------- Read model ----------
 
 function researchView(t: Tables, project_id: Id) {
-  const task = Object.values(t.research_task)
-    .filter((x) => x.status === 'open' && t.task_scope[x.id]?.work_project_id === project_id)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  // Only the panel's own task: the workspace's image hunts and plans have their own.
+  const task = panelTask(t, project_id);
   if (!task) return null;
   const messages = Object.values(t.research_message).filter((m) => m.task_id === task.id).sort((a, b) => a.created_at.localeCompare(b.created_at));
   const proposals = Object.values(t.research_proposal).filter((p) => p.task_id === task.id).sort((a, b) => a.created_at.localeCompare(b.created_at));

@@ -8,7 +8,7 @@
 import type { NormalisedProposal } from './agent';
 import type { CatalogSubjectPayload, PaintPlanPayload, SourceRead } from './agent';
 import type { PageSeen } from './ai';
-import type { Id, PaintChoice } from './types';
+import type { Id, PaintChoice, SubjectFocus } from './types';
 
 export interface ApproveOptions {
   /** productKey → existing product id, or 'create' to create an unconfirmed product. */
@@ -32,7 +32,8 @@ export interface ApplyResult {
 export type KnowledgeTarget = 'technique' | 'recipe';
 
 export interface ResearchCommands {
-  startTask(project_id: Id): Promise<Id>;
+  /** Opens a task in the project: the panel's (no focus) or the workspace's own for one miniature and kind. */
+  startTask(project_id: Id, focus?: SubjectFocus): Promise<Id>;
   /**
    * A library task (bit 7.4): area new_knowledge, no work project, and one result type
    * (technique or recipe). The agent only drafts; the user approves into the library.

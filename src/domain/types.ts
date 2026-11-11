@@ -539,6 +539,17 @@ export interface TaskScope {
   allow_new_knowledge: boolean;
   /** PROTOTYPE: the user's paint choice for recipe research (library tasks). */
   paint_choice?: PaintChoice | null;
+  /**
+   * PROTOTYPE: set for the workspace's own task for one miniature and one kind of run
+   * (image hunt or paint plan), so those runs never share a conversation with the
+   * project's agent panel or with each other. Absent or null: the panel's task.
+   */
+  subject_focus?: SubjectFocus | null;
+}
+
+export interface SubjectFocus {
+  subject_id: Id;
+  kind: 'images' | 'plan';
 }
 
 export interface TaskResultType {
