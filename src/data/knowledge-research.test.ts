@@ -312,5 +312,26 @@ describe('research til biblioteket (bit 7.4)', () => {
     expect(imgs[0]!.source.url).toBe('https://blog.example/fire');
     expect(Object.values(t.source_link).find((l) => l.target_id === id && l.use === 'visual_reference')).toBeTruthy();
   });
+
+  it('fra bilde: lagrer bildene, tillater både oppskrifter og teknikker, og sender bildene til agenten', async () => {
+    const { store, research, agent, cmd } = await setup();
+    await expect(cmd.storeImage(new Blob(['x'], { type: 'text/plain' }))).rejects.toThrow('Velg et bilde');
+    const file = await cmd.storeImage(new Blob(['png'], { type: 'image/png' }));
+    await expect(research.startKnowledgeTask('image', {})).rejects.toThrow('1–4 bilder');
+    const task = await research.startKnowledgeTask('image', { paint_choice: 'owned', image_file_ids: [file] });
+    const t = store.getTables();
+    expect(t.task_scope[task]).toMatchObject({ image_file_ids: [file], paint_choice: 'owned' });
+    expect(t.task_result_type.filter((r) => r.task_id === task).map((r) => r.result_type).sort()).toEqual(['recipe', 'technique']);
+    expect(checkScope(t, task, { result_type: 'technique', payload: {} }).result_type).toBe('technique');
+    expect(checkScope(t, task, { result_type: 'recipe', payload: {} }).result_type).toBe('recipe');
+    const { ai, seen } = fakeAi(() => [
+      { type: 'recipe', payload: { name: 'Glødende øyne', paint_choice: 'owned', paints: ['Moot Green'] } },
+      { type: 'technique', payload: { name: 'Punktlys' } },
+    ]);
+    const r = await runAgentTurn({ store, research, agent, ai }, task, 'Gløden i øynene', () => {}, undefined,
+      { kind: 'knowledge', target: 'image', reference_images: ['data:image/jpeg;base64,AAAA'] });
+    expect(seen[0]!.focus).toMatchObject({ kind: 'knowledge', target: 'image', paints: 'owned', reference_images: ['data:image/jpeg;base64,AAAA'] });
+    expect(r.created).toEqual(['F1', 'F2']);
+  });
 });
 

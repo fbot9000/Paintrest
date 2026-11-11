@@ -26,7 +26,7 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
   const blobs = store.persistence;
   const urlCache = new Map<Id, string>();
 
-  async function storeFile(ws: Id, purpose: 'cover' | 'source_asset', file: Blob) {
+  async function storeFile(ws: Id, purpose: 'cover' | 'source_asset' | 'import', file: Blob) {
     const id = newId();
     await blobs.putBlob(id, file);
     return {
@@ -623,6 +623,13 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
       const url = URL.createObjectURL(blob);
       urlCache.set(file_id, url);
       return url;
+    },
+
+    async storeImage(file) {
+      if (!/^image\/(jpeg|png|webp|gif)/.test(file.type)) throw new CommandError('Velg et bilde (JPEG, PNG, WebP eller GIF)');
+      const sf = await storeFile(store.snapshot.workspace_id, 'import', file);
+      tx((t) => { t.stored_file[sf.id] = sf; });
+      return sf.id;
     },
 
     async resetToSampleData() {

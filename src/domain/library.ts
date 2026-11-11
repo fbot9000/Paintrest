@@ -237,7 +237,9 @@ export function catalogProducts(t: Tables): PaintProduct[] {
 
 export interface KnowledgeTaskSummary {
   task: ResearchTask;
-  target: 'technique' | 'recipe';
+  target: 'technique' | 'recipe' | 'image';
+  /** «Fra bilde»: the pictures the user posted. */
+  image_file_ids: Id[];
   /** The first line of the user's first message. */
   title: string;
   pending: number;
@@ -246,7 +248,8 @@ export interface KnowledgeTaskSummary {
   revision_of: { id: Id; name: string } | null;
 }
 
-function knowledgeTarget(t: Tables, task_id: Id): 'technique' | 'recipe' {
+function knowledgeTarget(t: Tables, task_id: Id): 'technique' | 'recipe' | 'image' {
+  if (t.task_scope[task_id]?.image_file_ids?.length) return 'image';
   return t.task_result_type.some((r) => r.task_id === task_id && r.result_type === 'recipe') ? 'recipe' : 'technique';
 }
 
@@ -275,6 +278,7 @@ export function knowledgeTasks(t: Tables): KnowledgeTaskSummary[] {
       return {
         task,
         target: knowledgeTarget(t, task.id),
+        image_file_ids: t.task_scope[task.id]?.image_file_ids ?? [],
         title: revisionOf(t, task.id) ? `Forbedring av ${revisionOf(t, task.id)!.name}` : first?.body.split('\n')[0]?.slice(0, 120) || 'Ny research',
         pending: proposals.filter((p) => p.decision === 'pending').length,
         approved: proposals.filter((p) => p.decision === 'approved').length,

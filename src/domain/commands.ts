@@ -180,6 +180,9 @@ export interface Commands extends KnowledgeCommands {
   // Filer
   getFileUrl(file_id: Id): Promise<string | null>;
 
+  /** Stores a picture the user posts (for example to research from a picture). Returns the file id. */
+  storeImage(file: Blob): Promise<Id>;
+
   // Utvikling
   resetToSampleData(): Promise<void>;
 }

@@ -224,18 +224,28 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
     },
 
     async startKnowledgeTask(target, opts = {}) {
-      if (target !== 'technique' && target !== 'recipe') throw new CommandError('Ukjent researchtype');
+      if (target !== 'technique' && target !== 'recipe' && target !== 'image') throw new CommandError('Ukjent researchtype');
       const choice = opts.paint_choice ?? null;
       if (choice && !PAINT_CHOICES.includes(choice)) throw new CommandError('Ukjent malingsvalg');
+      const images = opts.image_file_ids ?? [];
+      if (target === 'image' && (images.length < 1 || images.length > 4)) throw new CommandError('Legg ved 1–4 bilder');
       return tx((t, ws) => {
+        for (const f of images) {
+          const file = t.stored_file[f];
+          if (!file || file.deleted_at) throw new CommandError('Bildet finnes ikke');
+        }
         const id = newId();
         t.research_task[id] = { id, workspace_id: ws, status: 'open', created_at: now() };
         t.task_scope[id] = {
           task_id: id, area_kind: 'new_knowledge', work_project_id: null, allow_new_knowledge: true,
-          // Only recipes choose paints; the user picks this on the start screen.
-          ...(target === 'recipe' ? { paint_choice: choice ?? 'both' } : {}),
+          // Recipes choose paints; the user picks this on the start screen.
+          ...(target !== 'technique' ? { paint_choice: choice ?? 'both' } : {}),
+          ...(target === 'image' ? { image_file_ids: images } : {}),
         };
-        t.task_result_type.push({ task_id: id, result_type: target });
+        // From a picture: both recipes and the techniques they need.
+        for (const result_type of target === 'image' ? ['recipe', 'technique'] as const : [target]) {
+          t.task_result_type.push({ task_id: id, result_type });
+        }
         record(t, ws, 'research_task', id, 'create', { initiated_by: 'user', task_id: id });
         return id;
       });

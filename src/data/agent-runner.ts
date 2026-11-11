@@ -42,10 +42,14 @@ export async function runAgentTurn(deps: {
   if (library) {
     const rev = Object.values(t.task_revision_target).find((r) => r.task_id === task_id && r.target_type === 'technique');
     const tech = rev ? t.technique[rev.target_id] : undefined;
+    // The pictures are loaded by the caller (it can scale them); the target comes from the task.
+    const pictures = focus?.kind === 'knowledge' ? focus.reference_images ?? [] : [];
     focus = {
-      kind: 'knowledge', target: ctx.allowedTypes.includes('recipe') ? 'recipe' : 'technique',
+      kind: 'knowledge',
+      target: scope.image_file_ids?.length ? 'image' : ctx.allowedTypes.includes('recipe') ? 'recipe' : 'technique',
       revision: tech && !tech.deleted_at ? { name: tech.name } : null,
       paints: scope.paint_choice ?? null,
+      ...(pictures.length ? { reference_images: pictures } : {}),
     };
   }
   const project = scope.work_project_id ? t.project[scope.work_project_id] : undefined;

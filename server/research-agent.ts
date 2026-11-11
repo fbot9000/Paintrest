@@ -79,11 +79,14 @@ export interface PlanFocus {
 /** Library research (bit 7.4): a technique or a recipe for the user's own library. */
 export interface KnowledgeFocus {
   kind: 'knowledge';
-  target: 'technique' | 'recipe';
+  /** image = suggestions for recipes and techniques from the user's pictures. */
+  target: 'technique' | 'recipe' | 'image';
   /** Bit 7.6: improve this technique from the library instead of drafting a new one. */
   revision?: { name: string } | null;
   /** Recipes: the user's paint choice. both = two drafts (owned / best). */
   paints?: 'both' | 'owned' | 'best' | null;
+  /** «Fra bilde»: up to 4 pictures (data URLs), sent to the model with the request. */
+  reference_images?: string[];
 }
 
 export interface ImageFocus {
@@ -174,7 +177,7 @@ const MAX_LOOK = 8;
 const MAX_MESSAGES = 30;
 
 export function researchInstructions(context: unknown, resultTypes: string[], mode: WebMode, anyFocus: ImageFocus | PlanFocus | KnowledgeFocus | null = null, vision = false, imagesAttached = false, direct = false, hunt0: HuntState | null = null, imageSearch = false): string {
-  if (anyFocus?.kind === 'knowledge') return knowledgeInstructions(context, resultTypes, mode, anyFocus, imageSearch && mode !== 'none');
+  if (anyFocus?.kind === 'knowledge') return knowledgeInstructions(context, resultTypes, mode, anyFocus, imageSearch && mode !== 'none', imagesAttached ? (anyFocus.reference_images ?? []).slice(0, 4).length : 0);
   const img = imageSearch && mode !== 'none';
   const focus = anyFocus?.kind === 'images' ? anyFocus : null;
   const plan = anyFocus?.kind === 'plan' ? anyFocus : null;
@@ -284,7 +287,7 @@ ${JSON.stringify(context)}`;
  * or a recipe, compare them, and draft one guide. The agent cannot change the
  * library; the user approves the draft (global zone, docs/AVVIK.md punkt 28).
  */
-export function knowledgeInstructions(context: unknown, resultTypes: string[], mode: WebMode, focus: KnowledgeFocus, img = false): string {
+export function knowledgeInstructions(context: unknown, resultTypes: string[], mode: WebMode, focus: KnowledgeFocus, img = false, pictures = 0): string {
   const steps = MAX_KNOWLEDGE_STEPS;
   const twoDrafts = focus.target === 'recipe' && focus.paints === 'both' && !focus.revision;
   const tools = mode === 'hosted'
@@ -309,6 +312,17 @@ Hele teknikken står i "technique_to_improve", sammen med brukerens erfaringer (
 - Lag ETT technique-forslag med HELE den forbedrede teknikken (alle felt og alle steg, også de som ikke endres). Brukeren ser forskjellene før de godtas.
 - Skriv i "note" og i meldingen kort hva du endret og hvorfor, med henvisning til erfaringen.
 - Navnet skal være det samme med mindre brukeren ber om noe annet.`
+    : focus.target === 'image'
+    ? `OPPDRAG: FORSLAG FRA BILDE til brukerens bibliotek.
+${pictures ? `Brukerens melding har ${pictures} bilde(r). Se nøye på dem.` : 'Bildene kunne ikke sendes til modellen. Arbeid ut fra brukerens beskrivelse, og si tydelig fra om det i meldingen.'}
+1. Beskriv kort i meldingen hva du ser: fargesoner, effekter (for eksempel glød, rust, slitasje, OSL, metall), kontrast og stil.
+2. Lag OPPSKRIFTER (type "recipe") for de viktigste fargesonene eller effektene, høyst 3: fargerekker med malinger fra "paints" i konteksten, og steg som viser hvordan rekken brukes for å få uttrykket i bildet.
+3. Lag TEKNIKKER (type "technique") for metodene som trengs, høyst 3. Finnes teknikken allerede i "library.techniques", lag den ikke på nytt; vis til den i oppskriftens steg med "technique": "T…". Nevn nye teknikker med navn i stegene.
+4. Søk gjerne etter guider for effektene, så steg og teknikker bygger på kilder.
+Ikke dikt opp malingsnavn.
+${focus.paints === 'both'
+    ? 'MALINGSVALG (valgt av brukeren): BEGGE. Lag hver oppskrift i to versjoner: én med "paint_choice": "owned" (bare malinger brukeren har, ownership "owns") og én med "paint_choice": "best" (beste resultat, uavhengig av eierstatus). Gi dem samme navn med «– med malinger du har» og «– beste valg». Høyst 2 oppskrifter da.'
+    : paintRule(focus.paints ?? 'best', 'recipe')}`
     : focus.target === 'technique'
     ? `OPPDRAG: TEKNIKK til brukerens bibliotek.
 En teknikk er en metode (for eksempel tørrbørsting, OSL, svamp for tekstur), uavhengig av spill og av bestemte malinger. Materialene er generelle ("finporet svamp", "oljemaling"). Bestemte malingsprodukter hører hjemme i en oppskrift, ikke i teknikken.`
@@ -316,8 +330,7 @@ En teknikk er en metode (for eksempel tørrbørsting, OSL, svamp for tekstur), u
 En oppskrift er en FARGEREKKE: bestemte malinger i rekkefølge, med produsent, serie og navn. Den kan i tillegg ha STEG som viser hvordan fargerekken brukes for å få en bestemt effekt. Er det bare en fargerekke, la "steps" være tom.
 Ikke dikt opp malingsnavn.
 ${paintRule(focus.paints ?? 'best', 'recipe')}`;
-  const shape = focus.target === 'technique'
-    ? `{"type": "technique", "evidence": "documented|synthesized|unresolved", "uncertainty": [{"path": "steps", "reason": "…"}],
+  const techShape = `{"type": "technique", "evidence": "documented|synthesized|unresolved", "uncertainty": [{"path": "steps", "reason": "…"}],
  "payload": {"name": "…", "tags": ["tekstur"], "desired_result": "hva teknikken gir", "use_area": "hvor den passer",
   "materials": ["Finporet svamp", "…"], "variants": "A · …\\nB · …", "risk_note": "det man må passe på, for eksempel tørking, ventilasjon og rengjøring",
   "steps": [{"title": "Kort overskrift", "instruction": "Hva du gjør", "basis": "documented|synthesized"}],
@@ -325,8 +338,8 @@ ${paintRule(focus.paints ?? 'best', 'recipe')}`;
   "comparison": {"common": "det kildene er enige om", "variants": [{"label": "Svamp for tekstur", "description": "hvordan denne varianten gjøres og hva den gir", "sources": ["https://…"], "primary": true}]},
   "images": [{"image_url": "https://…", "page_url": "https://…", "caption": "hva bildet viser"}],
   "sources": [{"url": "https://…", "title": "…"}],
-  "sources_read": [{"url": "https://…", "language": "en", "summary": "norsk sammendrag av hva siden viser og sier", "original_excerpt": "kort utdrag"}]}}`
-    : `{"type": "recipe", "evidence": "documented|synthesized|unresolved", "uncertainty": [],
+  "sources_read": [{"url": "https://…", "language": "en", "summary": "norsk sammendrag av hva siden viser og sier", "original_excerpt": "kort utdrag"}]}}`;
+  const recipeShape = `{"type": "recipe", "evidence": "documented|synthesized|unresolved", "uncertainty": [],
  "payload": {"name": "…", "tags": ["hud"], "effect": "hva oppskriften gir, eller null for en ren fargerekke", "note": null, "paint_choice": "owned|best",
   "paints": [{"product": {"manufacturer": "Citadel", "range": "Base", "name": "Rhinox Hide", "hex": "#3d2b23"}, "role": "base|shade|layer|highlight|wash|glaze|mix|other", "note": "for eksempel tynn ut"}],
   "steps": [{"instruction": "Hva du gjør", "paints": [1, 2], "technique": "T1 eller null"}],
@@ -335,6 +348,7 @@ ${paintRule(focus.paints ?? 'best', 'recipe')}`;
   "sources": [{"url": "https://…", "title": "…"}],
   "sources_read": [{"url": "https://…", "language": "en", "summary": "norsk sammendrag", "original_excerpt": "kort utdrag"}]}}
 "paints" i et steg er nummeret i fargerekken (1 er den første). "technique" er ref-en til en teknikk i "library.techniques", eller null.`;
+  const shape = focus.target === 'technique' ? techShape : focus.target === 'recipe' ? recipeShape : `${recipeShape}\n${techShape}`;
   return `Du er researchagenten i Paintrest, et personlig arbeidsverktøy for miniatyrmaling.
 Brukeren har sett noe og vil vite hvordan det gjøres. Du finner flere kilder, sammenligner dem og lager ${twoDrafts ? 'utkast' : 'ETT samlet utkast'} som brukeren kan teste ved malebordet.
 Svar alltid på norsk bokmål.
@@ -351,7 +365,7 @@ Arbeid slik:
    I "sources_read" skal "summary" si kort hva kilden viser og hva den bidrar med (for eksempel «viser hele metoden i video», «bare produktråd»).
 4. Skill mellom det kildene viser og det du selv foreslår: "basis": "documented" bare når en åpnet kilde beskriver steget, ellers "synthesized".
 5. Eksempelbilder: velg 3–8 bilder som viser resultatet eller viktige steg, fra bildelisten på sider du har åpnet med "open"${img ? ' eller fra et bildesøk' : ''}. Legg dem i "images" med eksakt bilde-URL og sidens URL. Ikke gjett bilde-URL-er.
-6. Lag ${twoDrafts ? 'forslag etter malingsvalget (to, med ulik "paint_choice")' : 'ETT forslag'} av typen ${focus.target}. Lag ikke andre forslagstyper.
+6. ${focus.target === 'image' ? 'Lag oppskriftene og teknikkene beskrevet i oppdraget.' : `Lag ${twoDrafts ? 'forslag etter malingsvalget (to, med ulik "paint_choice")' : 'ETT forslag'} av typen ${focus.target}. Lag ikke andre forslagstyper.`}
 
 Kildekrav:
 - Oppgi kildene du bygger på i "sources" med eksakt URL. Bare sider du har søkt fram eller åpnet, blir godtatt.
@@ -370,7 +384,7 @@ ${focus.revision ? '- Teknikken finnes fra før; du lager et forslag til endring
 - Tillatte forslagstyper: ${resultTypes.join(', ') || 'ingen'}.
 - Hold teksten kort og praktisk. Steg skal kunne leses ved malebordet.
 
-Forslagsform i "proposals":
+Forslagsform${focus.target === 'image' ? 'er' : ''} i "proposals":
 ${shape}
 
 "known_sources" i konteksten er sider som allerede er funnet for biblioteket. Åpne dem direkte når de er relevante, og bruk søk til å finne NYE sider.
@@ -489,7 +503,9 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   // Library research has no use for looking at images.
   let vision = !!deps.lookAtImages && !knowledge;
   // The plan request carries the chosen pictures as input_image; dropped if the model refuses images.
-  let imagesAttached = !!plan?.reference_images.length;
+  // «Fra bilde» research carries the user's pictures the same way.
+  const pictures = (plan?.reference_images ?? knowledge?.reference_images ?? []).slice(0, 4);
+  let imagesAttached = pictures.length > 0;
   const maxSteps = focus ? MAX_IMAGE_STEPS : plan ? MAX_PLAN_STEPS : knowledge ? MAX_KNOWLEDGE_STEPS : MAX_TOOL_STEPS;
   // Image hunt: phase 1 finds the official anchor, phase 2 searches broadly and compares with it.
   const hunt: HuntState | null = focus ? { phase: 'official', anchor: null } : null;
@@ -509,11 +525,11 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   }
   const build = () => researchInstructions(input.context, input.result_types, mode, input.focus ?? null, vision, imagesAttached, !!input.direct_apply && !input.focus, hunt, imageSearchOn);
   const withImages = (): ResponsesMessage[] => {
-    if (!imagesAttached || !plan) return history;
+    if (!imagesAttached) return history;
     const last = history.at(-1)!;
     return [...history.slice(0, -1), {
       role: 'user',
-      content: [{ type: 'input_text', text: last.content }, ...plan.reference_images.slice(0, 4).map((u) => ({ type: 'input_image' as const, image_url: u }))],
+      content: [{ type: 'input_text', text: last.content }, ...pictures.map((u) => ({ type: 'input_image' as const, image_url: u }))],
     }];
   };
   let instructions = build();
@@ -528,7 +544,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   let model = input.model ?? '';
 
   if (hunt) emit({ type: 'phase', phase: 'official', text: 'Fase 1 av 2: finner det beste offisielle bildet' });
-  emit({ type: 'status', text: knowledge ? (knowledge.revision ? `Forbedring av ${knowledge.revision.name}` : knowledge.target === 'technique' ? 'Research: teknikk' : 'Research: oppskrift') : plan ? `Maleplan for ${plan.subject_name}${imagesAttached ? ` · ${plan.reference_images.length} bilder` : ''}` : focus ? `Bildejakt for ${focus.subject_name}` : mode === 'hosted' ? 'Agenten søker via UiB' : mode === 'search' ? 'Agenten planlegger søket' : 'Agenten svarer uten nettilgang' });
+  emit({ type: 'status', text: knowledge ? (knowledge.revision ? `Forbedring av ${knowledge.revision.name}` : knowledge.target === 'image' ? `Research fra bilde${imagesAttached ? ` · ${pictures.length} ${pictures.length === 1 ? 'bilde' : 'bilder'}` : ''}` : knowledge.target === 'technique' ? 'Research: teknikk' : 'Research: oppskrift') : plan ? `Maleplan for ${plan.subject_name}${imagesAttached ? ` · ${plan.reference_images.length} bilder` : ''}` : focus ? `Bildejakt for ${focus.subject_name}` : mode === 'hosted' ? 'Agenten søker via UiB' : mode === 'search' ? 'Agenten planlegger søket' : 'Agenten svarer uten nettilgang' });
 
   for (let round = 0; round < maxSteps + (hunt ? 10 : 4); round++) {
     if (deps.signal?.aborted) throw new UserError('Avbrutt');
@@ -542,8 +558,9 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
         imagesAttached = false;
         vision = false;
         instructions = build();
-        emit({ type: 'tool_error', action: 'look', target: 'bildene av miniatyren', error: `Modellen godtok ikke bilder (${e.message}). Fortsetter uten bildene.` });
-        trace.push({ action: 'look', target: 'bildene av miniatyren', result: 'Ikke støttet, fortsatte uten bilder' });
+        const what = knowledge ? 'bildene dine' : 'bildene av miniatyren';
+        emit({ type: 'tool_error', action: 'look', target: what, error: `Modellen godtok ikke bilder (${e.message}). Fortsetter uten bildene.` });
+        trace.push({ action: 'look', target: what, result: 'Ikke støttet, fortsatte uten bilder' });
         round--;
         continue;
       }

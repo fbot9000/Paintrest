@@ -7,7 +7,7 @@ import type { KnowledgeComparison, KnowledgeImage, ProductRef, RecipePayload, So
 import { catalogProducts, knowledgeTaskView, techniqueDetail } from '../../domain/library';
 import { ownershipOf } from '../../domain/views';
 import type { Id, ResearchMessage, ResearchProposal } from '../../domain/types';
-import { Badge, Button, ErrorNote, OwnershipFlag } from '../../ui/components';
+import { Badge, Button, ErrorNote, FileImage, OwnershipFlag } from '../../ui/components';
 import { LiveSteps, Message } from '../agent/AgentPanel';
 import { EvidenceBadge } from './parts';
 import { AiStatusNote, PaintChoicePicker, useAiStatus } from './ResearchPage';
@@ -38,7 +38,7 @@ export function ResearchTaskPage() {
   }
   const send = () => {
     if (!text.trim()) return;
-    startRun({ store: app.store, research: app.research, agent: app.agent, ai: app.ai }, taskId, text);
+    startRun({ store: app.store, research: app.research, agent: app.agent, ai: app.ai, cmd: app.cmd }, taskId, text);
     setText('');
   };
   const pending = view.proposals.filter((p) => p.decision === 'pending');
@@ -52,10 +52,15 @@ export function ResearchTaskPage() {
             <span className="eyebrow">
               <Link to="/bibliotek/research">Research</Link> / {view.revision_of
                 ? <Link to={`/bibliotek/teknikker/${view.revision_of.id}`}>{view.revision_of.name}</Link>
-                : view.target === 'technique' ? 'Teknikk' : 'Oppskrift'}
+                : view.target === 'image' ? 'Fra bilde' : view.target === 'technique' ? 'Teknikk' : 'Oppskrift'}
             </span>
             <h1>{view.title}</h1>
           </div>
+          {view.image_file_ids.length > 0 && (
+            <div className="research-pictures" aria-label="Bildene du la ved">
+              {view.image_file_ids.map((id) => <FileImage key={id} fileId={id} alt="Bildet du la ved" className="research-picture" />)}
+            </div>
+          )}
           <AiStatusNote status={status} />
           {/* Errors the agent wrote into the conversation are not shown twice; only those that happened before it got that far. */}
           <ErrorNote error={run?.status === 'error' && !run.error_reported ? run.error ?? 'Agenten feilet.' : null} onClose={() => runs.dismiss(taskId, 'knowledge')} />
@@ -85,7 +90,7 @@ export function ResearchTaskPage() {
             <div ref={endRef} />
           </section>
 
-          {view.target === 'recipe' && !view.revision_of && choice && (
+          {view.target !== 'technique' && !view.revision_of && choice && (
             <div className="research-choice">
               <PaintChoicePicker value={choice} onChange={(v) => app.research.setPaintChoice(taskId, v)} />
               <p className="small muted">Gjelder fra neste melding.</p>

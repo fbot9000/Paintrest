@@ -240,7 +240,10 @@ function parseFocus(v: unknown): ImageFocus | PlanFocus | KnowledgeFocus | null 
   if (f.kind === 'knowledge') {
     const rev = f.revision && typeof f.revision === 'object' ? str((f.revision as Record<string, unknown>).name).slice(0, 200) : '';
     const paints = f.paints === 'both' || f.paints === 'owned' || f.paints === 'best' ? f.paints : null;
-    return { kind: 'knowledge', target: f.target === 'recipe' ? 'recipe' : 'technique', revision: rev ? { name: rev } : null, paints };
+    const reference_images = (Array.isArray(f.reference_images) ? f.reference_images : [])
+      .filter((x): x is string => typeof x === 'string' && DATA_IMAGE.test(x) && x.length < 700_000).slice(0, 4);
+    const target = f.target === 'recipe' ? 'recipe' : f.target === 'image' ? 'image' : 'technique';
+    return { kind: 'knowledge', target, revision: rev ? { name: rev } : null, paints, ...(reference_images.length ? { reference_images } : {}) };
   }
   if (f.kind === 'plan') {
     return {

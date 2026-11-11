@@ -717,3 +717,44 @@ describe('UiB og include-valget', () => {
     expect(bodies[2]!.tools).toEqual([{ type: 'web_search' }]);
   });
 });
+
+describe('research fra bilde', () => {
+  const focus = { kind: 'knowledge' as const, target: 'image' as const, paints: 'owned' as const, reference_images: ['data:image/jpeg;base64,AAAA', 'data:image/jpeg;base64,BBBB'] };
+
+  it('sender bildene med forespørselen og ber om oppskrifter og teknikker', async () => {
+    const seen: { input: unknown; instructions?: string }[] = [];
+    const provider = { respond: async (input: unknown, opts: { instructions?: string }) => {
+      seen.push({ input, instructions: opts.instructions });
+      return { text: '{"action":"final","message":"ok","proposals":[]}', model: 'm', usage: null, searches: [], citations: [] };
+    } } as unknown as ResponsesProvider;
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider, search: null, openPage: async () => PAGE },
+      { context: {}, messages: [{ role: 'user', content: 'Gløden' }], result_types: ['recipe', 'technique'], focus }, (e) => events.push(e));
+    const last = (seen[0]!.input as { content: unknown }[]).at(-1)!.content as { type: string }[];
+    expect(last.map((c) => c.type)).toEqual(['input_text', 'input_image', 'input_image']);
+    expect(seen[0]!.instructions).toContain('FORSLAG FRA BILDE');
+    expect(seen[0]!.instructions).toContain('2 bilde(r)');
+    expect(seen[0]!.instructions).toContain('BARE MALINGER BRUKEREN HAR');
+    expect(seen[0]!.instructions).toContain('{"type": "technique"');
+    expect(seen[0]!.instructions).toContain('{"type": "recipe"');
+    expect(events[0]).toEqual({ type: 'status', text: 'Research fra bilde · 2 bilder' });
+  });
+
+  it('fortsetter uten bildene og sier fra hvis modellen avviser dem', async () => {
+    const { UserError } = await import('./credential-store.ts');
+    const seen: string[] = [];
+    let i = 0;
+    const provider = { respond: async (_input: unknown, opts: { instructions?: string }) => {
+      i++;
+      seen.push(opts.instructions ?? '');
+      if (i === 1) throw new UserError('Tjenesten svarte med feil 400: image not supported', 502);
+      return { text: '{"action":"final","message":"ok","proposals":[]}', model: 'm', usage: null, searches: [], citations: [] };
+    } } as unknown as ResponsesProvider;
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider, search: null, openPage: async () => PAGE },
+      { context: {}, messages: [{ role: 'user', content: 'Gløden' }], result_types: ['recipe', 'technique'], focus }, (e) => events.push(e));
+    expect(events.some((e) => e.type === 'tool_error' && e.target === 'bildene dine')).toBe(true);
+    expect(seen[1]).toContain('Bildene kunne ikke sendes til modellen');
+  });
+});
+

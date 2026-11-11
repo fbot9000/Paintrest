@@ -29,7 +29,8 @@ export interface ApplyResult {
   kept_as_proposal: { id: Id; reason: string }[];
 }
 
-export type KnowledgeTarget = 'technique' | 'recipe';
+/** «image»: suggestions for recipes and techniques from pictures the user posts. */
+export type KnowledgeTarget = 'technique' | 'recipe' | 'image';
 
 export interface ResearchCommands {
   /** Opens a task in the project: the panel's (no focus) or the workspace's own for one miniature and kind. */
@@ -38,7 +39,7 @@ export interface ResearchCommands {
    * A library task (bit 7.4): area new_knowledge, no work project, and one result type
    * (technique or recipe). The agent only drafts; the user approves into the library.
    */
-  startKnowledgeTask(target: KnowledgeTarget, opts?: { paint_choice?: PaintChoice }): Promise<Id>;
+  startKnowledgeTask(target: KnowledgeTarget, opts?: { paint_choice?: PaintChoice; image_file_ids?: Id[] }): Promise<Id>;
   /** The user changes which paints a recipe task may use; applies from the next turn. */
   setPaintChoice(task_id: Id, choice: PaintChoice): Promise<void>;
   /**

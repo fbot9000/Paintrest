@@ -259,6 +259,24 @@
 .draft-images li.on .draft-img { border-color: var(--pine); }
 .draft-images a { color: var(--fore); }
 
+/* Research fra bilde */
+.picture-picker { display: grid; gap: 8px; }
+.picture-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.picture-thumb { position: relative; margin: 0; width: 120px; height: 120px; }
+.picture-thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: var(--r-md); border: 1px solid var(--line); }
+.picture-thumb button {
+  position: absolute; top: 4px; right: 4px; width: 32px; height: 32px; border: 0; border-radius: 50%;
+  background: rgb(20 39 34 / .75); color: #fff; cursor: pointer; font-size: 18px;
+}
+.picture-add {
+  display: grid; place-items: center; width: 120px; height: 120px; border: 1px dashed var(--muted); border-radius: var(--r-md);
+  cursor: pointer; color: var(--fore); font-weight: 500; text-align: center; padding: 8px; background: var(--paper);
+}
+.picture-add:hover { border-color: var(--fore); }
+.picture-add:focus-within { outline: 2px solid var(--fore); outline-offset: 2px; }
+.research-pictures { display: flex; gap: 10px; flex-wrap: wrap; }
+.research-picture { width: 140px; height: 140px; object-fit: cover; border-radius: var(--r-md); border: 1px solid var(--line); }
+
 /* Oppskrift */
 .recipe-strip { display: flex; gap: 3px; flex-wrap: wrap; }
 .recipe-strip-lg .swatch { border-radius: 6px; }

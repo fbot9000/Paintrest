@@ -539,6 +539,8 @@ export interface TaskScope {
   allow_new_knowledge: boolean;
   /** PROTOTYPE: the user's paint choice for recipe research (library tasks). */
   paint_choice?: PaintChoice | null;
+  /** PROTOTYPE: «Fra bilde» research: the pictures the user posted (stored_file ids, 1–4). */
+  image_file_ids?: Id[];
   /**
    * PROTOTYPE: set for the workspace's own task for one miniature and one kind of run
    * (image hunt or paint plan), so those runs never share a conversation with the

@@ -58,7 +58,9 @@ export interface AgentTurnInput {
         user_images?: { image_url: string; page_url: string; title: string }[] }
     | { kind: 'plan'; subject_ref: string; subject_name: string; game: string; reference_images: string[]; revision: boolean; paints?: 'owned' | 'best' | null }
     /** Library research (bit 7.4): a technique or recipe for the user's own library. */
-    | { kind: 'knowledge'; target: 'technique' | 'recipe'; revision?: { name: string } | null; paints?: 'both' | 'owned' | 'best' | null }
+    | { kind: 'knowledge'; target: 'technique' | 'recipe' | 'image'; revision?: { name: string } | null; paints?: 'both' | 'owned' | 'best' | null;
+        /** «Fra bilde»: the user's pictures as data URLs, sent to the model with the request. */
+        reference_images?: string[] }
     | null;
 }
 
