@@ -135,6 +135,15 @@ export interface TechniqueStepPayload {
   basis: StepBasis | null;
 }
 
+/**
+ * How the sources compare (bit 7.5, skisse 03): what they agree on, and the
+ * different ways of doing it. One variant is the starting point.
+ */
+export interface KnowledgeComparison {
+  common: string | null;
+  variants: { label: string; description: string; sources: string[]; primary: boolean }[];
+}
+
 /** A technique draft for the library. Approved by the user into a new technique (status draft). */
 export interface TechniquePayload {
   name: string;
@@ -148,6 +157,7 @@ export interface TechniquePayload {
   note: string | null;
   sources: SourceRef[];
   sources_read?: SourceRead[];
+  comparison?: KnowledgeComparison | null;
 }
 
 export interface RecipePaintPayload {
@@ -174,6 +184,18 @@ export interface RecipePayload {
   steps: RecipeStepPayload[];
   sources: SourceRef[];
   sources_read?: SourceRead[];
+  comparison?: KnowledgeComparison | null;
+}
+
+/**
+ * The variants as text for the library row, starting point first.
+ * `primary` (index in comparison.variants) overrides the agent's choice.
+ */
+export function variantsText(c: KnowledgeComparison | null | undefined, primary?: number): string | null {
+  if (!c?.variants.length) return null;
+  const start = primary !== undefined && c.variants[primary] ? primary : Math.max(0, c.variants.findIndex((v) => v.primary));
+  const ordered = [c.variants[start]!, ...c.variants.filter((_, i) => i !== start)];
+  return ordered.map((v, i) => `${String.fromCharCode(65 + i)} · ${v.label}${i === 0 ? ' (utgangspunkt)' : ''}: ${v.description}`).join('\n');
 }
 
 /** The paints in a recipe draft, for matching against the catalogue. */
@@ -234,6 +256,7 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
     const list = (v: unknown, max = 40) => arr(v).map((x) => str(x).trim()).filter(Boolean).slice(0, max);
     const sources = sourceRefs(o.sources);
     const read = sourcesRead(o.sources_read);
+    const comparison = knowledgeComparison(o.comparison, sources);
     if (raw.type === 'technique') {
       const steps = arr(o.steps).flatMap((x): TechniqueStepPayload[] => {
         const st = obj(x);
@@ -245,7 +268,7 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
       const payload: TechniquePayload = {
         name: name.slice(0, 200), tags: list(o.tags, 12), desired_result: text(o.desired_result), use_area: text(o.use_area),
         materials: list(o.materials), variants: text(o.variants), risk_note: text(o.risk_note), steps, note: text(o.note),
-        sources, ...(read.length ? { sources_read: read } : {}),
+        sources, ...(read.length ? { sources_read: read } : {}), ...(comparison ? { comparison } : {}),
       };
       return { ok: true, value: { ...common, result_type: 'technique', payload } };
     }
@@ -267,7 +290,7 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
     }).slice(0, 40);
     const payload: RecipePayload = {
       name: name.slice(0, 200), tags: list(o.tags, 12), effect: text(o.effect), note: text(o.note), paints, steps,
-      sources, ...(read.length ? { sources_read: read } : {}),
+      sources, ...(read.length ? { sources_read: read } : {}), ...(comparison ? { comparison } : {}),
     };
     return { ok: true, value: { ...common, result_type: 'recipe', payload } };
   }
@@ -700,6 +723,26 @@ function sourcesRead(v: unknown): SourceRead[] {
     return [{ url, title: str(so.title).trim() || url, site: str(so.site).trim() || hostOf(url), language: str(so.language).trim() || null,
       summary: str(so.summary).trim() || null, original_excerpt: str(so.original_excerpt).trim() || null }];
   });
+}
+
+/** Variants may only point to sources in the draft. Exactly one variant is the starting point. */
+function knowledgeComparison(v: unknown, sources: SourceRef[]): KnowledgeComparison | null {
+  const o = obj(v);
+  const key = (u: string) => u.trim().replace(/\/+$/, '').replace(/^https?:\/\/(www\.)?/, '').toLowerCase();
+  const known = new Map(sources.map((s) => [key(s.url), s.url]));
+  const variants = arr(o.variants).flatMap((x) => {
+    const vo = obj(x);
+    const label = str(vo.label).trim().slice(0, 120);
+    const description = str(vo.description).trim().slice(0, 1000);
+    if (!label && !description) return [];
+    const urls = [...new Set(arr(vo.sources).map((u) => known.get(key(str(u)))).filter((u): u is string => !!u))];
+    return [{ label: label || description.slice(0, 40), description, sources: urls, primary: vo.primary === true }];
+  }).slice(0, 6);
+  const common = str(o.common).trim().slice(0, 1500) || null;
+  if (!variants.length && !common) return null;
+  const first = Math.max(0, variants.findIndex((x) => x.primary));
+  variants.forEach((x, i) => { x.primary = i === first; });
+  return { common, variants };
 }
 
 function sourceRefs(v: unknown): SourceRef[] {

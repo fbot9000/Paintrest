@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildAgentContext, normaliseProposal } from '../domain/agent';
+import { buildAgentContext, normaliseProposal, variantsText } from '../domain/agent';
 import type { AiGateway, ResearchEvent } from '../domain/ai';
 import { runAgentTurn } from './agent-runner';
 import { createLocalCommands } from './local-commands';
@@ -167,4 +167,41 @@ describe('research til biblioteket (bit 7.4)', () => {
     expect(Object.keys(ctx.techniqueRefs ?? {})).toEqual(['T1']);
     expect(ctx.allowedTypes).toEqual(['recipe']);
   });
+
+  it('sammenligningen: varianter peker bare på kilder i utkastet, og nøyaktig én er utgangspunkt', () => {
+    const n = normaliseProposal({ type: 'technique', payload: {
+      name: 'Svamp', sources: [{ url: 'https://a.example/guide', title: 'A' }, { url: 'https://b.example/x', title: 'B' }],
+      comparison: { common: 'Lite maling', variants: [
+        { label: 'Tekstur', description: 'Uregelmessige pass', sources: ['https://www.a.example/guide/', 'https://ukjent.example'], primary: true },
+        { label: 'Overganger', description: 'Gradvis', sources: ['https://b.example/x'], primary: true },
+      ] },
+    } }, {});
+    expect(n.ok).toBe(true);
+    if (!n.ok) return;
+    const c = (n.value.payload as { comparison: { variants: { sources: string[]; primary: boolean }[] } }).comparison;
+    expect(c.variants.map((v) => v.sources)).toEqual([['https://a.example/guide'], ['https://b.example/x']]);
+    expect(c.variants.map((v) => v.primary)).toEqual([true, false]);
+  });
+
+  it('variantene lagres som tekst, med brukerens valg av utgangspunkt først', async () => {
+    const { store, research, agent } = await setup();
+    const task = await research.startKnowledgeTask('technique');
+    const { ai } = fakeAi(() => [{ ...TECHNIQUE, payload: { ...TECHNIQUE.payload, variants: 'agentens fritekst', comparison: {
+      common: 'Tynn maling', variants: [
+        { label: 'Lys kant', description: 'Bare øverste kant', sources: ['https://example.com/edge'], primary: true },
+        { label: 'Dobbel kant', description: 'To toner', sources: [] },
+      ] } } }], [{ url: 'https://example.com/edge', title: 'Edge guide' }]);
+    await runAgentTurn({ store, research, agent, ai }, task, 'Kantlys');
+    const prop = Object.values(store.getTables().research_proposal).find((p) => p.task_id === task)!;
+    await research.approveProposal(prop.id, { primary_variant: 1 });
+    const t = store.getTables();
+    expect(t.technique[t.research_proposal[prop.id]!.applied_target_id!]!.variants)
+      .toBe('A · Dobbel kant (utgangspunkt): To toner\nB · Lys kant: Bare øverste kant');
+  });
+
+  it('uten sammenligning beholdes agentens fritekst', () => {
+    expect(variantsText(null)).toBeNull();
+    expect(variantsText({ common: 'x', variants: [] })).toBeNull();
+  });
 });
+

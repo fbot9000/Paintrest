@@ -335,4 +335,26 @@ describe('research til biblioteket (bit 7.4)', () => {
     expect(p.payload.sources_read[0]!.summary).toBe('Viser rust');
     expect(final.pages?.map((x) => x.url)).toEqual(['https://example.com/gallery']);
   });
+
+  it('ber om sammenligning, og varianter peker bare på kilder som ble godtatt', async () => {
+    const events = [] as ResearchEvent[];
+    let instructions = '';
+    const replies = [
+      '{"action":"open","url":"https://example.com/gallery","why":"guide"}',
+      '{"action":"final","message":"ok","proposals":[{"type":"technique","payload":{"name":"Svamp","sources":[{"url":"https://example.com/gallery/","title":"G"},{"url":"https://ukjent.example","title":"U"}],"comparison":{"variants":[{"label":"A","description":"a","sources":["https://example.com/gallery/","https://ukjent.example"],"primary":true}]}}}]}',
+    ];
+    let i = 0;
+    const provider = { respond: async (_input: unknown, opts: { instructions?: string }) => {
+      instructions = opts.instructions ?? '';
+      return { text: replies[i++] ?? '{"action":"final","message":"slutt","proposals":[]}', model: 'm', usage: null, searches: [], citations: [] };
+    } } as unknown as ResponsesProvider;
+    await runResearch({ provider, search: fakeSearch, openPage: async () => PAGE },
+      { context: {}, messages: [{ role: 'user', content: 'Svamp' }], result_types: ['technique'], focus }, (e) => events.push(e));
+    expect(instructions).toContain('"comparison"');
+    const final = events.find((e) => e.type === 'final') as Extract<ResearchEvent, { type: 'final' }>;
+    const p = final.proposals[0] as { payload: { sources: { url: string }[]; comparison: { variants: { sources: string[] }[] } } };
+    expect(p.payload.sources.map((x) => x.url)).toEqual(['https://example.com/gallery']);
+    expect(p.payload.comparison.variants[0]!.sources).toEqual(['https://example.com/gallery']);
+  });
 });
+

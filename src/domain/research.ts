@@ -19,6 +19,8 @@ export interface ApproveOptions {
   set_cover?: boolean;
   /** reference_selection: this image becomes the miniature's illustration (replaces the current one). */
   cover_image_url?: string;
+  /** technique/recipe (bit 7.5): the variant the user wants to test first (index in comparison.variants). */
+  primary_variant?: number;
 }
 
 export interface ApplyResult {

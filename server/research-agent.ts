@@ -242,12 +242,14 @@ Foretrekk malinger brukeren eier (ownership "owns" i "paints"). Ikke dikt opp ma
   "materials": ["Finporet svamp", "…"], "variants": "A · …\\nB · …", "risk_note": "det man må passe på, for eksempel tørking, ventilasjon og rengjøring",
   "steps": [{"title": "Kort overskrift", "instruction": "Hva du gjør", "basis": "documented|synthesized"}],
   "note": "kort om hva kildene var uenige om",
+  "comparison": {"common": "det kildene er enige om", "variants": [{"label": "Svamp for tekstur", "description": "hvordan denne varianten gjøres og hva den gir", "sources": ["https://…"], "primary": true}]},
   "sources": [{"url": "https://…", "title": "…"}],
   "sources_read": [{"url": "https://…", "language": "en", "summary": "norsk sammendrag av hva siden viser og sier", "original_excerpt": "kort utdrag"}]}}`
     : `{"type": "recipe", "evidence": "documented|synthesized|unresolved", "uncertainty": [],
  "payload": {"name": "…", "tags": ["hud"], "effect": "hva oppskriften gir, eller null for en ren fargerekke", "note": null,
   "paints": [{"product": {"manufacturer": "Citadel", "range": "Base", "name": "Rhinox Hide", "hex": "#3d2b23"}, "role": "base|shade|layer|highlight|wash|glaze|mix|other", "note": "for eksempel tynn ut"}],
   "steps": [{"instruction": "Hva du gjør", "paints": [1, 2], "technique": "T1 eller null"}],
+  "comparison": {"common": "det kildene er enige om", "variants": [{"label": "…", "description": "…", "sources": ["https://…"], "primary": true}]},
   "sources": [{"url": "https://…", "title": "…"}],
   "sources_read": [{"url": "https://…", "language": "en", "summary": "norsk sammendrag", "original_excerpt": "kort utdrag"}]}}
 "paints" i et steg er nummeret i fargerekken (1 er den første). "technique" er ref-en til en teknikk i "library.techniques", eller null.`;
@@ -263,7 +265,8 @@ ${mode !== 'none' ? `Du har høyst ${steps} verktøysteg per svar.
 Arbeid slik:
 1. Har brukeren gitt en lenke, åpne den først. Skriv i meldingen hva du faktisk fikk lest. En videoside gir ofte bare tittel og beskrivelse, ikke selve videoen; si fra om det.
 2. Finn flere uavhengige kilder: maleblogger, guider, forum (Reddit, Discord-referater), produsentenes egne artikler og produktark, og videoer med beskrivelse. Søk gjerne på engelsk. Åpne 3–6 sider.
-3. Sammenlign: hva gjør kildene likt, og hvor er de uenige? Behold de felles stegene i guiden, og legg forskjellene i "variants".
+3. Sammenlign: hva gjør kildene likt, og hvor er de uenige? Skriv det felles i "comparison.common", og hver ulik fremgangsmåte som en variant i "comparison.variants" med URL-ene til kildene som viser den. Merk én variant som utgangspunkt ("primary": true). Stegene i guiden følger utgangspunktet.
+   I "sources_read" skal "summary" si kort hva kilden viser og hva den bidrar med (for eksempel «viser hele metoden i video», «bare produktråd»).
 4. Skill mellom det kildene viser og det du selv foreslår: "basis": "documented" bare når en åpnet kilde beskriver steget, ellers "synthesized".
 5. Lag ETT forslag av typen ${focus.target}. Lag ikke andre forslagstyper.
 
@@ -544,6 +547,17 @@ export function verifyProposals(proposals: unknown[], opened: Map<string, PageRe
       }
     } else if (p.evidence === 'documented' && p.type !== 'reference_selection') {
       p.evidence = 'synthesized';
+    }
+
+    if ((p.type === 'technique' || p.type === 'recipe') && payload.comparison && typeof payload.comparison === 'object') {
+      // Variants may only point to the sources that were kept, by their canonical URL.
+      const kept = new Map(((payload.sources as { url: string }[] | undefined) ?? []).map((x) => [normUrl(x.url), x.url]));
+      const c = payload.comparison as { variants?: { sources?: unknown }[] };
+      for (const v of Array.isArray(c.variants) ? c.variants : []) {
+        if (!v || typeof v !== 'object') continue;
+        const list = Array.isArray(v.sources) ? v.sources : [];
+        v.sources = list.flatMap((u) => (typeof u === 'string' && kept.has(normUrl(u)) ? [kept.get(normUrl(u))!] : []));
+      }
     }
 
     if ((p.type === 'technique' || p.type === 'recipe') && Array.isArray(payload.steps)) {

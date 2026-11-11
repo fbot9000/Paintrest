@@ -1,6 +1,6 @@
 import { CommandError } from '../domain/commands';
 import { newId, now } from '../domain/ids';
-import { describeOps, matchProduct, planProductRefs, productKey, proposalTitle, recipeProductRefs } from '../domain/agent';
+import { describeOps, matchProduct, planProductRefs, productKey, proposalTitle, recipeProductRefs, variantsText } from '../domain/agent';
 import type { CatalogChangePayload, CatalogSubjectPayload, NormalisedProposal, PaintPlanPayload, PaletteItem, ProductRef, ProposalKind, RecipePayload, ReferenceSelectionPayload, SourceRead, SourceRef, SubjectFields, TechniquePayload } from '../domain/agent';
 import type { AgentCommands, ApproveOptions, ProposalWrite, ResearchCommands } from '../domain/research';
 import type { ChangeAction, Id, MiniatureSubject, ResearchProposal, ResultType, RowPatch, Tables, Uncertainty } from '../domain/types';
@@ -439,8 +439,8 @@ function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions, files
     // The user approves the draft into the library; it starts as «utkast» and is edited freely after.
     const userWho: Who = { ...who, initiated_by: 'user' };
     p.applied_target_id = kind === 'technique'
-      ? approveTechnique(t, ws, p, userWho)
-      : approveRecipe(t, ws, p, opts.product_choices ?? {}, userWho);
+      ? approveTechnique(t, ws, p, opts.primary_variant, userWho)
+      : approveRecipe(t, ws, p, opts.product_choices ?? {}, opts.primary_variant, userWho);
     p.decision = 'approved';
     p.updated_at = now();
     p.last_error = null;
@@ -648,14 +648,16 @@ function linkMethodSources(t: Tables, ws: Id, target_type: 'technique' | 'recipe
   addSourceLayers(t, (read ?? []).filter((r) => linked.has(r.url) && writable.has(r.url)));
 }
 
-function approveTechnique(t: Tables, ws: Id, p: ResearchProposal, who: Who): Id {
+function approveTechnique(t: Tables, ws: Id, p: ResearchProposal, primary: number | undefined, who: Who): Id {
   const x = p.payload as TechniquePayload;
+  // The compared variants, with the user's choice first, replace the agent's free text.
+  const variants = variantsText(x.comparison, primary) ?? x.variants;
   const id = newId();
   const ts = now();
   const taken = new Set(Object.values(t.technique).filter((r) => !r.deleted_at).map((r) => r.name.toLowerCase()));
   t.technique[id] = {
     id, workspace_id: ws, name: taken.has(x.name.toLowerCase()) ? `${x.name} (ny)` : x.name, tags: x.tags, status: 'draft',
-    desired_result: x.desired_result, use_area: x.use_area, materials: x.materials, variants: x.variants, risk_note: x.risk_note,
+    desired_result: x.desired_result, use_area: x.use_area, materials: x.materials, variants, risk_note: x.risk_note,
     evidence: p.evidence, uncertainty: p.uncertainty, created_at: ts, updated_at: ts, deleted_at: null,
   };
   x.steps.forEach((st, position) => {
@@ -667,15 +669,18 @@ function approveTechnique(t: Tables, ws: Id, p: ResearchProposal, who: Who): Id 
   return id;
 }
 
-function approveRecipe(t: Tables, ws: Id, p: ResearchProposal, choices: Record<string, Id | 'create'>, who: Who): Id {
+function approveRecipe(t: Tables, ws: Id, p: ResearchProposal, choices: Record<string, Id | 'create'>, primary: number | undefined, who: Who): Id {
   const x = p.payload as RecipePayload;
+  // A recipe has no variants field: the compared variants go into the note.
+  const variants = variantsText(x.comparison, primary);
+  const note = [x.note, variants ? `Varianter:\n${variants}` : null].filter(Boolean).join('\n\n') || null;
   const products = resolveProducts(t, ws, recipeProductRefs(x), choices, who);
   const id = newId();
   const ts = now();
   const taken = new Set(Object.values(t.recipe).filter((r) => !r.deleted_at).map((r) => r.name.toLowerCase()));
   t.recipe[id] = {
     id, workspace_id: ws, name: taken.has(x.name.toLowerCase()) ? `${x.name} (ny)` : x.name, tags: x.tags, status: 'draft',
-    effect: x.effect, note: x.note, evidence: p.evidence, uncertainty: p.uncertainty, created_at: ts, updated_at: ts, deleted_at: null,
+    effect: x.effect, note, evidence: p.evidence, uncertainty: p.uncertainty, created_at: ts, updated_at: ts, deleted_at: null,
   };
   const paintIds = x.paints.map((pe, position) => {
     const pid = newId();

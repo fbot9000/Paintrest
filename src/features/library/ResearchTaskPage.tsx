@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { useApp, useView } from '../../app/context';
 import { matchProduct, productKey, recipeProductRefs } from '../../domain/agent';
-import type { ProductRef, RecipePayload, SourceRef, TechniquePayload } from '../../domain/agent';
+import type { KnowledgeComparison, ProductRef, RecipePayload, SourceRead, SourceRef, TechniquePayload } from '../../domain/agent';
 import { catalogProducts, knowledgeTaskView } from '../../domain/library';
-import type { Id, ResearchProposal } from '../../domain/types';
+import type { Id, ResearchMessage, ResearchProposal } from '../../domain/types';
 import { Badge, Button, ErrorNote } from '../../ui/components';
 import { LiveSteps, Message } from '../agent/AgentPanel';
 import { EvidenceBadge } from './parts';
@@ -25,7 +26,8 @@ export function ResearchTaskPage() {
   const [text, setText] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ block: 'nearest' }); }, [view?.messages.length, run.events.length]);
+  // Follow the agent's progress while it works; otherwise leave the scroll alone so the draft stays in view.
+  useEffect(() => { if (run.running) endRef.current?.scrollIntoView({ block: 'nearest' }); }, [run.running, run.events.length]);
 
   if (!view) {
     return <main className="page"><h1>Fant ikke researchen</h1><p><Link to="/bibliotek/research">Til research</Link></p></main>;
@@ -47,7 +49,7 @@ export function ResearchTaskPage() {
       <AiStatusNote status={status} />
       <ErrorNote error={run.error} onClose={() => clearRunError(taskId)} />
 
-      {pending.map((p) => <DraftCard key={p.id} p={p} />)}
+      {pending.map((p) => <DraftCard key={p.id} p={p} messages={view.messages} />)}
 
       <section className="research-chat" aria-label="Samtale med agenten">
         {view.messages.map((m) => <Message key={m.id} m={m} />)}
@@ -86,8 +88,11 @@ function DoneLine({ p }: { p: ResearchProposal }) {
   );
 }
 
-function DraftCard({ p }: { p: ResearchProposal }) {
+function DraftCard({ p, messages }: { p: ResearchProposal; messages: ResearchMessage[] }) {
   const app = useApp();
+  const payload = p.payload as TechniquePayload | RecipePayload;
+  const comparison = payload.comparison ?? null;
+  const [primary, setPrimary] = useState(() => Math.max(0, comparison?.variants.findIndex((v) => v.primary) ?? 0));
   const [error, setError] = useState<string | null>(p.last_error ?? null);
   const [busy, setBusy] = useState(false);
   const [choices, setChoices] = useState<Record<string, Id | 'create'>>({});
@@ -103,17 +108,24 @@ function DraftCard({ p }: { p: ResearchProposal }) {
   };
   const approve = () => act(() => app.research.approveProposal(p.id, {
     product_choices: Object.fromEntries(missing.map((r) => [productKey(r), choices[productKey(r)] ?? 'create'])),
+    ...(comparison?.variants.length ? { primary_variant: primary } : {}),
   }));
 
   return (
-    <article className="card tech-section draft-card">
+    <article className="card draft-card">
+      <SourceInspector sources={payload.sources} read={payload.sources_read ?? []} messages={messages} />
+      <div className="draft-main tech-section">
       <div className="tech-head-row">
         <span className="eyebrow">Utkast fra agenten · {p.result_type === 'technique' ? 'teknikk' : 'oppskrift'}</span>
-        <EvidenceBadge evidence={p.evidence} />
+        <div className="tech-badges">
+          <Badge>{payload.sources.length} {payload.sources.length === 1 ? 'kilde' : 'kilder'}</Badge>
+          {comparison && comparison.variants.length > 0 && <Badge tone="dark">{comparison.variants.length} {comparison.variants.length === 1 ? 'variant' : 'varianter'}</Badge>}
+          <EvidenceBadge evidence={p.evidence} />
+        </div>
       </div>
       {p.result_type === 'technique'
-        ? <TechniqueDraft x={p.payload as TechniquePayload} />
-        : <RecipeDraft x={p.payload as RecipePayload} />}
+        ? <TechniqueDraft x={p.payload as TechniquePayload} comparison={comparison && <Comparison c={comparison} sources={payload.sources} primary={primary} onPick={setPrimary} />} />
+        : <RecipeDraft x={p.payload as RecipePayload} comparison={comparison && <Comparison c={comparison} sources={payload.sources} primary={primary} onPick={setPrimary} />} />}
 
       {p.uncertainty.length > 0 && (
         <div className="tech-uncertain" role="note">
@@ -136,6 +148,7 @@ function DraftCard({ p }: { p: ResearchProposal }) {
         <Button variant="primary" disabled={busy} onClick={approve}>Lagre i biblioteket</Button>
       </div>
       <p className="small muted draft-hint">Lagres som utkast. Du kan endre alt etterpå.</p>
+      </div>
     </article>
   );
 }
@@ -154,12 +167,13 @@ function MissingPaint({ r, products, value, onChange }:
   );
 }
 
-function TechniqueDraft({ x }: { x: TechniquePayload }) {
+function TechniqueDraft({ x, comparison }: { x: TechniquePayload; comparison: ReactNode }) {
   return (
     <>
       <h2>{x.name}</h2>
       {x.desired_result && <p className="tech-lead">{x.desired_result}</p>}
       {x.tags.length > 0 && <div className="tech-badges">{x.tags.map((t) => <Badge key={t}>{t}</Badge>)}</div>}
+      {comparison}
       {x.use_area && <div className="article-block"><span className="eyebrow">Bruksområde</span><p>{x.use_area}</p></div>}
       {x.materials.length > 0 && (
         <div className="article-block">
@@ -185,21 +199,21 @@ function TechniqueDraft({ x }: { x: TechniquePayload }) {
           </ol>
         </div>
       )}
-      {x.variants && <div className="article-block"><span className="eyebrow">Varianter</span><p className="pre-line">{x.variants}</p></div>}
+      {x.variants && !x.comparison?.variants.length && <div className="article-block"><span className="eyebrow">Varianter</span><p className="pre-line">{x.variants}</p></div>}
       {x.risk_note && <div className="tech-risk-note"><span className="eyebrow">Forbehold</span><p className="pre-line">{x.risk_note}</p></div>}
       {x.note && <p className="small muted">{x.note}</p>}
-      <Sources sources={x.sources} />
     </>
   );
 }
 
-function RecipeDraft({ x }: { x: RecipePayload }) {
+function RecipeDraft({ x, comparison }: { x: RecipePayload; comparison: ReactNode }) {
   const techniques = useView((t) => Object.fromEntries(Object.values(t.technique).map((tq) => [tq.id, tq.name])));
   return (
     <>
       <h2>{x.name}</h2>
       {x.effect && <p className="tech-lead">{x.effect}</p>}
       {x.tags.length > 0 && <div className="tech-badges">{x.tags.map((t) => <Badge key={t}>{t}</Badge>)}</div>}
+      {comparison}
       <div className="article-block">
         <span className="eyebrow">Fargerekke</span>
         <ol className="draft-paints">
@@ -231,24 +245,96 @@ function RecipeDraft({ x }: { x: RecipePayload }) {
         </div>
       )}
       {x.note && <p className="small muted">{x.note}</p>}
-      <Sources sources={x.sources} />
     </>
   );
 }
 
-function Sources({ sources }: { sources: SourceRef[] }) {
-  if (!sources.length) return <p className="small muted">Ingen kilder oppgitt.</p>;
+function hostOf(u: string): string {
+  try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; }
+}
+
+/** Links in the user's own messages, so a link the agent could not read is still shown. */
+function userLinks(messages: ResearchMessage[]): string[] {
+  const urls = messages.filter((m) => m.role === 'user').flatMap((m) => m.body.match(/https?:\/\/[^\s)>\]]+/g) ?? []);
+  return [...new Set(urls.map((u) => u.replace(/[.,;:]+$/, '')))];
+}
+
+/** What happened when the agent tried to open a page, from the trace on its replies. */
+function openResult(messages: ResearchMessage[], url: string): string | null {
+  const key = (u: string) => u.replace(/\/+$/, '').replace(/^https?:\/\/(www\.)?/, '').toLowerCase();
+  const steps = messages.flatMap((m) => m.trace ?? []).filter((t) => t.action === 'open' && key(t.target) === key(url));
+  return steps.at(-1)?.result ?? null;
+}
+
+/**
+ * Skisse 03 «Kildeinspektør»: what each source contributed, and whether the
+ * agent actually read it. Sources only seen in search results are marked.
+ */
+function SourceInspector({ sources, read, messages }: { sources: SourceRef[]; read: SourceRead[]; messages: ResearchMessage[] }) {
+  const key = (u: string) => u.replace(/\/+$/, '').replace(/^https?:\/\/(www\.)?/, '').toLowerCase();
+  const summary = new Map(read.map((r) => [key(r.url), r.summary]));
+  const inDraft = new Set(sources.map((s) => key(s.url)));
+  const missingUser = userLinks(messages).filter((u) => !inDraft.has(key(u)));
   return (
-    <div className="article-block">
+    <aside className="source-inspector" aria-label="Kilder">
       <span className="eyebrow">Kilder</span>
-      <ul className="tech-sources">
-        {sources.map((s) => (
-          <li key={s.url}>
-            <a href={s.url} target="_blank" rel="noreferrer">{s.title} ↗</a>
-            {!s.opened && <span className="small muted"> · bare sett i søk</span>}
-          </li>
-        ))}
-      </ul>
+      <h3>Hva er dokumentert?</h3>
+      {missingUser.map((u) => {
+        const r = openResult(messages, u);
+        const failed = r?.startsWith('Feil');
+        return (
+          <div key={u} className="source-card source-card-warn">
+            <span className="eyebrow">Din kilde</span>
+            <strong>{hostOf(u)}</strong>
+            <Badge tone="warn">{failed ? 'Kunne ikke leses' : r ? 'Lest, men ikke brukt' : 'Ikke åpnet av agenten'}</Badge>
+            {failed && <p className="small">{r!.replace(/^Feil:\s*/, '')}</p>}
+            <a className="small" href={u} target="_blank" rel="noreferrer">Åpne ↗</a>
+          </div>
+        );
+      })}
+      {sources.length === 0 && missingUser.length === 0 && <p className="small muted">Agenten oppga ingen kilder. Utkastet bygger på det den vet fra før.</p>}
+      {sources.map((s, i) => (
+        <div key={s.url} className="source-card">
+          <span className="eyebrow">Kilde {String(i + 1).padStart(2, '0')}</span>
+          <strong>{s.title}</strong>
+          <span className="small muted">{hostOf(s.url)}</span>
+          {s.opened ? <Badge tone="moss">Lest</Badge> : <Badge tone="warn">Bare sett i søk</Badge>}
+          {summary.get(key(s.url)) && <p className="small">{summary.get(key(s.url))}</p>}
+          <a className="small" href={s.url} target="_blank" rel="noreferrer">Åpne ↗</a>
+        </div>
+      ))}
+      <p className="small muted source-note">
+        Agenten skal si hva den faktisk fikk lest. En videoside gir ofte bare tittel og beskrivelse, ikke selve videoen.
+      </p>
+    </aside>
+  );
+}
+
+/** Skisse 03 «Fremgangsmåter»: the variants side by side. The user picks the one to test first. */
+function Comparison({ c, sources, primary, onPick }:
+  { c: KnowledgeComparison; sources: SourceRef[]; primary: number; onPick: (i: number) => void }) {
+  const number = (u: string) => sources.findIndex((s) => s.url === u) + 1;
+  return (
+    <div className="article-block comparison">
+      <span className="eyebrow">Fremgangsmåter</span>
+      {c.common && <p><strong>Felles for kildene:</strong> {c.common}</p>}
+      {c.variants.length > 0 && (
+        <div className="variant-grid" role="radiogroup" aria-label="Velg utgangspunkt">
+          {c.variants.map((v, i) => {
+            const on = i === primary;
+            const refs = v.sources.map(number).filter((n) => n > 0);
+            return (
+              <button key={i} type="button" role="radio" aria-checked={on} className={`variant-card ${on ? 'on' : ''}`} onClick={() => onPick(i)}>
+                <strong>{String.fromCharCode(65 + i)} · {v.label}</strong>
+                {v.description && <span>{v.description}</span>}
+                <span className="small muted">{refs.length ? `Kilde ${refs.join(', ')}` : 'Ingen kilde oppgitt'}</span>
+                <span className="variant-pick small">{on ? '✓ Utgangspunkt' : 'Bruk som utgangspunkt'}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {c.variants.length > 1 && <p className="small muted">Stegene under følger agentens utgangspunkt. Varianten du velger, lagres først i teknikken.</p>}
     </div>
   );
 }

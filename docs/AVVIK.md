@@ -78,6 +78,7 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
     - **Research til biblioteket (7.4):** Oppgaven har `area_kind = new_knowledge`, `work_project_id = null`, `allow_new_knowledge = true` og én resultattype (`technique` eller `recipe`). `checkScope` avviser alt annet, og prosjektoppgaver kan ikke lage bibliotekforslag. Agenten lager bare forslag. Ingenting lagres i biblioteket før brukeren trykker «Lagre i biblioteket», og da lages raden med status `draft`. `research_proposal.applied_target_id` (nytt felt, PROTOTYPE) peker på raden som ble laget.
       - Agentens sammendrag (kildelag) legges bare på kilder som oppgaven selv fant, eller som allerede er lenket til biblioteket. Kilder som hører til et spill, kan få en lenke til biblioteket, men innholdet endres ikke (regel 1).
       - Serveren nedgraderer steg merket «vist i kilde» til «forslag fra agenten» når ingen kilde i utkastet er åpnet.
+      - **Sammenligning (7.5):** Utkastet kan ha `comparison` med felles trekk og varianter, som hver peker på kildene sine med URL. Serveren og klienten fjerner pekere til kilder som ikke er med i utkastet. Bare én variant er utgangspunkt. Ved lagring blir variantene tekst i `technique.variants` (eller i `recipe.note`), med brukerens valg først. Det finnes ingen egen tabell for varianter.
       - Det er ikke testet mot UiB. Testene bruker en simulert modell og simulerte serversvar.
     - **Erfaring (7.3):** Erfaring kan registreres uten å velge miniatyr. Feltet `subject_id` finnes, men skjermen bruker det ikke ennå. Avkryssing av steg i verkstedguiden lagres ikke.
     - **Hovednavigasjon (7.1):** Toppfeltet har «Prosjekter» og «Bibliotek». Skissene har også «Research» og «Malinger», men de sidene finnes ikke ennå. På smale skjermer vises bare logoen, uten navnet.
@@ -106,5 +107,5 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 
 - Redigering av maleplanen (bit 4). «Lag maleplan» lager bare en tom versjon 1.
 - Palett og kilder. Agenten kan foreløpig ikke foreslå referanser, teknikker eller oppskrifter.
-- Biblioteket etter 7.4: bilder på teknikker, kildeinspektør med varianter side om side (7.5), «Foreslå forbedring» fra en erfaring (7.6) og «Bruk i prosjekt» (7.7). Teknikksiden har ikke bilder, fordi datamodellen ikke har noe felt for det ennå.
+- Biblioteket etter 7.4: bilder på teknikker, «Foreslå forbedring» fra en erfaring (7.6) og «Bruk i prosjekt» (7.7). Teknikksiden har ikke bilder, fordi datamodellen ikke har noe felt for det ennå.
 - Ny planversjon ved redigering. Det kommer i bit 4, og der blir problemet med fremdrift og avvik på tvers av versjoner synlig.

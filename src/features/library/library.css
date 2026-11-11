@@ -139,7 +139,30 @@
   background: var(--card); border: 1px solid var(--line); border-radius: var(--r-sm);
 }
 .research-input textarea:focus { outline: none; border-color: var(--fore); box-shadow: 0 0 0 3px var(--moss-soft); }
-.draft-card { border-color: var(--warn-soft); box-shadow: var(--shadow); }
+.draft-card {
+  border-color: var(--warn-soft); box-shadow: var(--shadow); padding: 0; overflow: hidden;
+  display: grid; grid-template-columns: 280px minmax(0, 1fr);
+}
+.draft-main { padding: 20px; align-content: start; }
+
+/* Kildeinspektør og fremgangsmåter (bit 7.5, skisse 03) */
+.source-inspector { display: flex; flex-direction: column; gap: 10px; padding: 20px 16px; background: var(--panel); border-right: 1px solid var(--line); }
+.source-inspector h3 { margin-bottom: 4px; }
+.source-card { display: grid; gap: 6px; justify-items: start; padding: 12px; border-radius: var(--r-md); background: var(--card); border: 1px solid var(--line); }
+.source-card strong { overflow-wrap: anywhere; }
+.source-card .eyebrow { color: var(--fore); }
+.source-card a { color: var(--fore); font-weight: 500; }
+.source-card-warn { border-color: var(--warn-soft); }
+.source-note { margin-top: auto; padding-top: 8px; }
+.comparison { gap: 10px; }
+.variant-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.variant-card {
+  display: grid; gap: 6px; align-content: start; text-align: left; padding: 14px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper);
+}
+.variant-card:hover { border-color: var(--muted); }
+.variant-card.on { border-color: var(--pine); background: var(--moss-soft); }
+.variant-pick { color: var(--fore); font-weight: 500; }
 .draft-card h2 { font-size: 26px; }
 .draft-paints { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
 .draft-paints li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -185,6 +208,8 @@
 .step-technique { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 @media (max-width: 860px) {
+  .draft-card { grid-template-columns: 1fr; }
+  .source-inspector { border-right: 0; border-bottom: 1px solid var(--line); }
   .article-top { grid-template-columns: 1fr; }
   .recipe-paint { grid-template-columns: 28px minmax(0, 1fr); }
   .recipe-paint > :nth-child(n+3) { grid-column: 2; }
