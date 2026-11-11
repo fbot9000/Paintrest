@@ -89,6 +89,31 @@
 .tech-actions { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
 .tech-approve { display: grid; gap: 8px; justify-items: end; text-align: right; max-width: 420px; }
 
+/* Teknikk: artikkel (skisse 05) */
+.tech-head-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.tech-head-row .btn { text-decoration: none; }
+.tech-lead { font-size: 17px; color: var(--muted); max-width: 60ch; }
+.pre-line { white-space: pre-line; }
+.article-top { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(220px, 1fr); gap: 16px; align-items: stretch; }
+.article-block { display: grid; gap: 6px; }
+.article-block .eyebrow, .tech-section > .eyebrow, .tech-head-row .eyebrow { color: var(--fore); }
+.article-materials { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.article-workshop {
+  display: grid; gap: 10px; align-content: start; padding: 20px; border-radius: var(--r-lg); background: var(--moss-soft);
+}
+.article-workshop .btn { text-decoration: none; }
+.article-steps { list-style: none; margin: 0; padding: 0; display: grid; }
+.article-steps li { display: grid; grid-template-columns: 36px 1fr; gap: 10px; padding: 12px 0; border-top: 1px solid var(--line); }
+.article-steps li:first-child { border-top: 0; padding-top: 0; }
+.article-steps p { color: var(--muted); }
+.tech-risk-note { display: grid; gap: 6px; padding: 16px 20px; border-radius: var(--r-lg); background: var(--warn-soft); color: var(--warn); }
+.tech-risk-note .eyebrow { color: var(--warn); }
+.experience-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.experience-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.experience-list li:first-child { border-top: 0; padding-top: 0; }
+.experience-list p { flex-basis: 100%; }
+.experience-list .link { margin-left: auto; }
+
 /* Oppskrift */
 .recipe-strip { display: flex; gap: 3px; flex-wrap: wrap; }
 .recipe-strip-lg .swatch { border-radius: 6px; }
@@ -124,6 +149,7 @@
 .step-technique { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 @media (max-width: 860px) {
+  .article-top { grid-template-columns: 1fr; }
   .recipe-paint { grid-template-columns: 28px minmax(0, 1fr); }
   .recipe-paint > :nth-child(n+3) { grid-column: 2; }
 

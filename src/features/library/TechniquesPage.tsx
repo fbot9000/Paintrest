@@ -27,7 +27,7 @@ export function TechniquesPage() {
 
   const create = async () => {
     const id = await run((c) => c.createTechnique());
-    if (id) navigate(id);
+    if (id) navigate(`${id}/rediger`);
   };
 
   return (

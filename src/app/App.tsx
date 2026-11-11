@@ -10,6 +10,8 @@ import { AiSettingsPage } from '../features/settings/AiSettingsPage';
 import { LibraryLayout } from '../features/library/LibraryLayout';
 import { TechniquesPage } from '../features/library/TechniquesPage';
 import { TechniquePage } from '../features/library/TechniquePage';
+import { TechniqueEditPage } from '../features/library/TechniqueEditPage';
+import { WorkshopGuide } from '../features/library/WorkshopGuide';
 import { RecipesPage } from '../features/library/RecipesPage';
 import { RecipePage } from '../features/library/RecipePage';
 import { Button, Dialog } from '../ui/components';
@@ -32,6 +34,7 @@ const routes = [
           { index: true, element: <Navigate to="teknikker" replace /> },
           { path: 'teknikker', element: <TechniquesPage /> },
           { path: 'teknikker/:techniqueId', element: <TechniquePage /> },
+          { path: 'teknikker/:techniqueId/rediger', element: <TechniqueEditPage /> },
           { path: 'oppskrifter', element: <RecipesPage /> },
           { path: 'oppskrifter/:recipeId', element: <RecipePage /> },
         ],
@@ -50,6 +53,7 @@ const routes = [
     ],
   },
   { path: 'male/:subjectId', element: <PaintingMode /> },
+  { path: 'bibliotek/teknikker/:techniqueId/verksted', element: <WorkshopGuide /> },
   { path: '*', element: <Navigate to="/" replace /> },
 ];
 const router = import.meta.env.VITE_ROUTER === 'memory' ? createMemoryRouter(routes) : createHashRouter(routes);
