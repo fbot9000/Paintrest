@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { extract } from './fetch-page.ts';
 import type { PageResult } from './fetch-page.ts';
 import { isPrivateAddress } from './net-guard.ts';
-import { GAME_SOURCE_STEPS, GUIDE_STEPS, IDENTIFY_STEPS, MAX_IMAGE_STEPS, isRefusal, knowledgeInstructions, mergeHeld, normUrl, parseAction, researchInstructions, runResearch, verifyProposals } from './research-agent.ts';
+import { GAME_SOURCE_STEPS, GUIDE_STEPS, IDENTIFY_STEPS, MAX_IMAGE_STEPS, isRefusal, knowledgeInstructions, mergeHeld, mergeSurvey, normUrl, parseAction, researchInstructions, runResearch, verifyProposals } from './research-agent.ts';
 import type { ResearchEvent, RunHint } from './research-agent.ts';
 import { HostedToolError, hostedSearchOf, parseResponse } from './provider.ts';
 import type { ResponsesProvider } from './provider.ts';
@@ -978,6 +978,37 @@ describe('kartlegging av hele spillet (brukerønske 11.11.2026)', () => {
       { url: 'https://forum.example/avalon-painted', title: 'My painted Avalon set', role: 'painted', shows: ['M1', 'M2', 'M3'], summary: null, read: true },
     ]);
     expect(final.warnings.join(' ')).toContain('Fjernet 1 kilde(r) for spillet');
+  });
+
+  it('foreslår miniatyrer som mangler, med kontrollert identifisering, og nye nøkler kan brukes i «shows»', async () => {
+    const events: ResearchEvent[] = [];
+    const { prov, calls } = recorder([
+      '{"action":"open","url":"https://www.kickstarter.com/projects/x/avalon"}',
+      '{"action":"next_phase"}',
+      JSON.stringify({ action: 'final', message: 'Fant én som mangler.', proposals: [
+        { type: 'catalog_subject', evidence: 'documented', payload: { key: 'N1', name: 'Morgana le Fay', grouping: 'single', physical_count: 1, expansion_name: null,
+          sources: [{ url: 'https://www.kickstarter.com/projects/x/avalon', title: 'KS' }],
+          identity: { official_name: 'Morgana le Fay', description: 'Heks i mørk kappe', images: [
+            { image_url: 'https://ks.example/morgana-art.jpg', page_url: 'https://www.kickstarter.com/projects/x/avalon', kind: 'concept_art' },
+            { image_url: 'https://invented.example/morgana.jpg', kind: 'official' }] } } },
+        { type: 'catalog_subject', payload: { key: 'X1', name: 'Oppdiktet', identity: { images: [{ image_url: 'https://invented.example/x.jpg' }] } } },
+      ], game_sources: [{ url: 'https://www.kickstarter.com/projects/x/avalon', role: 'official', shows: ['M1', 'N1', 'N7'] }] }),
+    ]);
+    await runResearch({ provider: prov, search: fakeSearch, openPage: pageOf },
+      { context: {}, messages: [{ role: 'user', content: 'x' }], result_types: ['reference_selection', 'catalog_subject'], focus: game }, (e) => events.push(e));
+    expect(calls[0]!.instructions).toContain('finn figurer i spillet som MANGLER i prosjektet');
+    expect(calls.at(-1)!.instructions).toContain('"key": "N1"');
+    const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    const [morgana, invented] = final.proposals as { payload: Record<string, unknown> }[];
+    expect(morgana!.payload).toMatchObject({ key: 'N1', name: 'Morgana le Fay', identity: { official_name: 'Morgana le Fay', images: [{ image_url: 'https://ks.example/morgana-art.jpg' }] } });
+    expect((morgana!.payload.identity as { images: unknown[] }).images).toHaveLength(1);
+    // A key outside N1 … is removed, and an identification with nothing that holds is left out.
+    expect(invented!.payload.key).toBeUndefined();
+    expect(invented!.payload.identity).toBeUndefined();
+    expect(final.game_sources![0]!.shows).toEqual(['M1', 'N1']);
+    // A missing miniature from an earlier answer is kept when the final answer has none by that name.
+    expect(mergeSurvey([], [{ type: 'catalog_subject', payload: { name: 'Morgana' } }])).toHaveLength(1);
+    expect(mergeSurvey([{ type: 'catalog_subject', payload: { name: 'morgana ' } }], [{ type: 'catalog_subject', payload: { name: 'Morgana' } }])).toHaveLength(1);
   });
 
   it('gir fase 1 egne steg, og tar vare på et tidlig svar', async () => {

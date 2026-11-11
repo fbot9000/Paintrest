@@ -18,7 +18,29 @@ import type { Downloaded } from './images-tx';
  */
 export const IMPLEMENTED_TYPES: ResultType[] = ['catalog_subject', 'paint_plan', 'reference_selection', 'catalog_change', 'plan_revision'];
 
+/** The game survey's task: pictures for the miniatures, and miniatures missing from the list (brukerønske 11.11.2026). */
+export const GAME_TYPES: ResultType[] = ['reference_selection', 'catalog_subject'];
+
 const PAINT_CHOICES: PaintChoice[] = ['both', 'owned', 'best'];
+
+/**
+ * Why a proposed new miniature would be a duplicate: a miniature in the project with the same name or
+ * official name, or a pending proposal for one. Null when it is new. Names are compared without case.
+ */
+export function duplicateMiniature(t: Tables, task_id: Id, c: CatalogSubjectPayload): string | null {
+  const project_id = t.task_scope[task_id]?.work_project_id;
+  if (!project_id) return null;
+  const norm = (x: string | null | undefined) => (x ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const names = new Set([c.name, c.identity?.official_name].map(norm).filter(Boolean));
+  const same = (x: string | null | undefined) => !!norm(x) && names.has(norm(x));
+  const existing = Object.values(t.miniature_subject).find((s) => s.project_id === project_id && !s.deleted_at && (same(s.name) || same(s.identity?.official_name)));
+  if (existing) return `«${c.name}» finnes allerede i prosjektet (${existing.name})`;
+  const open = new Set(Object.values(t.research_task).filter((x) => x.status === 'open' && t.task_scope[x.id]?.work_project_id === project_id).map((x) => x.id));
+  const pending = Object.values(t.research_proposal).find((x) => x.decision === 'pending' && x.result_type === 'catalog_subject' && open.has(x.task_id)
+    && (same((x.payload as CatalogSubjectPayload).name) || same((x.payload as CatalogSubjectPayload).identity?.official_name)));
+  if (pending) return `«${c.name}» venter allerede som forslag (${pending.ref})`;
+  return null;
+}
 
 type Who = { initiated_by: 'user' | 'agent'; task_id?: Id | null; proposal_id?: Id | null };
 
@@ -138,6 +160,10 @@ export function createAgentCommands(store: Store): AgentCommands {
         return tx((t) => {
           const scope = checkScope(t, task_id, p);
           const ts = now();
+          if (scope.result_type === 'catalog_subject' && !p.update_of) {
+            const dup = duplicateMiniature(t, task_id, p.payload as CatalogSubjectPayload);
+            if (dup) throw new Error(dup);
+          }
           if (p.update_of) {
             // update_proposal: only the agent's own pending draft on the same task.
             const existing = Object.values(t.research_proposal).find((x) => x.task_id === task_id && x.ref === p.update_of);
@@ -278,8 +304,8 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
         // System sets scope and result types in the same transaction (skjema §7).
         t.task_scope[id] = { task_id: id, area_kind: 'new_project', work_project_id: project_id, allow_new_knowledge: false,
           ...(game ? { game_focus: true } : focus ? { subject_focus: { ...focus } } : {}) };
-        // The game survey only proposes pictures; it never changes the catalogue or the plans.
-        for (const result_type of game ? ['reference_selection' as const] : IMPLEMENTED_TYPES) t.task_result_type.push({ task_id: id, result_type });
+        // The game survey proposes pictures and missing miniatures; it never changes existing ones or the plans.
+        for (const result_type of game ? GAME_TYPES : IMPLEMENTED_TYPES) t.task_result_type.push({ task_id: id, result_type });
         record(t, ws, 'research_task', id, 'create', { initiated_by: 'user', task_id: id });
         return id;
       });
@@ -348,11 +374,12 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
 
     async syncResultTypes(task_id) {
       if (!store.getTables().research_task[task_id]) return;
-      const missing = IMPLEMENTED_TYPES.filter((rt) => !store.getTables().task_result_type.some((r) => r.task_id === task_id && r.result_type === rt));
+      const wanted = store.getTables().task_scope[task_id]?.game_focus ? GAME_TYPES : IMPLEMENTED_TYPES;
+      const missing = wanted.filter((rt) => !store.getTables().task_result_type.some((r) => r.task_id === task_id && r.result_type === rt));
       if (!missing.length) return;
       tx((t, ws) => {
         const task = must(t.research_task[task_id], 'Oppgaven');
-        if (task.status !== 'open' || t.task_scope[task_id]?.area_kind !== 'new_project' || t.task_scope[task_id]?.game_focus) return;
+        if (task.status !== 'open' || t.task_scope[task_id]?.area_kind !== 'new_project') return;
         for (const result_type of missing) t.task_result_type.push({ task_id, result_type });
         record(t, ws, 'task_result_type', task_id, 'update', { initiated_by: 'user', task_id });
       });
@@ -588,6 +615,15 @@ function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions, files
     };
     record(t, ws, 'miniature_subject', id, 'create', who);
     linkEvidence(t, ws, c.sources ?? [], id, who);
+    // From a game survey: who the figure is (still to be confirmed), and the pages that probably show it.
+    if (c.identity) t.miniature_subject[id]!.identity = { ...structuredClone(c.identity), status: 'proposed', found_by_task_id: p.task_id, updated_at: now() };
+    for (const url of c.shown_on ?? []) {
+      const src = Object.values(t.source).find((x) => !x.deleted_at && x.url === url);
+      if (!src || Object.values(t.source_link).some((l) => l.source_id === src.id && l.target_type === 'subject' && l.target_id === id && l.use === 'evidence')) continue;
+      const lid = newId();
+      t.source_link[lid] = { id: lid, source_id: src.id, target_type: 'subject', target_id: id, use: 'evidence', layer_id: null, deleted_at: null, suggested_by_task_id: p.task_id };
+      record(t, ws, 'source_link', lid, 'attach', who);
+    }
   } else if (kind === 'reference_selection') {
     const r = p.payload as ReferenceSelectionPayload;
     const s = t.miniature_subject[r.subject_id]!;

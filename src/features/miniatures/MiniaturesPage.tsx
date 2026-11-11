@@ -4,7 +4,8 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { useApp, useCommand, useView } from '../../app/context';
 import type { SubjectPatch } from '../../domain/commands';
 import type { Expansion, Grouping, Id, MiniatureSubject, Tables } from '../../domain/types';
-import type { ReferenceSelectionPayload } from '../../domain/agent';
+import type { CatalogSubjectPayload, ReferenceSelectionPayload } from '../../domain/agent';
+import type { Evidence, ResearchProposal } from '../../domain/types';
 import { assetFileId, attachedExpansions, deletedSubjects, liveSubjects, physicalStatus } from '../../domain/views';
 import type { PhysicalStatus } from '../../domain/views';
 import { Badge, Button, Dialog, ErrorNote, Field, FileImage, ImagePicker, Segmented, Stepper } from '../../ui/components';
@@ -13,6 +14,19 @@ import type { Run } from '../../app/runs';
 import { LiveSteps } from '../agent/AgentPanel';
 import { startGameSurvey } from '../workspace/agentRuns';
 import './miniatures.css';
+
+/** Miniatures the game survey found missing from the list, waiting for the user. */
+function missingMiniatures(t: Tables, project_id: Id) {
+  const surveys = new Set(Object.values(t.research_task).filter((x) => x.status === 'open' && t.task_scope[x.id]?.work_project_id === project_id && t.task_scope[x.id]?.game_focus).map((x) => x.id));
+  const attached = new Set(attachedExpansions(t, project_id).map((e) => e.name.trim().toLowerCase()));
+  return Object.values(t.research_proposal)
+    .filter((p) => p.decision === 'pending' && p.result_type === 'catalog_subject' && surveys.has(p.task_id))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .map((p) => {
+      const c = p.payload as CatalogSubjectPayload;
+      return { p, c, unknownExpansion: !!c.expansion_name && !attached.has(c.expansion_name.trim().toLowerCase()) };
+    });
+}
 
 /** Pictures waiting in image proposals (image hunt or game survey), per miniature. */
 function pendingImages(t: Tables, project_id: Id): Map<Id, number> {
@@ -36,6 +50,7 @@ export function MiniaturesPage() {
     deleted: deletedSubjects(t, projectId),
     game: t.game[t.project[projectId]?.game_id ?? '']?.primary_name ?? '',
     pending: pendingImages(t, projectId),
+    missing: missingMiniatures(t, projectId),
   }), [projectId]);
   const app = useApp();
   const survey = useRuns((r) => r.get(projectId, 'game'));
@@ -79,7 +94,13 @@ export function MiniaturesPage() {
         </div>
       </div>
       <ErrorNote error={error} onClose={clearError} />
-      {survey && <SurveyPanel run={survey} onStop={() => runs.stop(projectId, 'game')} onClose={() => runs.dismiss(projectId, 'game')} />}
+      {survey && <SurveyPanel run={survey} missing={data.missing.length} onStop={() => runs.stop(projectId, 'game')} onClose={() => runs.dismiss(projectId, 'game')} />}
+      {data.missing.length > 0 && (
+        <MissingList items={data.missing} imageUrl={(u) => app.ai.imageProxyUrl(u)}
+          onAdd={(id) => run(() => app.research.approveProposal(id))}
+          onReject={(id) => run(() => app.research.rejectProposal(id))}
+          onAddAll={() => run(async () => { for (const m of data.missing) await app.research.approveProposal(m.p.id); })} />
+      )}
 
       {data.subjects.length > 0 && (
         <div className="filters" role="toolbar" aria-label="Filtrer">
@@ -161,8 +182,66 @@ function FilterChip({ on, onClick, children }: { on: boolean; onClick: () => voi
 
 const STATUS_LABEL: Record<PhysicalStatus, string> = { not_started: 'Ikke startet', in_progress: 'Under arbeid', finished: 'Ferdig' };
 
+const EVIDENCE_LABEL: Record<Evidence, string> = { documented: 'Fra kilde', synthesized: 'Agentens vurdering', unresolved: 'Uavklart' };
+
+/**
+ * «Mangler i listen»: figures the game survey found in the game (component list, rulebook, campaign)
+ * that are not in the project. Nothing is added before the user says so.
+ */
+function MissingList({ items, imageUrl, onAdd, onReject, onAddAll }: {
+  items: { p: ResearchProposal; c: CatalogSubjectPayload; unknownExpansion: boolean }[];
+  imageUrl: (u: string) => string; onAdd: (id: Id) => void; onReject: (id: Id) => void; onAddAll: () => void;
+}) {
+  return (
+    <section className="missing" aria-label="Miniatyrer som mangler i listen">
+      <div className="missing-head">
+        <div>
+          <h2>Mangler i listen ({items.length})</h2>
+          <p className="small muted">Kartleggingen fant disse figurene i spillet. Ingenting legges til før du sier ja. Identifiseringen og kildene følger med.</p>
+        </div>
+        {items.length > 1 && <Button onClick={onAddAll}>Legg til alle</Button>}
+      </div>
+      <ul className="missing-list">
+        {items.map(({ p, c, unknownExpansion }) => {
+          const img = c.identity?.images[0];
+          return (
+            <li key={p.id} className="missing-item">
+              {img && <img className="missing-img" src={imageUrl(img.thumbnail_url ?? img.image_url)} alt="" loading="lazy"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+              <div className="missing-body">
+                <p className="missing-name"><strong>{c.name}</strong> <Badge tone={p.evidence === 'documented' ? 'moss' : 'neutral'}>{EVIDENCE_LABEL[p.evidence]}</Badge></p>
+                <p className="small muted">
+                  {c.grouping === 'group' ? `Malegruppe · ${c.physical_count} figurer` : 'Enkeltfigur'} · {c.expansion_name ?? 'Grunnspill'}
+                  {c.category_label ? ` · ${c.category_label}` : ''}
+                </p>
+                {c.identity?.description && <p className="small">{c.identity.description}</p>}
+                {c.note && <p className="small muted">{c.note}</p>}
+                {unknownExpansion && <p className="small missing-warn">Utvidelsen «{c.expansion_name}» er ikke med i prosjektet.</p>}
+                {p.uncertainty.map((u, i) => <p key={i} className="small missing-warn">{u.reason}</p>)}
+                {c.sources.length > 0 && (
+                  <p className="small missing-sources">
+                    {c.sources.slice(0, 4).map((x) => <a key={x.url} href={x.url} target="_blank" rel="noreferrer" title={x.title}>{hostOf(x.url)} ↗</a>)}
+                  </p>
+                )}
+              </div>
+              <div className="missing-actions">
+                <Button variant="primary" onClick={() => onAdd(p.id)}>Legg til</Button>
+                <Button variant="ghost" onClick={() => onReject(p.id)}>Avvis</Button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function hostOf(u: string): string {
+  try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; }
+}
+
 /** The game survey's progress while it works, and what it found when it is done. */
-function SurveyPanel({ run, onStop, onClose }: { run: Run; onStop: () => void; onClose: () => void }) {
+function SurveyPanel({ run, missing, onStop, onClose }: { run: Run; missing: number; onStop: () => void; onClose: () => void }) {
   const final = [...run.events].reverse().find((e) => e.type === 'final');
   const found = run.events.filter((e) => e.type === 'identity').length;
   return (
@@ -176,7 +255,8 @@ function SurveyPanel({ run, onStop, onClose }: { run: Run; onStop: () => void; o
           {final && final.type === 'final' && <p>{final.message}</p>}
           {final && final.type === 'final' && (
             <p className="small">
-              {found} {found === 1 ? 'miniatyr' : 'miniatyrer'} identifisert · {final.game_sources?.length ?? 0} kilder for spillet.
+              {found} {found === 1 ? 'miniatyr' : 'miniatyrer'} identifisert · {final.game_sources?.length ?? 0} kilder for spillet
+              {missing > 0 ? ` · ${missing} mangler i listen (se under)` : ''}.
               {' '}Bildeforslagene ligger i Bilder-fanen til hver miniatyr, og kildene merket «Trolig figuren» bekrefter du der.
             </p>
           )}

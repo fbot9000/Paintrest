@@ -27,16 +27,25 @@ async function setup() {
 }
 
 describe('kartleggingens egen oppgave', () => {
-  it('er skilt fra panelet, og kan bare foreslå bilder', async () => {
+  it('er skilt fra panelet, og kan bare foreslå bilder og miniatyrer som mangler', async () => {
     const { store, research, project } = await setup();
     const task = await research.startTask(project.id, 'game');
     const t = store.getTables();
     expect(t.task_scope[task]).toMatchObject({ game_focus: true, work_project_id: project.id });
-    expect(t.task_result_type.filter((r) => r.task_id === task).map((r) => r.result_type)).toEqual(['reference_selection']);
+    expect(t.task_result_type.filter((r) => r.task_id === task).map((r) => r.result_type)).toEqual(['reference_selection', 'catalog_subject']);
     expect(gameTask(t, project.id)?.id).toBe(task);
     expect(panelTask(t, project.id)?.id).not.toBe(task);
     await research.syncResultTypes(task);
-    expect(store.getTables().task_result_type.filter((r) => r.task_id === task)).toHaveLength(1);
+    expect(store.getTables().task_result_type.filter((r) => r.task_id === task)).toHaveLength(2);
+  });
+
+  it('en kartlegging fra før får lov å foreslå miniatyrer, men ikke mer', async () => {
+    const { store, research, project } = await setup();
+    const task = await research.startTask(project.id, 'game');
+    // As saved before this version: pictures only.
+    store.getTables().task_result_type = store.getTables().task_result_type.filter((r) => !(r.task_id === task && r.result_type === 'catalog_subject'));
+    await research.syncResultTypes(task);
+    expect(store.getTables().task_result_type.filter((r) => r.task_id === task).map((r) => r.result_type).sort()).toEqual(['catalog_subject', 'reference_selection']);
   });
 });
 
@@ -130,5 +139,69 @@ describe('kartlegging fra start til slutt', () => {
     const note = Object.values(t.research_message).filter((m) => m.task_id === task && m.role === 'system').map((m) => m.body).join('\n');
     expect(note).toContain('identifiserte 1 miniatyr: Merlin the Archmage');
     expect(note).toContain('koblet sider til miniatyrer 2 ganger');
+  });
+});
+
+describe('miniatyrer som mangler i listen', () => {
+  it('blir forslag med kildene som viser dem; et duplikat avvises', async () => {
+    const { store, research, agent, cmd, project, subject } = await setup();
+    const task = await research.startTask(project.id, 'game');
+    const refs = buildAgentContext(store.getTables(), task).subjectRefs;
+    const mRef = Object.entries(refs).find(([, id]) => id === subject('Merlin').id)![0];
+    const identity = { official_name: 'Morgana le Fay', aliases: ['Morgana'], edition: 'Avalon grunnspill', faction: 'Skurker', description: 'Heks i mørk kappe',
+      images: [{ image_url: 'https://ks.example/morgana-art.jpg', page_url: 'https://ks.example/avalon', page_title: 'KS', site: 'ks.example', kind: 'concept_art' as const, thumbnail_url: null }],
+      painter: null, confidence: 'high' as const, why: 'Komponentlisten', sources: [] };
+    const ai = {
+      async runAgent(_input: AgentTurnInput, onEvent: (e: ResearchEvent) => void) {
+        const e: Extract<ResearchEvent, { type: 'final' }> = {
+          type: 'final', message: 'Fant to', model: 'm', warnings: [], trace: [], pages: [],
+          proposals: [
+            { type: 'catalog_subject', evidence: 'documented', payload: { key: 'N1', name: 'Morgana le Fay', grouping: 'single', physical_count: 1,
+              sources: [{ url: 'https://ks.example/avalon', title: 'Komponentliste' }], identity } },
+            { type: 'catalog_subject', payload: { key: 'N2', name: 'merlin', grouping: 'single' } },
+            { type: 'catalog_subject', payload: { key: 'N3', name: 'Mørkets tjenere', grouping: 'group', physical_count: 6, expansion_name: 'Finnes ikke' } },
+          ],
+          game_sources: [
+            { url: 'https://forum.example/avalon', title: 'Avalon painted', role: 'painted', shows: [mRef, 'N1'], summary: null, read: true },
+            { url: 'https://ks.example/avalon', title: 'Komponentliste', role: 'official', shows: ['N1', 'N3'], summary: null, read: true },
+          ],
+        };
+        onEvent(e);
+        return e;
+      },
+    } as unknown as AiGateway;
+    await runAgentTurn({ store, research, agent, ai }, task, 'Kartlegg', () => {}, undefined, { kind: 'game', game: 'Avalon', miniatures: [] });
+    let t = store.getTables();
+    const pending = Object.values(t.research_proposal).filter((p) => p.task_id === task && p.decision === 'pending' && p.result_type === 'catalog_subject');
+    expect(pending.map((p) => (p.payload as { name: string }).name).sort()).toEqual(['Morgana le Fay', 'Mørkets tjenere']);
+    const morgana = pending.find((p) => (p.payload as { name: string }).name === 'Morgana le Fay')!;
+    expect(morgana.payload).toMatchObject({ shown_on: ['https://forum.example/avalon', 'https://ks.example/avalon'], identity: { official_name: 'Morgana le Fay' } });
+    const notes = Object.values(t.research_message).filter((m) => m.task_id === task && m.role === 'system').map((m) => m.body).join('\n');
+    expect(notes).toContain('«merlin» finnes allerede i prosjektet (Merlin)');
+    expect(notes).toContain('fant 2 miniatyrer som mangler i listen: Morgana le Fay, Mørkets tjenere');
+
+    // The same figure again, from the panel or a new survey, waits already.
+    const again = agent.writeProposal(task, { result_type: 'catalog_subject', update_of: null, evidence: 'synthesized', uncertainty: [],
+      payload: { name: 'Morgana', grouping: 'single', physical_count: 1, expansion_name: null, category_label: null, count_basis: null, grouping_basis: null, note: null, sources: [], identity: { ...identity, official_name: 'MORGANA LE FAY' } } }, 'uib', 'm');
+    expect(again).toMatchObject({ ok: false, reason: expect.stringContaining('venter allerede som forslag') });
+
+    // «Legg til»: the miniature comes with who it is (to confirm) and the pages that probably show it.
+    await research.approveProposal(morgana.id);
+    t = store.getTables();
+    const added = Object.values(t.miniature_subject).find((s) => s.project_id === project.id && s.name === 'Morgana le Fay' && !s.deleted_at)!;
+    expect(added.identity).toMatchObject({ status: 'proposed', official_name: 'Morgana le Fay', found_by_task_id: task });
+    expect(linkedSources(t, added.id, 'evidence').map((x) => x.url)).toEqual(['https://ks.example/avalon']);
+    expect(suggestedSources(t, added.id).map((x) => x.url)).toEqual(['https://forum.example/avalon']);
+    await cmd.updateSubject(added.id, { name: 'Morgana' });
+    expect(agent.writeProposal(task, { result_type: 'catalog_subject', update_of: null, evidence: 'synthesized', uncertainty: [],
+      payload: { name: 'Morgana le Fay', grouping: 'single', physical_count: 1, expansion_name: null, category_label: null, count_basis: null, grouping_basis: null, note: null, sources: [] } }, 'uib', 'm'))
+      .toMatchObject({ ok: false, reason: expect.stringContaining('finnes allerede i prosjektet (Morgana)') });
+
+    // An expansion outside the project is said plainly when the miniature is added.
+    const dark = pending.find((p) => (p.payload as { name: string }).name === 'Mørkets tjenere')!;
+    await research.approveProposal(dark.id);
+    const group = Object.values(store.getTables().miniature_subject).find((s) => s.name === 'Mørkets tjenere')!;
+    expect(group).toMatchObject({ grouping: 'group', physical_count: 6, expansion_id: null });
+    expect(JSON.stringify(group.uncertainty)).toContain('Utvidelsen «Finnes ikke» er ikke med i prosjektet');
   });
 });

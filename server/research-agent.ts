@@ -706,6 +706,7 @@ ${img ? `Begynn med bredt bildesøk: «${game.game} miniatures», «${game.game}
 - Malt av andre: gallerier, malerapporter og tråder som viser mange av figurene malt, på flere språk (Reddit, BGG, blogger, Putty&Paint, koreanske og japanske blogger).
 - Maleguider: guider og videoer for spillet, fraksjonene eller figurene.
 Åpne sidene som viser flest figurer. Noter hvilke miniatyrer (ref) hver side viser.
+Sammenlign også med listen over: finn figurer i spillet som MANGLER i prosjektet, helst fra komponentlisten, regelboka eller kampanjen. Ta bare med figurer fra grunnspillet og utvidelsene i prosjektet ("project.expansions_in_project").
 ${identify}
 Gå videre med {"action": "next_phase", "why": "kort grunn"} når du har gode kilder. Paintrest flytter deg uansett etter ${GAME_SOURCE_STEPS} steg.`;
   }
@@ -721,11 +722,21 @@ Bruk kildene fra fase 1. Gå gjennom miniatyrene, helst de som ikke er identifis
 ${identify}
 Avslutt med ETT JSON-objekt:
   {"action": "final", "message": "kort norsk oppsummering: hva du fant, og hva som mangler", "proposals": [ … ], "game_sources": [ … ]}
-"proposals": ETT reference_selection-forslag per miniatyr du fant bilder, videoer eller maleguider til, med "subject" (ref). For hvert bilde: "confidence": "high|medium|low", "reason": "norsk begrunnelse", "original_text": "kort utdrag på originalspråket eller null", og "kind". I payload kan du også ha "videos" og "guides" (som i bildejakten) og "sources_read" med norsk sammendrag. Ta bare med bilder du har grunn til å tro viser akkurat den miniatyren.
+"proposals": ETT reference_selection-forslag per miniatyr du fant bilder, videoer eller maleguider til, med "subject" (ref), og ETT catalog_subject-forslag per miniatyr som MANGLER i prosjektet (se under). For hvert bilde: "confidence": "high|medium|low", "reason": "norsk begrunnelse", "original_text": "kort utdrag på originalspråket eller null", og "kind". I payload kan du også ha "videos" og "guides" (som i bildejakten) og "sources_read" med norsk sammendrag. Ta bare med bilder du har grunn til å tro viser akkurat den miniatyren.
 "game_sources": kildene for hele spillet, høyst ${MAX_GAME_SOURCES}:
-  [{"url": "https://…", "title": "…", "role": "official|painted|guide|other", "shows": ["M1", "M3"], "summary": "norsk: hva siden viser, og hvorfor den er nyttig"}]
-  "shows" er miniatyrene siden viser, så langt du kan avgjøre. Ta med sider du har åpnet eller sett i søk.
-Lag ikke andre forslagstyper i dette oppdraget.`;
+  [{"url": "https://…", "title": "…", "role": "official|painted|guide|other", "shows": ["M1", "M3", "N1"], "summary": "norsk: hva siden viser, og hvorfor den er nyttig"}]
+  "shows" er miniatyrene siden viser, så langt du kan avgjøre, også nye ("N1" …). Ta med sider du har åpnet eller sett i søk.
+Miniatyrer som MANGLER i prosjektet, foreslår du som catalog_subject, med kilder som viser at figuren finnes:
+  {"type": "catalog_subject", "evidence": "documented|synthesized", "uncertainty": [{"path": "physical_count", "reason": "…"}],
+   "payload": {"key": "N1", "name": "offisielt navn", "grouping": "single|group", "physical_count": 1, "expansion_name": "navn fra project.expansions_in_project, eller null for grunnspillet",
+    "category_label": null, "count_basis": "documented|inferred", "grouping_basis": "documented|inferred", "note": "hvor du fant den",
+    "sources": [{"url": "https://…", "title": "…"}],
+    "identity": {"official_name": "…", "aliases": [], "edition": "…", "faction": "…", "description": "…", "images": [{"image_url": "https://…", "page_url": "https://…", "kind": "concept_art|official|render"}], "why": "…"}}}
+  - "key" (N1, N2 …) bruker du i "shows" for sider som viser den nye miniatyren. "identity" er valgfri, men gjør senere bildejakt raskere.
+  - Malegruppe ("group") når flere like figurer males likt (for eksempel 6 soldater); ellers enkeltfigur.
+  - Ikke foreslå miniatyrer som allerede finnes i listen (sammenlign navnene og de offisielle navnene), eller som står i "your_pending_proposals". Er du usikker på om en figur i listen er den samme, la den være.
+  - Figurer fra utvidelser som ikke er med i prosjektet, foreslår du ikke; nevn dem kort i meldingen.
+Lag ikke andre forslagstyper enn reference_selection og catalog_subject i dette oppdraget.`;
 }
 
 type Action =
@@ -754,6 +765,30 @@ export interface IdentifyAction {
   sources: { url: string; title: string | null }[];
 }
 
+/** An identification as the model wrote it: the «identify» action, or the «identity» inside a proposed new miniature. */
+export function toIdentifyAction(v: Record<string, unknown>): IdentifyAction {
+  const s = (x: unknown) => (typeof x === 'string' && x.trim() ? x.trim() : null);
+  const list = (x: unknown) => (Array.isArray(x) ? x : []);
+  const images = list(v.images).flatMap((i) => {
+    const o = (i && typeof i === 'object' ? i : {}) as Record<string, unknown>;
+    const url = s(typeof i === 'string' ? i : o.image_url);
+    return url ? [{ image_url: url, page_url: s(o.page_url), kind: s(o.kind) }] : [];
+  });
+  // The older one-picture form ("anchor" with image_url) is still understood.
+  const single = s(v.image_url);
+  if (single && !images.some((i) => i.image_url === single)) images.unshift({ image_url: single, page_url: s(v.page_url), kind: s(v.kind) });
+  return {
+    action: 'identify', subject: s(v.subject), official_name: s(v.official_name) ?? s(v.name), aliases: list(v.aliases).flatMap((a) => (s(a) ? [s(a)!] : [])),
+    edition: s(v.edition), faction: s(v.faction), description: s(v.description), images, painter: s(v.painter), confidence: s(v.confidence),
+    why: typeof v.why === 'string' ? v.why : null,
+    sources: list(v.sources).flatMap((x) => {
+      const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>;
+      const url = s(typeof x === 'string' ? x : o.url);
+      return url ? [{ url, title: s(o.title) }] : [];
+    }),
+  };
+}
+
 /** Finds the JSON action in a reply, also inside a code fence or surrounding prose. */
 export function parseAction(text: string): Action | null {
   const candidates: string[] = [];
@@ -774,27 +809,7 @@ export function parseAction(text: string): Action | null {
       return { action: 'look', image_urls: v.image_urls.filter((x): x is string => typeof x === 'string'), question: typeof v.question === 'string' ? v.question : '', why,
         compare_with: (Array.isArray(v.compare_with) ? v.compare_with : []).filter((x): x is string => typeof x === 'string') };
     }
-    if (v.action === 'identify' || v.action === 'anchor') {
-      const s = (x: unknown) => (typeof x === 'string' && x.trim() ? x.trim() : null);
-      const list = (x: unknown) => (Array.isArray(x) ? x : []);
-      const images = list(v.images).flatMap((i) => {
-        const o = (i && typeof i === 'object' ? i : {}) as Record<string, unknown>;
-        const url = s(typeof i === 'string' ? i : o.image_url);
-        return url ? [{ image_url: url, page_url: s(o.page_url), kind: s(o.kind) }] : [];
-      });
-      // The older one-picture form ("anchor" with image_url) is still understood.
-      const single = s(v.image_url);
-      if (single && !images.some((i) => i.image_url === single)) images.unshift({ image_url: single, page_url: s(v.page_url), kind: s(v.kind) });
-      return {
-        action: 'identify', subject: s(v.subject), official_name: s(v.official_name) ?? s(v.name), aliases: list(v.aliases).flatMap((a) => (s(a) ? [s(a)!] : [])),
-        edition: s(v.edition), faction: s(v.faction), description: s(v.description), images, painter: s(v.painter), confidence: s(v.confidence), why,
-        sources: list(v.sources).flatMap((x) => {
-          const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>;
-          const url = s(typeof x === 'string' ? x : o.url);
-          return url ? [{ url, title: s(o.title) }] : [];
-        }),
-      };
-    }
+    if (v.action === 'identify' || v.action === 'anchor') return toIdentifyAction(v);
     if (v.action === 'next_phase') return { action: 'next_phase', why };
     if (v.action === 'final' || 'message' in v || 'proposals' in v) {
       return { action: 'final', message: typeof v.message === 'string' ? v.message : '', proposals: Array.isArray(v.proposals) ? v.proposals : [],
@@ -931,7 +946,9 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       const checked = verifyProposals(raw, opened, searched, imageHits, hostedOpened);
       checked.proposals = checked.proposals.filter((p) => isSel(p) && gameRefs.has(String(p.payload.subject)) || !isSel(p));
       await finishSurvey(checked, raw, game, survey, opened, searched, hostedOpened, deps.videoInfo, imageHits);
-      const sources = verifyGameSources([...gameSources, ...(held?.game_sources ?? [])], opened, searched, hostedOpened, new Set(gameRefs.keys()), checked.warnings);
+      // Missing miniatures: their identification is checked like any other, and their keys (N1 …) may be used in «shows».
+      const keys = checkNewMiniatures(checked.proposals, opened, searched, imageHits, hostedOpened);
+      const sources = verifyGameSources([...gameSources, ...(held?.game_sources ?? [])], opened, searched, hostedOpened, new Set([...gameRefs.keys(), ...keys]), checked.warnings);
       emit({ ...finalEvent(message, checked.proposals, model, checked.warnings, trace, opened) as Extract<ResearchEvent, { type: 'final' }>,
         identities: [...survey.identities].map(([subject_ref, identity]) => ({ subject_ref, identity })), game_sources: sources });
       return;
@@ -1689,11 +1706,37 @@ async function finishSurvey(checked: { proposals: unknown[]; warnings: string[] 
   }
 }
 
+/**
+ * Missing miniatures the survey proposes (catalog_subject): «key» is kept only in the form N1, N2 …;
+ * «identity» is checked like phase 1's (pictures from opened pages or image searches, sources seen) and
+ * removed when nothing in it holds. Returns the keys, which game sources may refer to.
+ */
+export function checkNewMiniatures(proposals: unknown[], opened: Map<string, PageResult>, searched: Map<string, SearchHit>,
+  imageHits: Map<string, ImageHit>, hostedOpened: Set<string>): string[] {
+  const keys: string[] = [];
+  for (const raw of proposals) {
+    const p = raw as { type?: string; payload?: Record<string, unknown> };
+    if (p?.type !== 'catalog_subject' || !p.payload) continue;
+    const key = typeof p.payload.key === 'string' && /^N\d{1,3}$/.test(p.payload.key) ? p.payload.key : null;
+    if (key && !keys.includes(key)) keys.push(key);
+    else delete p.payload.key;
+    const v = p.payload.identity;
+    if (!v || typeof v !== 'object') { delete p.payload.identity; continue; }
+    const { identity } = identityFrom(toIdentifyAction(v as Record<string, unknown>), opened, searched, imageHits, hostedOpened);
+    if (identity.official_name || identity.description || identity.images.length) p.payload.identity = identity;
+    else delete p.payload.identity;
+  }
+  return keys;
+}
+
 /** Joins the survey's final answer with one given earlier, per miniature. */
 export function mergeSurvey(final: unknown[], held: unknown[]): unknown[] {
   if (!held.length) return final;
   const subjects = new Set([...final, ...held].filter(isSel).map((p) => String(p.payload.subject ?? '')));
-  const others = final.filter((p) => !isSel(p));
+  // Other proposals (missing miniatures) from the earlier answer are kept, unless the final answer has one with the same name.
+  const nameOf = (p: unknown) => String((p as { payload?: { name?: unknown } })?.payload?.name ?? '').trim().toLowerCase();
+  const finalNames = new Set(final.filter((p) => !isSel(p)).map(nameOf));
+  const others = [...final.filter((p) => !isSel(p)), ...held.filter((p) => !isSel(p) && !finalNames.has(nameOf(p)))];
   return [...others, ...[...subjects].flatMap((ref) => mergeHeld(final.filter(isSel).filter((p) => String(p.payload.subject ?? '') === ref),
     held.filter(isSel).filter((p) => String(p.payload.subject ?? '') === ref)))];
 }

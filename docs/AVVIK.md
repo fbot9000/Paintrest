@@ -137,6 +137,15 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
       - `known_sources` i konteksten har nå `role`, `shows_confirmed` og `shows_suggested`.
       - Bildejakten får sidene merket «Trolig figuren» (`suggested_sources`). Maleplanen får maleguidene for spillet (`game_guides`).
     - **Synlighet:** Panelet sier hva som ble lagret («lagret N nye kilder … koblet sider til miniatyrer M ganger»), og miniatyrkortene viser navn og antall bildeforslag.
+    - **Miniatyrer som mangler (brukerønske 11.11.2026):**
+      - **Forslag:** Kartleggingens oppgave har også resultattypen `catalog_subject`. Eldre kartleggingsoppgaver får den når de kjøres igjen. Forslaget kan ha `key` (N1 …), som `game_sources.shows` kan vise til, og `identity`. Serveren kontrollerer identiteten på samme måte som `identify`.
+      - **Kilder som viser figuren:** Klienten lagrer sidene som viser figuren i `shown_on` (PROTOTYPE).
+      - **Ved «Legg til»** (vanlig godkjenning av `catalog_subject`):
+        - Miniatyren får `identity` med status `proposed`.
+        - `sources` blir bekreftede `evidence`-lenker, som før.
+        - Sidene i `shown_on` blir «Trolig figuren»-lenker.
+      - **Duplikater:** `writeProposal` avviser et nytt `catalog_subject` hvis navnet eller det offisielle navnet (uten hensyn til store og små bokstaver) finnes på en miniatyr i prosjektet, eller på et ventende forslag i en åpen oppgave i prosjektet. Det gjelder også agentpanelet. Panelets runder tar ellers endringer i bruk direkte, så et duplikat ville blitt lagt inn uten at du så det.
+      - **Utvidelser:** Instruksen sier at bare figurer fra grunnspillet og utvidelsene i prosjektet skal foreslås. Foreslår agenten likevel en ukjent utvidelse, står det på forslaget, og miniatyren får en usikkerhet når den legges til.
     - **Testing:** Det er ikke testet mot UiB. Hele kjeden er kjørt i nettleseren mot en simulert modell, et simulert bildesøk og lokale sider. Kjeden går fra knappen, via kartlegging og lagring, til bildejakt og maleplan som bygger på resultatet.
 
 ## Antakelser

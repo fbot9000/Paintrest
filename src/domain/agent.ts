@@ -117,6 +117,10 @@ export interface CatalogSubjectPayload {
   grouping_basis: 'documented' | 'inferred' | null;
   note: string | null;
   sources: SourceRef[];
+  /** Game survey: who the missing figure is, checked by the server; kept on the miniature (proposed) when added. */
+  identity?: SubjectIdentity | null;
+  /** Game survey: pages that show the missing figure; they become «Trolig figuren» when it is added. */
+  shown_on?: string[];
 }
 
 export interface PlanMaterialPayload {
@@ -412,6 +416,8 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
           grouping_basis: basis(o.grouping_basis),
           note: str(o.note).trim() || null,
           sources: sourceRefs(o.sources),
+          ...(normaliseIdentity(o.identity) ? { identity: normaliseIdentity(o.identity) } : {}),
+          ...(arr(o.shown_on).length ? { shown_on: [...new Set(arr(o.shown_on).map(str).filter((u) => /^https?:\/\//.test(u)))].slice(0, 20) } : {}),
         },
       },
     };

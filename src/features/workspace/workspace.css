@@ -135,9 +135,9 @@
 
 /* Bildejakt i tre faser: figuren, grupper, maleguider og videoer */
 .wsi-phase { font-weight: 600; color: var(--pine); margin-top: 4px; }
-.wsi-id { display: grid; grid-template-columns: minmax(200px, 2fr) 3fr; gap: 16px; align-items: start; }
+.wsi-id { display: grid; grid-template-columns: minmax(180px, 320px) minmax(0, 1fr); gap: 16px; align-items: start; }
 .wsi-id.no-img { grid-template-columns: 1fr; }
-.wsi-id-images { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.wsi-id-images { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .wsi-id-text { display: grid; gap: 6px; }
 .wsi-id-text p { margin: 0; }
 .wsi-id-text > button { justify-self: start; }

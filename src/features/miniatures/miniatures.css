@@ -45,3 +45,23 @@
 .survey-warn { color: #f3c9a8; }
 .mini-found { display: flex; gap: 10px; flex-wrap: wrap; margin: 0; }
 .mini-found .link { text-align: left; overflow-wrap: anywhere; }
+
+/* Mangler i listen (fra kartleggingen) */
+.missing { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--card); }
+.missing-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.missing-head h2 { font-size: 20px; margin: 0 0 4px; }
+.missing-head p { margin: 0; }
+.missing-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.missing-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 10px; border-radius: var(--r-md); background: var(--paper); }
+.missing-img { width: 72px; height: 72px; object-fit: cover; border-radius: var(--r-sm); background: var(--panel); }
+.missing-item:not(:has(.missing-img)) { grid-template-columns: minmax(0, 1fr) auto; }
+.missing-body { display: grid; gap: 3px; min-width: 0; }
+.missing-body p { margin: 0; overflow-wrap: anywhere; }
+.missing-name { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.missing-warn { color: var(--warn); }
+.missing-sources { display: flex; gap: 10px; flex-wrap: wrap; }
+.missing-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 600px) {
+  .missing-item, .missing-item:not(:has(.missing-img)) { grid-template-columns: minmax(0, 1fr); }
+  .missing-actions { justify-content: flex-start; }
+}

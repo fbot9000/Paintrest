@@ -153,6 +153,13 @@ Sider som bygges med skript (typisk kampanjesider), har ofte bildene i sidedata 
 - **Bildeforslag til hver miniatyr:** i Bilder-fanen. Kortet viser «N bildeforslag».
 - **Kildene for spillet:** med rolle (Offisiell, Malt, Guide) og hvilke miniatyrer hver side viser. Kildelisten i verkstedet viser dette som «Trolig figuren». Ett trykk gjør det til ditt eget merke, og × sier at siden ikke viser figuren. Ingen av delene foreslås på nytt.
 
+**Miniatyrer som mangler.** Kartleggingen sammenligner listen med komponentlisten, regelboka og kampanjen.
+- Figurer fra grunnspillet og utvidelsene i prosjektet som mangler, legges under «Mangler i listen» øverst på miniatyrlisten. Hver figur vises med navn, enkeltfigur eller malegruppe med antall, utvidelse, kilder og det kartleggingen er usikker på.
+- Ingenting legges til før du trykker «Legg til» (eller «Legg til alle»). «Avvis» fjerner forslaget.
+- En figur du legger til, får med seg identifiseringen (som forslag du bekrefter) og sidene som trolig viser den («Trolig figuren»).
+- Figurer fra utvidelser som ikke er i prosjektet, nevnes bare i meldingen.
+- Et forslag med samme navn eller offisielle navn som en miniatyr i prosjektet, eller som et forslag som allerede venter, avvises, og panelet sier hvorfor. Det gjelder også forslag fra agentpanelet.
+
 **Senere kjøringer bygger på kartleggingen:**
 - Bildejakten for en miniatyr åpner sidene merket «Trolig figuren» tidlig.
 - Maleplanen får maleguidene for spillet.
