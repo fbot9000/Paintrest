@@ -38,6 +38,11 @@ export interface ResearchCommands {
    * (technique or recipe). The agent only drafts; the user approves into the library.
    */
   startKnowledgeTask(target: KnowledgeTarget): Promise<Id>;
+  /**
+   * Bit 7.6: a library task that improves one technique, for example after an experience.
+   * The agent drafts a changed technique; approving writes it into the technique.
+   */
+  startTechniqueRevision(technique_id: Id): Promise<Id>;
   closeTask(task_id: Id): Promise<void>;
   addUserMessage(task_id: Id, body: string): Promise<Id>;
   openRevisionTarget(task_id: Id, subject_id: Id): Promise<void>;

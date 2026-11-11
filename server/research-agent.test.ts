@@ -356,5 +356,19 @@ describe('research til biblioteket (bit 7.4)', () => {
     expect(p.payload.sources.map((x) => x.url)).toEqual(['https://example.com/gallery']);
     expect(p.payload.comparison.variants[0]!.sources).toEqual(['https://example.com/gallery']);
   });
+
+  it('forbedring har egen instruks', async () => {
+    let instructions = '';
+    const provider = { respond: async (_i: unknown, opts: { instructions?: string }) => {
+      instructions = opts.instructions ?? '';
+      return { text: '{"action":"final","message":"ok","proposals":[]}', model: 'm', usage: null, searches: [], citations: [] };
+    } } as unknown as ResponsesProvider;
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider, search: null, openPage: async () => PAGE },
+      { context: {}, messages: [{ role: 'user', content: 'For grov' }], result_types: ['technique'], focus: { kind: 'knowledge', target: 'technique', revision: { name: 'Svamp' } } }, (e) => events.push(e));
+    expect(instructions).toContain('FORBEDRE TEKNIKKEN «Svamp»');
+    expect(instructions).toContain('technique_to_improve');
+    expect(events[0]).toEqual({ type: 'status', text: 'Forbedring av Svamp' });
+  });
 });
 

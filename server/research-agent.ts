@@ -71,6 +71,8 @@ export interface PlanFocus {
 export interface KnowledgeFocus {
   kind: 'knowledge';
   target: 'technique' | 'recipe';
+  /** Bit 7.6: improve this technique from the library instead of drafting a new one. */
+  revision?: { name: string } | null;
 }
 
 export interface ImageFocus {
@@ -230,7 +232,15 @@ export function knowledgeInstructions(context: unknown, resultTypes: string[], m
   {"action": "final", "message": "…", "proposals": [ … ]}     – ferdig svar til brukeren`
       : `Du har ikke nettilgang i dette oppsettet. Svar direkte med ett JSON-objekt {"action": "final", "message": "…", "proposals": [ … ]}.
 Alt du skriver, bygger da på det du vet fra før. Merk forslaget "synthesized", alle steg med "basis": "synthesized", og si tydelig i meldingen at det ikke er sjekket mot kilder.`;
-  const what = focus.target === 'technique'
+  const what = focus.revision
+    ? `OPPDRAG: FORBEDRE TEKNIKKEN «${focus.revision.name}» i brukerens bibliotek.
+Hele teknikken står i "technique_to_improve", sammen med brukerens erfaringer ("experiences") og kildene den bygger på.
+- Ta utgangspunkt i det som står der. Behold det som fungerer, og endre det erfaringene og meldingen peker på.
+- Les gjerne kildene på nytt, eller finn nye, når erfaringen tyder på at noe mangler eller er feil.
+- Lag ETT technique-forslag med HELE den forbedrede teknikken (alle felt og alle steg, også de som ikke endres). Brukeren ser forskjellene før de godtas.
+- Skriv i "note" og i meldingen kort hva du endret og hvorfor, med henvisning til erfaringen.
+- Navnet skal være det samme med mindre brukeren ber om noe annet.`
+    : focus.target === 'technique'
     ? `OPPDRAG: TEKNIKK til brukerens bibliotek.
 En teknikk er en metode (for eksempel tørrbørsting, OSL, svamp for tekstur), uavhengig av spill og av bestemte malinger. Materialene er generelle ("finporet svamp", "oljemaling"). Bestemte malingsprodukter hører hjemme i en oppskrift, ikke i teknikken.`
     : `OPPDRAG: OPPSKRIFT til brukerens bibliotek.
@@ -277,7 +287,7 @@ Kildekrav:
 
 Regler:
 - Du kan ikke endre biblioteket, prosjektene eller malingskatalogen. Utkastet ditt lagres først når brukeren godkjenner det.
-- Ikke lag et utkast som finnes fra før i "library" (sammenlign navn). Si heller fra i meldingen.
+${focus.revision ? '- Teknikken finnes fra før; du lager et forslag til endring av den, ikke en ny.' : '- Ikke lag et utkast som finnes fra før i "library" (sammenlign navn). Si heller fra i meldingen.'}
 - For å endre et eget ventende utkast (your_pending_proposals), sett "update_of" til dets ref.
 - Tillatte forslagstyper: ${resultTypes.join(', ') || 'ingen'}.
 - Hold teksten kort og praktisk. Steg skal kunne leses ved malebordet.
@@ -355,7 +365,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   let nudged = false;
   let model = input.model ?? '';
 
-  emit({ type: 'status', text: knowledge ? (knowledge.target === 'technique' ? 'Research: teknikk' : 'Research: oppskrift') : plan ? `Maleplan for ${plan.subject_name}${imagesAttached ? ` · ${plan.reference_images.length} bilder` : ''}` : focus ? `Bildejakt for ${focus.subject_name}` : mode === 'hosted' ? 'Agenten søker via UiB' : mode === 'search' ? 'Agenten planlegger søket' : 'Agenten svarer uten nettilgang' });
+  emit({ type: 'status', text: knowledge ? (knowledge.revision ? `Forbedring av ${knowledge.revision.name}` : knowledge.target === 'technique' ? 'Research: teknikk' : 'Research: oppskrift') : plan ? `Maleplan for ${plan.subject_name}${imagesAttached ? ` · ${plan.reference_images.length} bilder` : ''}` : focus ? `Bildejakt for ${focus.subject_name}` : mode === 'hosted' ? 'Agenten søker via UiB' : mode === 'search' ? 'Agenten planlegger søket' : 'Agenten svarer uten nettilgang' });
 
   for (let round = 0; round < maxSteps + 4; round++) {
     if (deps.signal?.aborted) throw new UserError('Avbrutt');

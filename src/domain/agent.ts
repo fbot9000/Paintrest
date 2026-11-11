@@ -590,11 +590,26 @@ function knowledgeContext(t: Tables, task_id: Id, allowedTypes: ResultType[]): A
   const pending = Object.values(t.research_proposal)
     .filter((p) => p.task_id === task_id && p.decision === 'pending')
     .map((p) => ({ ref: p.ref, type: p.result_type, summary: proposalTitle(t, p.result_type, p.payload) }));
+  // Improvement task (bit 7.6): the whole technique and what the user experienced with it.
+  const target = Object.values(t.task_revision_target).find((r) => r.task_id === task_id && r.target_type === 'technique');
+  const tech = target ? t.technique[target.target_id] : undefined;
+  const revision = tech && !tech.deleted_at ? {
+    name: tech.name, tags: tech.tags, status: tech.status, desired_result: tech.desired_result, use_area: tech.use_area,
+    materials: tech.materials, variants: tech.variants, risk_note: tech.risk_note,
+    steps: Object.values(t.technique_step).filter((st) => st.technique_id === tech.id).sort((a, b) => a.position - b.position)
+      .map((st) => ({ title: st.title, instruction: st.instruction, basis: st.basis })),
+    experiences: Object.values(t.technique_experience).filter((e) => e.technique_id === tech.id && !e.deleted_at)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))
+      .map((e) => ({ outcome: e.outcome === 'worked' ? 'fungerte' : 'trenger justering', note: e.note, date: e.created_at.slice(0, 10) })),
+    sources: Object.values(t.source_link).filter((l) => !l.deleted_at && l.target_type === 'technique' && l.target_id === tech.id)
+      .map((l) => t.source[l.source_id]).filter((x): x is NonNullable<typeof x> => !!x && !!x.url).map((x) => ({ url: x.url, title: x.title })),
+  } : null;
   return {
     subjectRefs: {},
     techniqueRefs,
     allowedTypes,
     data: {
+      ...(revision ? { technique_to_improve: revision } : {}),
       library: { techniques, recipes },
       paints,
       your_pending_proposals: pending,

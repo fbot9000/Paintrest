@@ -56,7 +56,7 @@ export interface AgentTurnInput {
     | { kind: 'images'; subject_ref: string; subject_name: string; game: string; reference_image?: string | null }
     | { kind: 'plan'; subject_ref: string; subject_name: string; game: string; reference_images: string[]; revision: boolean }
     /** Library research (bit 7.4): a technique or recipe for the user's own library. */
-    | { kind: 'knowledge'; target: 'technique' | 'recipe' }
+    | { kind: 'knowledge'; target: 'technique' | 'recipe'; revision?: { name: string } | null }
     | null;
 }
 

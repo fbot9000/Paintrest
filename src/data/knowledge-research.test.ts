@@ -69,7 +69,7 @@ describe('research til biblioteket (bit 7.4)', () => {
     const { ai, seen } = fakeAi(() => [TECHNIQUE], [{ url: 'https://example.com/edge', title: 'Edge guide' }]);
     const before = Object.keys(store.getTables().technique).length;
     const r = await runAgentTurn({ store, research, agent, ai }, task, 'Hvordan gjør man kantlys?');
-    expect(seen[0]!.focus).toEqual({ kind: 'knowledge', target: 'technique' });
+    expect(seen[0]!.focus).toEqual({ kind: 'knowledge', target: 'technique', revision: null });
     expect(seen[0]!.direct).toBe(false);
     expect(seen[0]!.context).toHaveProperty('library');
     expect(seen[0]!.context).not.toHaveProperty('miniatures');
@@ -202,6 +202,61 @@ describe('research til biblioteket (bit 7.4)', () => {
   it('uten sammenligning beholdes agentens fritekst', () => {
     expect(variantsText(null)).toBeNull();
     expect(variantsText({ common: 'x', variants: [] })).toBeNull();
+  });
+
+  it('forbedring: agenten får teknikken og erfaringene, og godkjenning skriver endringen inn', async () => {
+    const { store, research, agent, cmd } = await setup();
+    const tech = Object.values(store.getTables().technique).find((x) => x.name.startsWith('Tekstur'))!;
+    await cmd.setTechniqueStatus(tech.id, 'approved');
+    await cmd.recordExperience(tech.id, { outcome: 'needs_adjustment', note: 'For grov struktur' });
+    const task = await research.startTechniqueRevision(tech.id);
+    const { ai, seen } = fakeAi((ctx) => {
+      const cur = ctx.technique_to_improve as { name: string; steps: { title: string }[] };
+      return [{ type: 'technique', evidence: 'synthesized', payload: {
+        name: cur.name, materials: ['Finere svamp'], note: 'Byttet til finere svamp',
+        steps: [...cur.steps.map((st) => ({ title: st.title, instruction: 'x' })), { title: 'Ny', instruction: 'Tørk mellom pass' }],
+        sources: [{ url: 'https://example.com/fine', title: 'Fine sponge' }],
+      } }];
+    });
+    await runAgentTurn({ store, research, agent, ai }, task, 'Strukturen ble for grov');
+    const ctx = seen[0]!.context as { technique_to_improve: { experiences: { note: string }[] } };
+    expect(ctx.technique_to_improve.experiences.map((e) => e.note)).toEqual(['For grov struktur']);
+    expect((seen[0]!.focus as { revision: { name: string } }).revision.name).toBe(tech.name);
+
+    const before = Object.keys(store.getTables().technique).length;
+    const prop = Object.values(store.getTables().research_proposal).find((p) => p.task_id === task)!;
+    await research.approveProposal(prop.id);
+    const t = store.getTables();
+    expect(Object.keys(t.technique).length).toBe(before);
+    expect(t.research_proposal[prop.id]!.applied_target_id).toBe(tech.id);
+    const after = t.technique[tech.id]!;
+    expect(after.materials).toEqual(['Finere svamp']);
+    expect(after.status).toBe('approved');
+    expect(Object.values(t.technique_step).filter((x) => x.technique_id === tech.id)).toHaveLength(5);
+    expect(Object.values(t.technique_experience).filter((e) => e.technique_id === tech.id)).toHaveLength(1);
+  });
+
+  it('forbedring stopper hvis teknikken er endret etter forslaget, og endrer ingenting', async () => {
+    const { store, research, agent, cmd } = await setup();
+    const tech = Object.values(store.getTables().technique)[0]!;
+    const task = await research.startTechniqueRevision(tech.id);
+    const { ai } = fakeAi(() => [{ type: 'technique', payload: { name: tech.name, materials: ['Annet'] } }]);
+    await runAgentTurn({ store, research, agent, ai }, task, 'Forbedre');
+    await new Promise((r) => setTimeout(r, 5));
+    await cmd.updateTechnique(tech.id, { use_area: 'Endret av meg' });
+    const prop = Object.values(store.getTables().research_proposal).find((p) => p.task_id === task)!;
+    await expect(research.approveProposal(prop.id)).rejects.toThrow('endret etter');
+    const t = store.getTables();
+    expect(t.technique[tech.id]!.use_area).toBe('Endret av meg');
+    expect(t.technique[tech.id]!.materials).not.toEqual(['Annet']);
+    expect(t.research_proposal[prop.id]!.decision).toBe('pending');
+  });
+
+  it('kan ikke forbedre en slettet teknikk', async () => {
+    const { store, research, cmd } = await setup();
+    const tech = Object.values(store.getTables().technique)[0]!;
+    await cmd.deleteTechnique(tech.id);
+    await expect(research.startTechniqueRevision(tech.id)).rejects.toThrow('slettet');
   });
 });
 

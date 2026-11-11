@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router';
-import { useView } from '../../app/context';
+import { Link, useNavigate, useParams } from 'react-router';
+import { useApp, useView } from '../../app/context';
 import { techniqueDetail } from '../../domain/library';
 import { Badge, Button, Card, ErrorNote } from '../../ui/components';
 import { ExperienceDialog } from './ExperienceDialog';
 import { EvidenceBadge, ExperienceBadge, StatusBadge, useAutosave } from './parts';
+import { useAiStatus } from './ResearchPage';
+import { startImprovement } from './research-runs';
 
 /**
  * Skisse 05 «Global teknikkartikkel»: the technique as one readable guide.
@@ -15,19 +17,33 @@ export function TechniquePage() {
   const d = useView((t) => techniqueDetail(t, techniqueId), [techniqueId]);
   const { save, error, clearError } = useAutosave();
   const [experienceOpen, setExperienceOpen] = useState(false);
+  const app = useApp();
+  const ai = useAiStatus();
+  const navigate = useNavigate();
 
   if (!d) {
     return <main className="page"><h1>Fant ikke teknikken</h1><p><Link to="/bibliotek/teknikker">Til teknikkene</Link></p></main>;
   }
   const x = d.technique;
   const deleted = !!x.deleted_at;
+  const improve = async () => {
+    const text = d.experiences.length ? 'Forbedre teknikken ut fra erfaringene mine.' : 'Gå gjennom teknikken og foreslå forbedringer.';
+    let task: string | undefined;
+    await save(async () => { task = await startImprovement({ store: app.store, research: app.research, agent: app.agent, ai: app.ai }, x.id, text); });
+    if (task) navigate(`/bibliotek/research/${task}`);
+  };
 
   return (
     <main className="page tech-page">
       <div className="tech-head">
         <div className="tech-head-row">
           <span className="eyebrow"><Link to="/bibliotek/teknikker">Teknikker</Link></span>
-          {!deleted && <Link className="btn btn-secondary" to="rediger">Rediger</Link>}
+          {!deleted && (
+            <div className="head-actions">
+              {ai === 'ready' && <Button onClick={improve}>Forbedre med agenten</Button>}
+              <Link className="btn btn-secondary" to="rediger">Rediger</Link>
+            </div>
+          )}
         </div>
         <h1>{x.name}</h1>
         {x.desired_result && <p className="tech-lead">{x.desired_result}</p>}

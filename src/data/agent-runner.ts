@@ -34,7 +34,12 @@ export async function runAgentTurn(deps: {
   // Library tasks get their own assignment; the agent only drafts (global zone).
   const library = scope.area_kind === 'new_knowledge';
   if (library) {
-    focus = { kind: 'knowledge', target: ctx.allowedTypes.includes('recipe') ? 'recipe' : 'technique' };
+    const rev = Object.values(t.task_revision_target).find((r) => r.task_id === task_id && r.target_type === 'technique');
+    const tech = rev ? t.technique[rev.target_id] : undefined;
+    focus = {
+      kind: 'knowledge', target: ctx.allowedTypes.includes('recipe') ? 'recipe' : 'technique',
+      revision: tech && !tech.deleted_at ? { name: tech.name } : null,
+    };
   }
   const project = scope.work_project_id ? t.project[scope.work_project_id] : undefined;
   agent.recordContext(task_id, [
@@ -96,7 +101,9 @@ export async function runAgentTurn(deps: {
     ...r.warnings,
     ...summary.refused.map((x) => `Forslag avvist av omfangssjekken: ${x}`),
     ...kept.map((x) => `Venter på deg: ${x}`),
-    ...(library && (summary.created.length || summary.updated.length) ? ['Utkastet er ikke lagret i biblioteket før du godkjenner det.'] : []),
+    ...(library && (summary.created.length || summary.updated.length)
+      ? [focus?.kind === 'knowledge' && focus.revision ? 'Endringen er ikke tatt i bruk før du godtar den.' : 'Utkastet er ikke lagret i biblioteket før du godkjenner det.']
+      : []),
     // Nothing is stored out of sight: say which pages were kept as sources for the game.
     ...(newSources.length ? [`Lagret ${newSources.length} ${newSources.length === 1 ? 'side' : 'sider'} som kilder for ${library ? 'biblioteket' : 'spillet'}: ${newSources.slice(0, 5).join(' · ')}${newSources.length > 5 ? ' …' : ''}`] : []),
   ].filter(Boolean);

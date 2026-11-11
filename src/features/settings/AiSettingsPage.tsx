@@ -4,6 +4,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useAi } from '../../app/context';
+import { forgetAiStatus } from '../../app/ai-status';
 import type { AiCredentialView, AiTestResult, HostedSearchSetting, HostedSearchTest, SearchCredentialView } from '../../domain/ai';
 import { Badge, Button, Card, Dialog, ErrorNote, Field, Segmented } from '../../ui/components';
 import './settings.css';
@@ -74,6 +75,7 @@ export function AiSettingsPage() {
       label, base_url: baseUrl, default_model: model || null, hosted_search: hosted,
       ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
     });
+    forgetAiStatus();
     setApiKey('');
     setTest(null);
     setLoad({ state: 'ready', credential: c });
@@ -235,6 +237,7 @@ export function AiSettingsPage() {
           <Button variant="primary" onClick={async () => {
             await run('delete', async () => {
               await ai.deleteCredential();
+              forgetAiStatus();
               setLoad({ state: 'ready', credential: null });
               fill(null);
               setModels(null);

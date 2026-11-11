@@ -54,6 +54,13 @@ export function checkScope(t: Tables, task_id: Id, p: { result_type: ProposalKin
     if (scope.area_kind !== 'new_knowledge' || !scope.allow_new_knowledge || !types.has(p.result_type)) {
       throw new CommandError(p.result_type === 'technique' ? 'Oppgaven tillater ikke nye teknikker' : 'Oppgaven tillater ikke nye oppskrifter');
     }
+    // An improvement task (bit 7.6): the draft is based on the technique as it is now.
+    const target = libraryRevisionTarget(t, task_id);
+    if (target && p.result_type === 'technique') {
+      const tech = t.technique[target.target_id];
+      if (!tech || tech.deleted_at) throw new CommandError('Teknikken som skal forbedres, finnes ikke lenger');
+      return { result_type: 'technique', base_version_id: tech.updated_at };
+    }
     return { result_type: p.result_type, base_version_id: null };
   }
   if (scope.area_kind === 'new_knowledge') throw new CommandError('Oppgaven gjelder biblioteket og kan ikke endre prosjekter');
@@ -220,6 +227,21 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
         t.research_task[id] = { id, workspace_id: ws, status: 'open', created_at: now() };
         t.task_scope[id] = { task_id: id, area_kind: 'new_knowledge', work_project_id: null, allow_new_knowledge: true };
         t.task_result_type.push({ task_id: id, result_type: target });
+        record(t, ws, 'research_task', id, 'create', { initiated_by: 'user', task_id: id });
+        return id;
+      });
+    },
+
+    async startTechniqueRevision(technique_id) {
+      return tx((t, ws) => {
+        const tech = must(t.technique[technique_id], 'Teknikken');
+        if (tech.deleted_at) throw new CommandError('Teknikken er slettet');
+        const id = newId();
+        t.research_task[id] = { id, workspace_id: ws, status: 'open', created_at: now() };
+        t.task_scope[id] = { task_id: id, area_kind: 'new_knowledge', work_project_id: null, allow_new_knowledge: true };
+        t.task_result_type.push({ task_id: id, result_type: 'technique' });
+        const rid = newId();
+        t.task_revision_target[rid] = { id: rid, task_id: id, target_type: 'technique', target_id: technique_id, base_version_id: tech.updated_at, opened_at: now() };
         record(t, ws, 'research_task', id, 'create', { initiated_by: 'user', task_id: id });
         return id;
       });
@@ -438,7 +460,10 @@ function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions, files
   if (kind === 'technique' || kind === 'recipe') {
     // The user approves the draft into the library; it starts as «utkast» and is edited freely after.
     const userWho: Who = { ...who, initiated_by: 'user' };
-    p.applied_target_id = kind === 'technique'
+    const revision = kind === 'technique' ? libraryRevisionTarget(t, p.task_id) : undefined;
+    p.applied_target_id = revision
+      ? reviseTechnique(t, ws, p, revision.target_id, opts.primary_variant, userWho)
+      : kind === 'technique'
       ? approveTechnique(t, ws, p, opts.primary_variant, userWho)
       : approveRecipe(t, ws, p, opts.product_choices ?? {}, opts.primary_variant, userWho);
     p.decision = 'approved';
@@ -646,6 +671,42 @@ function linkMethodSources(t: Tables, ws: Id, target_type: 'technique' | 'recipe
   }
   // Summaries only for the pages that are now linked to the library.
   addSourceLayers(t, (read ?? []).filter((r) => linked.has(r.url) && writable.has(r.url)));
+}
+
+/** The technique an improvement task is about (bit 7.6), if any. */
+export function libraryRevisionTarget(t: Tables, task_id: Id) {
+  return Object.values(t.task_revision_target).find((r) => r.task_id === task_id && r.target_type === 'technique');
+}
+
+/**
+ * Writes an approved improvement into the technique (no versions, brukerbeslutning 11.11.2026).
+ * Refuses when the technique was changed after the draft was made; nothing is overwritten then.
+ * Status and experiences stay. New sources are added; existing ones stay.
+ */
+function reviseTechnique(t: Tables, ws: Id, p: ResearchProposal, technique_id: Id, primary: number | undefined, who: Who): Id {
+  const tech = must(t.technique[technique_id], 'Teknikken');
+  if (tech.deleted_at) throw new CommandError('Teknikken er slettet');
+  if (tech.updated_at !== p.base_version_id) {
+    throw new CommandError('Teknikken er endret etter at forslaget ble laget. Be agenten om et nytt forslag.');
+  }
+  const x = p.payload as TechniquePayload;
+  Object.assign(tech, {
+    name: x.name, tags: x.tags, desired_result: x.desired_result, use_area: x.use_area, materials: x.materials,
+    variants: variantsText(x.comparison, primary) ?? x.variants, risk_note: x.risk_note,
+    evidence: p.evidence, uncertainty: p.uncertainty, updated_at: now(),
+  });
+  for (const st of Object.values(t.technique_step)) if (st.technique_id === technique_id) delete t.technique_step[st.id];
+  x.steps.forEach((st, position) => {
+    const sid = newId();
+    t.technique_step[sid] = { id: sid, technique_id, position, title: st.title, instruction: st.instruction, basis: st.basis };
+  });
+  record(t, ws, 'technique', technique_id, 'update', who);
+  // Only sources not already linked to the technique.
+  const linked = new Set(Object.values(t.source_link)
+    .filter((l) => !l.deleted_at && l.target_type === 'technique' && l.target_id === technique_id)
+    .map((l) => t.source[l.source_id]?.url));
+  linkMethodSources(t, ws, 'technique', technique_id, x.sources.filter((s) => !linked.has(s.url)), x.sources_read, who);
+  return technique_id;
 }
 
 function approveTechnique(t: Tables, ws: Id, p: ResearchProposal, primary: number | undefined, who: Who): Id {

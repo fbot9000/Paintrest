@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { useApp, useView } from '../../app/context';
-import { matchProduct, productKey, recipeProductRefs } from '../../domain/agent';
+import { matchProduct, productKey, recipeProductRefs, variantsText } from '../../domain/agent';
 import type { KnowledgeComparison, ProductRef, RecipePayload, SourceRead, SourceRef, TechniquePayload } from '../../domain/agent';
-import { catalogProducts, knowledgeTaskView } from '../../domain/library';
+import { catalogProducts, knowledgeTaskView, techniqueDetail } from '../../domain/library';
 import type { Id, ResearchMessage, ResearchProposal } from '../../domain/types';
 import { Badge, Button, ErrorNote } from '../../ui/components';
 import { LiveSteps, Message } from '../agent/AgentPanel';
@@ -43,13 +43,17 @@ export function ResearchTaskPage() {
   return (
     <main className="page tech-page">
       <div className="tech-head">
-        <span className="eyebrow"><Link to="/bibliotek/research">Research</Link> / {view.target === 'technique' ? 'Teknikk' : 'Oppskrift'}</span>
+        <span className="eyebrow">
+          <Link to="/bibliotek/research">Research</Link> / {view.revision_of
+            ? <Link to={`/bibliotek/teknikker/${view.revision_of.id}`}>{view.revision_of.name}</Link>
+            : view.target === 'technique' ? 'Teknikk' : 'Oppskrift'}
+        </span>
         <h1>{view.title}</h1>
       </div>
       <AiStatusNote status={status} />
       <ErrorNote error={run.error} onClose={() => clearRunError(taskId)} />
 
-      {pending.map((p) => <DraftCard key={p.id} p={p} messages={view.messages} />)}
+      {pending.map((p) => <DraftCard key={p.id} p={p} messages={view.messages} revisionOf={view.revision_of?.id ?? null} />)}
 
       <section className="research-chat" aria-label="Samtale med agenten">
         {view.messages.map((m) => <Message key={m.id} m={m} />)}
@@ -81,16 +85,19 @@ function DoneLine({ p }: { p: ResearchProposal }) {
   const exists = useView((t) => !!p.applied_target_id && !!(p.result_type === 'technique' ? t.technique[p.applied_target_id] : t.recipe[p.applied_target_id]), [p.applied_target_id]);
   return (
     <p className="done-line">
-      {p.decision === 'approved' ? <Badge tone="moss">Lagret</Badge> : <Badge>Forkastet</Badge>}{' '}
+      {p.decision === 'approved' ? <Badge tone="moss">Tatt i bruk</Badge> : <Badge>Forkastet</Badge>}{' '}
       <strong>{name}</strong>
       {p.decision === 'approved' && exists && <> · <Link to={`/bibliotek/${path}/${p.applied_target_id}`}>Åpne i biblioteket</Link></>}
     </p>
   );
 }
 
-function DraftCard({ p, messages }: { p: ResearchProposal; messages: ResearchMessage[] }) {
+function DraftCard({ p, messages, revisionOf }: { p: ResearchProposal; messages: ResearchMessage[]; revisionOf: Id | null }) {
   const app = useApp();
   const payload = p.payload as TechniquePayload | RecipePayload;
+  // Improvement (bit 7.6): compare with the technique as it is now.
+  const current = useView((t) => (revisionOf ? techniqueDetail(t, revisionOf) : undefined), [revisionOf]);
+  const stale = !!current && current.technique.updated_at !== p.base_version_id;
   const comparison = payload.comparison ?? null;
   const [primary, setPrimary] = useState(() => Math.max(0, comparison?.variants.findIndex((v) => v.primary) ?? 0));
   const [error, setError] = useState<string | null>(p.last_error ?? null);
@@ -116,14 +123,17 @@ function DraftCard({ p, messages }: { p: ResearchProposal; messages: ResearchMes
       <SourceInspector sources={payload.sources} read={payload.sources_read ?? []} messages={messages} />
       <div className="draft-main tech-section">
       <div className="tech-head-row">
-        <span className="eyebrow">Utkast fra agenten · {p.result_type === 'technique' ? 'teknikk' : 'oppskrift'}</span>
+        <span className="eyebrow">{current ? 'Forslag til endring' : `Utkast fra agenten · ${p.result_type === 'technique' ? 'teknikk' : 'oppskrift'}`}</span>
         <div className="tech-badges">
           <Badge>{payload.sources.length} {payload.sources.length === 1 ? 'kilde' : 'kilder'}</Badge>
           {comparison && comparison.variants.length > 0 && <Badge tone="dark">{comparison.variants.length} {comparison.variants.length === 1 ? 'variant' : 'varianter'}</Badge>}
           <EvidenceBadge evidence={p.evidence} />
         </div>
       </div>
-      {p.result_type === 'technique'
+      {current
+        ? <TechniqueChanges x={p.payload as TechniquePayload} cur={current} primary={primary}
+            comparison={comparison && <Comparison c={comparison} sources={payload.sources} primary={primary} onPick={setPrimary} />} />
+        : p.result_type === 'technique'
         ? <TechniqueDraft x={p.payload as TechniquePayload} comparison={comparison && <Comparison c={comparison} sources={payload.sources} primary={primary} onPick={setPrimary} />} />
         : <RecipeDraft x={p.payload as RecipePayload} comparison={comparison && <Comparison c={comparison} sources={payload.sources} primary={primary} onPick={setPrimary} />} />}
 
@@ -142,12 +152,17 @@ function DraftCard({ p, messages }: { p: ResearchProposal; messages: ResearchMes
         </div>
       )}
 
+      {stale && (
+        <div className="tech-uncertain" role="alert">
+          Du har endret teknikken etter at forslaget ble laget. Be agenten om et nytt forslag, så det bygger på det som står der nå.
+        </div>
+      )}
       <ErrorNote error={error} onClose={() => setError(null)} />
       <div className="draft-actions">
         <Button variant="danger" disabled={busy} onClick={() => act(() => app.research.rejectProposal(p.id))}>Forkast</Button>
-        <Button variant="primary" disabled={busy} onClick={approve}>Lagre i biblioteket</Button>
+        <Button variant="primary" disabled={busy || stale} onClick={approve}>{current ? 'Ta i bruk endringene' : 'Lagre i biblioteket'}</Button>
       </div>
-      <p className="small muted draft-hint">Lagres som utkast. Du kan endre alt etterpå.</p>
+      <p className="small muted draft-hint">{current ? 'Endringene skrives inn i teknikken. Erfaringer og status blir værende.' : 'Lagres som utkast. Du kan endre alt etterpå.'}</p>
       </div>
     </article>
   );
@@ -245,6 +260,48 @@ function RecipeDraft({ x, comparison }: { x: RecipePayload; comparison: ReactNod
         </div>
       )}
       {x.note && <p className="small muted">{x.note}</p>}
+    </>
+  );
+}
+
+/**
+ * Bit 7.6: what the improvement changes, field by field («Nå» and «Forslag»).
+ * Unchanged fields are left out.
+ */
+function TechniqueChanges({ x, cur, primary, comparison }:
+  { x: TechniquePayload; cur: NonNullable<ReturnType<typeof techniqueDetail>>; primary: number; comparison: ReactNode }) {
+  const now = cur.technique;
+  const list = (v: string[]) => v.join(', ');
+  const stepText = (steps: { title: string; instruction: string }[]) =>
+    steps.map((s, i) => `${i + 1}. ${[s.title, s.instruction].filter(Boolean).join(': ')}`).join('\n');
+  const rows: { label: string; before: string; after: string }[] = [
+    { label: 'Navn', before: now.name, after: x.name },
+    { label: 'Ønsket resultat', before: now.desired_result ?? '', after: x.desired_result ?? '' },
+    { label: 'Bruksområde', before: now.use_area ?? '', after: x.use_area ?? '' },
+    { label: 'Merkelapper', before: list(now.tags), after: list(x.tags) },
+    { label: 'Dette trenger du', before: list(now.materials), after: list(x.materials) },
+    { label: 'Steg', before: stepText(cur.steps), after: stepText(x.steps) },
+    { label: 'Varianter', before: now.variants ?? '', after: variantsText(x.comparison, primary) ?? x.variants ?? '' },
+    { label: 'Forbehold', before: now.risk_note ?? '', after: x.risk_note ?? '' },
+  ].filter((r) => r.before.trim() !== r.after.trim());
+  return (
+    <>
+      <h2>{x.name}</h2>
+      {x.note && <p className="tech-lead">{x.note}</p>}
+      {comparison}
+      {rows.length === 0
+        ? <p className="muted">Forslaget endrer ikke teksten i teknikken.</p>
+        : (
+          <div className="changes">
+            {rows.map((r) => (
+              <div key={r.label} className="change-row">
+                <span className="eyebrow">{r.label}</span>
+                <div className="change-before"><span className="small muted">Nå</span><p className="pre-line">{r.before || '–'}</p></div>
+                <div className="change-after"><span className="small">Forslag</span><p className="pre-line">{r.after || '–'}</p></div>
+              </div>
+            ))}
+          </div>
+        )}
     </>
   );
 }

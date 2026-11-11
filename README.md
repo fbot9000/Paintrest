@@ -59,6 +59,7 @@ Panelet til høyre i hvert prosjekt. Det bruker nøkkelen og standardmodellen fr
 - Utkastet viser hver kilde, om agenten faktisk leste den, og hva den bidro med. En lenke du la ved, men som ikke kunne leses, vises med grunnen.
 - Er kildene uenige, vises fremgangsmåtene side om side. Du velger hvilken som er utgangspunktet.
 - Hvert steg er merket «Vist i kilde» eller «Forslag fra agenten».
+- «Lagre og foreslå forbedring» (etter en erfaring) og «Forbedre med agenten» (på en teknikk) gir et forslag til endring. Du ser hva som endres, med «Nå» og «Forslag», før du tar det i bruk. Har du endret teknikken i mellomtiden, må agenten lage et nytt forslag.
 - Ingenting lagres i biblioteket før du trykker «Lagre i biblioteket». Da lagres det som utkast, og du kan endre alt etterpå. Malinger som ikke finnes i katalogen, kobler du til et produkt eller legger til som ubekreftet.
 
 ## Research på nettet
@@ -101,9 +102,9 @@ Alle sider agenten leser, lagres automatisk som kilder for spillet («Funnet av 
 | 1 Prosjekter og spill | Nytt prosjekt med en gang («Nytt spill N»), endring av navn, år, utgiver og illustrasjon, utvidelser med kobling og løsning, simulert BGG-kobling, sletting og gjenoppretting |
 | 2 (delvis) Miniatyrer | Galleri med planstatus og malefremdrift hver for seg, filtre, legge til, redigere og slette |
 | 5 Painting Mode | iPad liggende: referanser på 1/3 og plan på 2/3. Felles operasjoner og deler, steg, materialer med eierstatus, blandinger, «Finn fram malingene», avvik, delen ferdig, gruppeteller, «Marker ferdig» og historikk |
-| 7.0–7.5 Bibliotek | Teknikker og oppskrifter (fargerekke med valgfri fremgangsmåte) i datamodellen. «Bibliotek» i toppfeltet: søk, merkelapper og redigering av teknikker og oppskrifter, som lagres når du forlater et felt. Teknikken som artikkel, verkstedguide for iPad og registrering av erfaring. Research med agenten gir utkast til teknikker og oppskrifter, som du godkjenner inn i biblioteket. Se [docs/BIT7-KUNNSKAP.md](docs/BIT7-KUNNSKAP.md) |
+| 7.0–7.6 Bibliotek | Teknikker og oppskrifter (fargerekke med valgfri fremgangsmåte) i datamodellen. «Bibliotek» i toppfeltet: søk, merkelapper og redigering av teknikker og oppskrifter, som lagres når du forlater et felt. Teknikken som artikkel, verkstedguide for iPad og registrering av erfaring. Research med agenten gir utkast til teknikker og oppskrifter, som du godkjenner inn i biblioteket. Se [docs/BIT7-KUNNSKAP.md](docs/BIT7-KUNNSKAP.md) |
 
-Neste: bit 3 (maling og palett), bit 4 (redigering av maleplanen), bit 6 (kilder), bit 7.6 og videre (forbedring fra erfaring og bruk i prosjekt) og bit 8 (simulert agent).
+Neste: bit 3 (maling og palett), bit 4 (redigering av maleplanen), bit 6 (kilder), bit 7.7 (bruk i prosjekt, etter bit 4) og bit 8 (simulert agent).
 
 ## Arkitektur
 

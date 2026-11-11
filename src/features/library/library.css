@@ -173,6 +173,16 @@
 .draft-hint { text-align: right; }
 .done-line { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 
+/* Forslag til endring (bit 7.6) */
+.changes { display: grid; gap: 12px; }
+.change-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.change-row:first-child { border-top: 0; padding-top: 0; }
+.change-row > .eyebrow { grid-column: 1 / -1; color: var(--fore); }
+.change-before, .change-after { display: grid; gap: 4px; align-content: start; padding: 10px 12px; border-radius: var(--r-sm); }
+.change-before { background: var(--panel); }
+.change-before p { color: var(--muted); }
+.change-after { background: var(--moss-soft); }
+
 /* Oppskrift */
 .recipe-strip { display: flex; gap: 3px; flex-wrap: wrap; }
 .recipe-strip-lg .swatch { border-radius: 6px; }
@@ -208,6 +218,7 @@
 .step-technique { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 @media (max-width: 860px) {
+  .change-row { grid-template-columns: 1fr; }
   .draft-card { grid-template-columns: 1fr; }
   .source-inspector { border-right: 0; border-bottom: 1px solid var(--line); }
   .article-top { grid-template-columns: 1fr; }

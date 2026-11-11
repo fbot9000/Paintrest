@@ -242,6 +242,8 @@ export interface KnowledgeTaskSummary {
   title: string;
   pending: number;
   approved: number;
+  /** Bit 7.6: the technique this task improves, if any. */
+  revision_of: { id: Id; name: string } | null;
 }
 
 function knowledgeTarget(t: Tables, task_id: Id): 'technique' | 'recipe' {
@@ -256,6 +258,12 @@ function taskProposals(t: Tables, task_id: Id): ResearchProposal[] {
   return Object.values(t.research_proposal).filter((p) => p.task_id === task_id).sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 
+function revisionOf(t: Tables, task_id: Id): { id: Id; name: string } | null {
+  const r = Object.values(t.task_revision_target).find((x) => x.task_id === task_id && x.target_type === 'technique');
+  const tech = r ? t.technique[r.target_id] : undefined;
+  return tech ? { id: tech.id, name: tech.name } : null;
+}
+
 /** Library research tasks, newest first. */
 export function knowledgeTasks(t: Tables): KnowledgeTaskSummary[] {
   return Object.values(t.research_task)
@@ -267,9 +275,10 @@ export function knowledgeTasks(t: Tables): KnowledgeTaskSummary[] {
       return {
         task,
         target: knowledgeTarget(t, task.id),
-        title: first?.body.split('\n')[0]?.slice(0, 120) || 'Ny research',
+        title: revisionOf(t, task.id) ? `Forbedring av ${revisionOf(t, task.id)!.name}` : first?.body.split('\n')[0]?.slice(0, 120) || 'Ny research',
         pending: proposals.filter((p) => p.decision === 'pending').length,
         approved: proposals.filter((p) => p.decision === 'approved').length,
+        revision_of: revisionOf(t, task.id),
       };
     });
 }

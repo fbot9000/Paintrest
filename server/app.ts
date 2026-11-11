@@ -180,7 +180,8 @@ function parseFocus(v: unknown): ImageFocus | PlanFocus | KnowledgeFocus | null 
   if (!v || typeof v !== 'object') return null;
   const f = v as Record<string, unknown>;
   if (f.kind === 'knowledge') {
-    return { kind: 'knowledge', target: f.target === 'recipe' ? 'recipe' : 'technique' };
+    const rev = f.revision && typeof f.revision === 'object' ? str((f.revision as Record<string, unknown>).name).slice(0, 200) : '';
+    return { kind: 'knowledge', target: f.target === 'recipe' ? 'recipe' : 'technique', revision: rev ? { name: rev } : null };
   }
   if (f.kind === 'plan') {
     return {

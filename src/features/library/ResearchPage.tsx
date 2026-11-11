@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import type { AiStatus } from '../../app/ai-status';
+import { useAiStatus } from '../../app/ai-status';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useApp, useView } from '../../app/context';
 import { knowledgeTasks } from '../../domain/library';
@@ -6,21 +8,8 @@ import type { KnowledgeTarget } from '../../domain/research';
 import { Badge, Button, ErrorNote, Field, Segmented } from '../../ui/components';
 import { startRun } from './research-runs';
 
-export type AiStatus = 'checking' | 'no-server' | 'no-key' | 'ready';
-
-/** Whether research can run here: needs the Paintrest server and a saved key. */
-export function useAiStatus(): AiStatus {
-  const { ai } = useApp();
-  const [status, setStatus] = useState<AiStatus>('checking');
-  useEffect(() => {
-    let live = true;
-    ai.getCredential()
-      .then((r) => live && setStatus(r.status === 'unavailable' ? 'no-server' : r.credential ? 'ready' : 'no-key'))
-      .catch(() => live && setStatus('no-server'));
-    return () => { live = false; };
-  }, [ai]);
-  return status;
-}
+export type { AiStatus };
+export { useAiStatus };
 
 export function AiStatusNote({ status }: { status: AiStatus }) {
   if (status === 'no-server') {
@@ -101,7 +90,7 @@ export function ResearchPage() {
             {tasks.map((x) => (
               <li key={x.task.id}>
                 <Link to={x.task.id}>
-                  <span className="eyebrow">{x.target === 'technique' ? 'Teknikk' : 'Oppskrift'}</span>
+                  <span className="eyebrow">{x.revision_of ? 'Forbedring' : x.target === 'technique' ? 'Teknikk' : 'Oppskrift'}</span>
                   <strong>{x.title}</strong>
                   <span className="research-meta small muted">
                     {new Date(x.task.created_at).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short' })}

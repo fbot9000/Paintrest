@@ -57,3 +57,10 @@ export function useRun(task_id: Id): Run {
     () => runs.get(task_id) ?? IDLE,
   );
 }
+
+/** Bit 7.6: opens an improvement task for a technique and starts the first turn. Returns the task id. */
+export async function startImprovement(deps: { store: Store; research: ResearchCommands; agent: AgentCommands; ai: AiGateway }, technique_id: Id, text: string): Promise<Id> {
+  const task = await deps.research.startTechniqueRevision(technique_id);
+  startRun(deps, task, text);
+  return task;
+}
