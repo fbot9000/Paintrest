@@ -20,6 +20,13 @@ export interface RespondResult {
   citations: { url: string; title: string }[];
   /** Searches the model ran with the hosted web_search tool. */
   searches: string[];
+  /**
+   * Pages the hosted search returned (web_search_call.action.sources), asked for with
+   * include. Empty when the gateway does not support it.
+   */
+  search_sources: { url: string; title: string }[];
+  /** Pages the hosted tool opened itself (web_search_call actions of type open_page). */
+  hosted_opened: string[];
 }
 
 /** Message for the Responses API: plain text, or content parts with images (input_image takes a data URL). */
@@ -39,6 +46,8 @@ export class HostedToolError extends UserError {}
 export class ResponsesProvider {
   private store: CredentialStore;
   private fetchImpl: typeof fetch;
+  /** Set when the gateway rejected include: web_search_call.action.sources; then it is not sent again. */
+  private includeUnsupported = false;
 
   constructor(store: CredentialStore, fetchImpl: typeof fetch = fetch) {
     this.store = store;
@@ -61,12 +70,25 @@ export class ResponsesProvider {
       const model = opts.model || cred.default_model;
       if (!model) throw new UserError('Velg en standardmodell først');
       const tools = opts.hostedSearch ? [{ type: opts.hostedSearch }] : undefined;
+      // Ask for the pages behind each search, so sources the model found can be checked.
+      const include = tools && !this.includeUnsupported ? ['web_search_call.action.sources'] : undefined;
+      const send = (withInclude: boolean) => this.call(secret, `${cred.base_url}/responses`, {
+        method: 'POST',
+        body: JSON.stringify({
+          model, input, ...(opts.instructions ? { instructions: opts.instructions } : {}), ...(tools ? { tools } : {}),
+          ...(withInclude && include ? { include } : {}),
+        }),
+      }, opts.timeoutMs);
       let res: Response;
       try {
-        res = await this.call(secret, `${cred.base_url}/responses`, {
-          method: 'POST',
-          body: JSON.stringify({ model, input, ...(opts.instructions ? { instructions: opts.instructions } : {}), ...(tools ? { tools } : {}) }),
-        }, opts.timeoutMs);
+        try {
+          res = await send(true);
+        } catch (e) {
+          // A gateway that does not know the include option should not cost us the search itself.
+          if (!include || !(e instanceof UserError) || !/feil 400|feil 422/i.test(e.message)) throw e;
+          this.includeUnsupported = true;
+          res = await send(false);
+        }
       } catch (e) {
         // A 400 with tools present most likely means the tool is not supported for this model or gateway.
         if (tools && e instanceof UserError && /feil 400|feil 422|feil 501/i.test(e.message)) {
@@ -114,7 +136,7 @@ interface ResponseBody {
   output_text?: string;
   output?: {
     type?: string;
-    action?: { type?: string; query?: string; queries?: string[] };
+    action?: { type?: string; query?: string; queries?: string[]; url?: string; sources?: { type?: string; url?: string; title?: string }[] };
     query?: string;
     content?: { type?: string; text?: string; annotations?: Record<string, unknown>[] }[];
   }[];
@@ -143,7 +165,15 @@ export function parseResponse(body: ResponseBody, fallbackModel: string): Respon
     if (typeof q === 'string' && q.trim()) return [q];
     return (o.action?.queries ?? []).filter((x): x is string => typeof x === 'string');
   });
-  return { text, model: body.model ?? fallbackModel, usage: body.usage ?? null, citations: [...citations.values()], searches };
+  const calls = output.filter((o) => o.type === 'web_search_call');
+  const sources = new Map<string, { url: string; title: string }>();
+  for (const o of calls) {
+    for (const src of o.action?.sources ?? []) {
+      if (typeof src?.url === 'string' && /^https?:\/\//.test(src.url)) sources.set(src.url, { url: src.url, title: typeof src.title === 'string' ? src.title : src.url });
+    }
+  }
+  const hosted_opened = calls.flatMap((o) => (o.action?.type === 'open_page' && typeof o.action.url === 'string' && /^https?:\/\//.test(o.action.url) ? [o.action.url] : []));
+  return { text, model: body.model ?? fallbackModel, usage: body.usage ?? null, citations: [...citations.values()], searches, search_sources: [...sources.values()], hosted_opened };
 }
 
 export function hostedSearchOf(v: unknown): HostedSearch | null {

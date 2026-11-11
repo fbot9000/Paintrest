@@ -614,3 +614,106 @@ describe('like adresser', () => {
   });
 });
 
+
+describe('kilder fra UiB sitt nettsøk og eksempelbilder (bit 7.4)', () => {
+  it('leser søketreff (action.sources) og sider UiB åpnet (open_page)', () => {
+    const r = parseResponse({ output: [
+      { type: 'web_search_call', action: { type: 'search', query: 'fire effect miniature', sources: [{ type: 'url', url: 'https://a.example/fire' }, { type: 'api', name: 'x' } as never] } },
+      { type: 'web_search_call', action: { type: 'open_page', url: 'https://b.example/guide' } },
+      { type: 'message', content: [{ type: 'output_text', text: '{}' }] },
+    ] } as never, 'm');
+    expect(r.searches).toEqual(['fire effect miniature']);
+    expect(r.search_sources).toEqual([{ url: 'https://a.example/fire', title: 'https://a.example/fire' }]);
+    expect(r.hosted_opened).toEqual(['https://b.example/guide']);
+  });
+
+  it('godtar sider UiB åpnet som lest, søketreff som sett, og lister det som fjernes', async () => {
+    let i = 0;
+    const provider = { respond: async () => {
+      i++;
+      if (i === 1) return { text: '{"action":"final","message":"ok","proposals":[{"type":"technique","evidence":"documented","payload":{"name":"Ild","steps":[{"title":"Rødt","basis":"documented"}],"sources":[{"url":"https://b.example/guide","title":"Guide"},{"url":"https://a.example/fire"},{"url":"https://diktet.example/x"}],"sources_read":[{"url":"https://b.example/guide","summary":"Viser lagdeling"}]}}]}',
+        model: 'm', usage: null, searches: ['fire'], citations: [], search_sources: [{ url: 'https://a.example/fire', title: 'Fire' }], hosted_opened: ['https://b.example/guide'] };
+      return { text: '{"action":"final","message":"slutt","proposals":[]}', model: 'm', usage: null, searches: [], citations: [] };
+    } } as unknown as ResponsesProvider;
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider, search: null, hostedSearch: 'web_search', openPage: async () => PAGE },
+      { context: {}, messages: [{ role: 'user', content: 'Flammer' }], result_types: ['technique'], focus: { kind: 'knowledge', target: 'technique' } }, (e) => events.push(e));
+    const final = events.find((e) => e.type === 'final') as Extract<ResearchEvent, { type: 'final' }>;
+    const p = final.proposals[0] as { evidence: string; payload: { sources: { url: string; opened: boolean; via?: string }[]; steps: { basis: string }[]; sources_read: { summary: string }[] } };
+    expect(p.payload.sources.map((x) => [x.url, x.opened, x.via ?? null])).toEqual([['https://b.example/guide', true, 'uib'], ['https://a.example/fire', false, null]]);
+    expect(p.evidence).toBe('documented');
+    expect(p.payload.steps[0]!.basis).toBe('documented');
+    expect(p.payload.sources_read[0]!.summary).toBe('Viser lagdeling');
+    expect(final.warnings.join(' ')).toContain('https://diktet.example/x');
+    expect(final.trace.some((t) => t.action === 'open' && t.result === 'Lest via UiB')).toBe(true);
+  });
+
+  it('eksempelbilder må komme fra en åpnet side eller et bildesøk', async () => {
+    const page = { ...PAGE, url: 'https://blog.example/fire', images: [{ url: 'https://blog.example/fire1.jpg', alt: 'Ild', caption: null, context: null }] };
+    const replies = [
+      '{"action":"open","url":"https://blog.example/fire","why":"guide"}',
+      '{"action":"final","message":"ok","proposals":[{"type":"technique","payload":{"name":"Ild","sources":[{"url":"https://blog.example/fire"}],"images":[{"image_url":"https://blog.example/fire1.jpg","page_url":"https://blog.example/fire","caption":"Ferdig flamme"},{"image_url":"https://gjettet.example/x.jpg","page_url":"https://gjettet.example"}]}}]}',
+    ];
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider: fakeProvider(replies), search: fakeSearch, openPage: async () => page },
+      { context: {}, messages: [{ role: 'user', content: 'Ild' }], result_types: ['technique'], focus: { kind: 'knowledge', target: 'technique' } }, (e) => events.push(e));
+    const final = events.find((e) => e.type === 'final') as Extract<ResearchEvent, { type: 'final' }>;
+    const p = final.proposals[0] as { payload: { images: { image_url: string; caption: string }[] } };
+    expect(p.payload.images).toEqual([expect.objectContaining({ image_url: 'https://blog.example/fire1.jpg', caption: 'Ferdig flamme' })]);
+    expect(final.warnings.join(' ')).toContain('Fjernet 1 bilde');
+  });
+
+  it('sender agenten tilbake én gang hvis den svarer uten å ha lest noe', async () => {
+    const seen: string[] = [];
+    let i = 0;
+    const provider = { respond: async (input: { content: string }[]) => {
+      seen.push(String(input.at(-1)?.content ?? ''));
+      i++;
+      if (i === 1) return { text: '{"action":"final","message":"fra hukommelsen","proposals":[{"type":"technique","payload":{"name":"Ild"}}]}', model: 'm', usage: null, searches: [], citations: [] };
+      if (i === 2) return { text: '{"action":"open","url":"https://example.com/gallery"}', model: 'm', usage: null, searches: [], citations: [] };
+      return { text: '{"action":"final","message":"lest","proposals":[{"type":"technique","payload":{"name":"Ild","sources":[{"url":"https://example.com/gallery"}]}}]}', model: 'm', usage: null, searches: [], citations: [] };
+    } } as unknown as ResponsesProvider;
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider, search: fakeSearch, openPage: async () => PAGE },
+      { context: {}, messages: [{ role: 'user', content: 'Ild' }], result_types: ['technique'], focus: { kind: 'knowledge', target: 'technique' } }, (e) => events.push(e));
+    expect(seen[1]).toContain('Du har ikke åpnet noen sider');
+    const final = events.find((e) => e.type === 'final') as Extract<ResearchEvent, { type: 'final' }>;
+    expect(final.message).toBe('lest');
+    expect((final.proposals[0] as { payload: { sources: { opened: boolean }[] } }).payload.sources[0]!.opened).toBe(true);
+  });
+
+  it('sier fra når det ikke finnes nettilgang', async () => {
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider: fakeProvider(['{"action":"final","message":"ok","proposals":[{"type":"technique","payload":{"name":"Ild"}}]}']), search: null, openPage: async () => PAGE },
+      { context: {}, messages: [{ role: 'user', content: 'Ild' }], result_types: ['technique'], focus: { kind: 'knowledge', target: 'technique' } }, (e) => events.push(e));
+    const final = events.find((e) => e.type === 'final') as Extract<ResearchEvent, { type: 'final' }>;
+    expect(final.warnings[0]).toContain('Uten nettsøk');
+  });
+});
+
+describe('UiB og include-valget', () => {
+  it('ber om søketreff, og prøver uten valget hvis UiB avviser det', async () => {
+    const { mkdtempSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { CredentialStore } = await import('./credential-store.ts');
+    const { ResponsesProvider } = await import('./provider.ts');
+    const { randomBytes } = await import('node:crypto');
+    const store = new CredentialStore(mkdtempSync(join(tmpdir(), 'pt-')), randomBytes(32));
+    store.save({ label: 'UiB', base_url: 'https://uib.example/v1', api_key: 'hemmelig', default_model: 'm', hosted_search: 'web_search' } as never);
+    const bodies: Record<string, unknown>[] = [];
+    const fetchImpl = (async (_url: string, init: { body: string }) => {
+      const body = JSON.parse(init.body) as Record<string, unknown>;
+      bodies.push(body);
+      if (body.include) return new Response('{"error":"unknown parameter include"}', { status: 400 });
+      return new Response(JSON.stringify({ output: [{ type: 'message', content: [{ type: 'output_text', text: '{}' }] }] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const provider = new ResponsesProvider(store, fetchImpl);
+    await provider.respond('hei', { hostedSearch: 'web_search' });
+    expect(bodies.map((b) => b.include ?? null)).toEqual([['web_search_call.action.sources'], null]);
+    // Remembered: the next call does not send it again, and the search tool is still on.
+    await provider.respond('hei igjen', { hostedSearch: 'web_search' });
+    expect(bodies[2]!.include).toBeUndefined();
+    expect(bodies[2]!.tools).toEqual([{ type: 'web_search' }]);
+  });
+});

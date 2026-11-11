@@ -242,6 +242,23 @@
   }
 }
 
+/* Eksempelbilder */
+.kg { margin: 0; display: grid; gap: 8px; }
+.kg-main { width: 100%; max-height: 380px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--r-lg); background: var(--panel); }
+.kg figcaption a { color: var(--fore); }
+.kg-thumbs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.kg-thumbs button { flex: none; width: 72px; height: 72px; padding: 0; border: 2px solid transparent; border-radius: var(--r-sm); overflow: hidden; cursor: pointer; background: none; }
+.kg-thumbs button.on { border-color: var(--pine); }
+.kg-thumb { width: 100%; height: 100%; object-fit: cover; }
+.draft-images { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.draft-images li { display: grid; gap: 4px; align-content: start; opacity: .55; }
+.draft-images li.on { opacity: 1; }
+.draft-images label { position: relative; display: block; cursor: pointer; }
+.draft-images input { position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; accent-color: var(--pine); }
+.draft-img { display: grid; place-items: center; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--r-sm); background: var(--panel); border: 2px solid transparent; font-size: 12px; text-align: center; }
+.draft-images li.on .draft-img { border-color: var(--pine); }
+.draft-images a { color: var(--fore); }
+
 /* Oppskrift */
 .recipe-strip { display: flex; gap: 3px; flex-wrap: wrap; }
 .recipe-strip-lg .swatch { border-radius: 6px; }

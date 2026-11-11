@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useView } from '../../app/context';
-import { techniqueDetail } from '../../domain/library';
+import { knowledgeImages, techniqueDetail } from '../../domain/library';
+import { FileImage } from '../../ui/components';
 import type { ExperienceOutcome } from '../../domain/types';
 import { ExperienceDialog } from './ExperienceDialog';
 import { ExperienceBadge, StatusBadge } from './parts';
@@ -15,6 +16,7 @@ import './workshop.css';
 export function WorkshopGuide() {
   const { techniqueId = '' } = useParams();
   const d = useView((t) => techniqueDetail(t, techniqueId), [techniqueId]);
+  const images = useView((t) => knowledgeImages(t, 'technique', techniqueId), [techniqueId]);
   const [done, setDone] = useState<Set<string>>(new Set());
   const [dialog, setDialog] = useState<ExperienceOutcome | null>(null);
   const [thanks, setThanks] = useState(false);
@@ -45,6 +47,12 @@ export function WorkshopGuide() {
 
       <div className="wg-body">
         <aside className="wg-side" aria-label="Materialer">
+          {images[0] && (
+            <figure className="wg-figure">
+              <FileImage fileId={images[0].file_id} alt={images[0].caption ?? images[0].source.title} className="wg-img" />
+              <figcaption className="wg-dim small">{images[0].caption ?? images[0].source.title}</figcaption>
+            </figure>
+          )}
           <span className="eyebrow">Dette trenger du</span>
           {x.materials.length
             ? <ul>{x.materials.map((m, i) => <li key={i}>{m}</li>)}</ul>

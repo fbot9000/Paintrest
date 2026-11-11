@@ -3,8 +3,8 @@ import type { ReactNode } from 'react';
 import { useCommand } from '../../app/context';
 import type { Commands } from '../../domain/commands';
 import type { Evidence, KnowledgeStatus } from '../../domain/types';
-import type { PracticalExperience } from '../../domain/library';
-import { Badge } from '../../ui/components';
+import type { KnowledgeImageView, PracticalExperience } from '../../domain/library';
+import { Badge, FileImage } from '../../ui/components';
 
 // ---------- Lagring ----------
 
@@ -166,5 +166,36 @@ export function ChipListEditor({ items, onSave, label, placeholder, suggestions 
         </li>
       </ul>
     </div>
+  );
+}
+
+// ---------- Eksempelbilder ----------
+
+/**
+ * Example pictures of a technique or recipe: the first one large, the rest as
+ * thumbnails. Each picture names its page, so it is clear where it comes from.
+ */
+export function KnowledgeGallery({ images }: { images: KnowledgeImageView[] }) {
+  const [index, setIndex] = useState(0);
+  if (!images.length) return null;
+  const cur = images[Math.min(index, images.length - 1)]!;
+  return (
+    <figure className="kg">
+      <FileImage fileId={cur.file_id} alt={cur.caption ?? cur.source.title} className="kg-main" />
+      <figcaption className="small">
+        {cur.caption && <span>{cur.caption} · </span>}
+        {cur.source.url ? <a href={cur.source.url} target="_blank" rel="noreferrer">{cur.source.title} ↗</a> : cur.source.title}
+      </figcaption>
+      {images.length > 1 && (
+        <div className="kg-thumbs" role="group" aria-label="Bilder">
+          {images.map((im, i) => (
+            <button key={im.asset_id} type="button" className={i === index ? 'on' : ''} aria-pressed={i === index}
+              aria-label={`Vis bilde ${i + 1}`} onClick={() => setIndex(i)}>
+              <FileImage fileId={im.file_id} alt="" className="kg-thumb" />
+            </button>
+          ))}
+        </div>
+      )}
+    </figure>
   );
 }

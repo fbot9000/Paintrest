@@ -2,11 +2,11 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useView } from '../../app/context';
 import type { RecipePatch, RecipePaintInput, RecipeStepInput } from '../../domain/commands';
-import { catalogProducts, libraryTags, libraryTechniques, recipeDetail } from '../../domain/library';
+import { catalogProducts, knowledgeImages, libraryTags, libraryTechniques, recipeDetail } from '../../domain/library';
 import type { RecipePaintView } from '../../domain/library';
 import type { Id, MaterialRole, PaintProduct } from '../../domain/types';
 import { Button, Card, ErrorNote, InlineText, OwnershipFlag, ProductName, Swatch } from '../../ui/components';
-import { AutoField, ChipListEditor, EvidenceBadge, RowTools, SaveState, StatusBadge, moved, useAutosave } from './parts';
+import { AutoField, ChipListEditor, EvidenceBadge, KnowledgeGallery, RowTools, SaveState, StatusBadge, moved, useAutosave } from './parts';
 
 const ROLES: MaterialRole[] = ['base', 'shade', 'layer', 'highlight', 'wash', 'glaze', 'mix', 'other'];
 const ROLE_LABEL: Record<MaterialRole, string> = {
@@ -20,6 +20,7 @@ const ROLE_LABEL: Record<MaterialRole, string> = {
 export function RecipePage() {
   const { recipeId = '' } = useParams();
   const d = useView((t) => recipeDetail(t, recipeId), [recipeId]);
+  const images = useView((t) => knowledgeImages(t, 'recipe', recipeId), [recipeId]);
   const tags = useView((t) => libraryTags(t, 'recipe').map((x) => x.tag));
   const products = useView((t) => catalogProducts(t));
   const techniques = useView((t) => libraryTechniques(t).map((c) => c.technique));
@@ -83,6 +84,8 @@ export function RecipePage() {
               <ul>{x.uncertainty.map((u, i) => <li key={i}>{u.reason}</li>)}</ul>
             </div>
           )}
+
+          <KnowledgeGallery images={images} />
 
           <Card className="tech-section">
             <AutoField label="Effekt" multiline value={x.effect ?? ''}

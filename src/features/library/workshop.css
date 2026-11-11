@@ -72,3 +72,6 @@
   .wg-foot { position: sticky; bottom: 0; flex-wrap: wrap; }
   .wg-btn { flex: 1; padding: 0 12px; }
 }
+
+.wg-figure { margin: 0; display: grid; gap: 6px; }
+.wg-img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--r-md); background: var(--fore); }

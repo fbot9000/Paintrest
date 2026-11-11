@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useApp, useView } from '../../app/context';
-import { techniqueDetail } from '../../domain/library';
+import { knowledgeImages, techniqueDetail } from '../../domain/library';
 import { Badge, Button, Card, ErrorNote } from '../../ui/components';
 import { ExperienceDialog } from './ExperienceDialog';
-import { EvidenceBadge, ExperienceBadge, StatusBadge, useAutosave } from './parts';
+import { EvidenceBadge, ExperienceBadge, KnowledgeGallery, StatusBadge, useAutosave } from './parts';
 import { useAiStatus } from './ResearchPage';
 import { startImprovement } from './research-runs';
 
@@ -15,6 +15,7 @@ import { startImprovement } from './research-runs';
 export function TechniquePage() {
   const { techniqueId = '' } = useParams();
   const d = useView((t) => techniqueDetail(t, techniqueId), [techniqueId]);
+  const images = useView((t) => knowledgeImages(t, 'technique', techniqueId), [techniqueId]);
   const { save, error, clearError } = useAutosave();
   const [experienceOpen, setExperienceOpen] = useState(false);
   const app = useApp();
@@ -95,6 +96,7 @@ export function TechniquePage() {
             </Card>
             </div>
             <div className="article-main">
+          <KnowledgeGallery images={images} />
           <Card className="tech-section">
             <span className="eyebrow">Slik gjør du</span>
             {d.steps.length === 0

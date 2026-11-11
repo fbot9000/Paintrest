@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { useApp, useView } from '../../app/context';
 import { matchProduct, productKey, recipeProductRefs, variantsText } from '../../domain/agent';
-import type { KnowledgeComparison, ProductRef, RecipePayload, SourceRead, SourceRef, TechniquePayload } from '../../domain/agent';
+import type { KnowledgeComparison, KnowledgeImage, ProductRef, RecipePayload, SourceRead, SourceRef, TechniquePayload } from '../../domain/agent';
 import { catalogProducts, knowledgeTaskView, techniqueDetail } from '../../domain/library';
 import { ownershipOf } from '../../domain/views';
 import type { Id, ResearchMessage, ResearchProposal } from '../../domain/types';
@@ -126,6 +126,9 @@ function DraftCard({ p, messages, revisionOf }: { p: ResearchProposal; messages:
   const stale = !!current && current.technique.updated_at !== p.base_version_id;
   const comparison = payload.comparison ?? null;
   const [primary, setPrimary] = useState(() => Math.max(0, comparison?.variants.findIndex((v) => v.primary) ?? 0));
+  const images = payload.images ?? [];
+  // All example pictures are kept unless the user unticks them.
+  const [dropped, setDropped] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(p.last_error ?? null);
   const [busy, setBusy] = useState(false);
   const [choices, setChoices] = useState<Record<string, Id | 'create'>>({});
@@ -142,6 +145,7 @@ function DraftCard({ p, messages, revisionOf }: { p: ResearchProposal; messages:
   const approve = () => act(() => app.research.approveProposal(p.id, {
     product_choices: Object.fromEntries(missing.map((r) => [productKey(r), choices[productKey(r)] ?? 'create'])),
     ...(comparison?.variants.length ? { primary_variant: primary } : {}),
+    ...(images.length ? { image_urls: images.map((i) => i.image_url).filter((u) => !dropped.has(u)) } : {}),
   }));
 
   // The source column only takes space when there is something in it.
@@ -171,6 +175,11 @@ function DraftCard({ p, messages, revisionOf }: { p: ResearchProposal; messages:
         : p.result_type === 'technique'
         ? <TechniqueDraft x={p.payload as TechniquePayload} comparison={comparison && <Comparison c={comparison} sources={payload.sources} primary={primary} onPick={setPrimary} />} />
         : <RecipeDraft x={p.payload as RecipePayload} comparison={comparison && <Comparison c={comparison} sources={payload.sources} primary={primary} onPick={setPrimary} />} />}
+
+      {images.length > 0 && (
+        <DraftImages images={images} dropped={dropped}
+          onToggle={(u) => setDropped((d) => { const n = new Set(d); if (n.has(u)) n.delete(u); else n.add(u); return n; })} />
+      )}
 
       {p.uncertainty.length > 0 && (
         <div className="tech-uncertain" role="note">
@@ -202,6 +211,41 @@ function DraftCard({ p, messages, revisionOf }: { p: ResearchProposal; messages:
     </article>
     </div>
   );
+}
+
+/** Example pictures in a draft. Ticked ones are stored with the technique or recipe when it is saved. */
+function DraftImages({ images, dropped, onToggle }: { images: KnowledgeImage[]; dropped: Set<string>; onToggle: (url: string) => void }) {
+  const app = useApp();
+  const kept = images.length - [...dropped].filter((u) => images.some((i) => i.image_url === u)).length;
+  return (
+    <div className="article-block">
+      <span className="eyebrow">Eksempelbilder · {kept} av {images.length} lagres</span>
+      <ul className="draft-images">
+        {images.map((im) => {
+          const on = !dropped.has(im.image_url);
+          return (
+            <li key={im.image_url} className={on ? 'on' : ''}>
+              <label>
+                <input type="checkbox" checked={on} onChange={() => onToggle(im.image_url)} />
+                <DraftImg src={app.ai.imageProxyUrl(im.image_url)} fallback={im.thumbnail_url ? app.ai.imageProxyUrl(im.thumbnail_url) : null} alt={im.caption ?? ''} />
+              </label>
+              <span className="small">{im.caption ?? im.page_title}</span>
+              <a className="small" href={im.page_url} target="_blank" rel="noreferrer">{im.site} ↗</a>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/** Tries the image itself, then the image search's small copy, then shows that it could not be loaded. */
+function DraftImg({ src, fallback, alt }: { src: string; fallback: string | null; alt: string }) {
+  const [cur, setCur] = useState(src);
+  const [failed, setFailed] = useState(false);
+  if (failed) return <span className="img-fallback draft-img">Bildet kan ikke vises</span>;
+  return <img className="draft-img" src={cur} alt={alt} loading="lazy"
+    onError={() => { if (fallback && cur !== fallback) setCur(fallback); else setFailed(true); }} />;
 }
 
 function MissingPaint({ r, products, value, onChange }:
@@ -417,7 +461,7 @@ function SourceInspector({ sources, read, messages }: { sources: SourceRef[]; re
           <span className="eyebrow">Kilde {String(i + 1).padStart(2, '0')}</span>
           <strong>{s.title}</strong>
           <span className="small muted">{hostOf(s.url)}</span>
-          {s.opened ? <Badge tone="moss">Lest</Badge> : <Badge tone="warn">Bare sett i søk</Badge>}
+          {s.opened ? <Badge tone="moss">{s.via === 'uib' ? 'Lest via UiB' : 'Lest'}</Badge> : <Badge tone="warn">Bare sett i søk</Badge>}
           {summary.get(key(s.url)) && <p className="small">{summary.get(key(s.url))}</p>}
           <a className="small" href={s.url} target="_blank" rel="noreferrer">Åpne ↗</a>
         </div>

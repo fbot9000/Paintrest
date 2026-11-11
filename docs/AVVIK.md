@@ -90,6 +90,10 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
       - Serveren nedgraderer steg merket «vist i kilde» til «forslag fra agenten» når ingen kilde i utkastet er åpnet.
       - **Sammenligning (7.5):** Utkastet kan ha `comparison` med felles trekk og varianter, som hver peker på kildene sine med URL. Serveren og klienten fjerner pekere til kilder som ikke er med i utkastet. Bare én variant er utgangspunkt. Ved lagring blir variantene tekst i `technique.variants` (eller i `recipe.note`), med brukerens valg først. Det finnes ingen egen tabell for varianter.
       - **Forbedring (7.6):** `task_revision_target` kan nå ha `target_type = 'technique'`. Fordi biblioteket ikke har versjoner, lagres `technique.updated_at` i `base_version_id`, både på målet og på forslaget. Godkjenning skriver forslaget rett inn i teknikken og stopper hvis `updated_at` er endret etter at forslaget ble skrevet. Status, erfaringer og kilder som allerede er lenket, blir værende. Nye kilder legges til. Oppskrifter kan ikke forbedres på denne måten ennå.
+      - **Kilder fra UiB sitt nettsøk:** Paintrest ber UiB om `include: ["web_search_call.action.sources"]`, slik at treffene bak et søk regnes som «sett i søk». Sider UiB sitt verktøy åpnet selv (`web_search_call` med `open_page`), regnes som lest og merkes «Lest via UiB». Paintrest får ikke teksten fra dem. Avviser UiB `include`, prøver Paintrest én gang til uten, og sender det ikke igjen. Før dette ble nesten alle kilder fra UiB-søket fjernet, fordi bare sitater (`url_citation`) talte.
+      - **Fjernede kilder** listes med adresse, ikke bare antall.
+      - **Må lese:** Svarer agenten med et utkast uten å ha åpnet en eneste side mens den har nettilgang, sendes den tilbake én gang. Uten nettilgang sier Paintrest fra («Uten nettsøk»).
+      - **Eksempelbilder:** Utkastet kan ha `images`, og bare bilder fra bildelisten på en side Paintrest åpnet eller fra et bildesøk godtas. Bildesøk (Tavily/Brave) er nå også på for research til biblioteket. Bildene du har krysset av, hentes og lagres som `source_asset` med en `visual_reference`-lenke til teknikken eller oppskriften. De vises i artikkelen, på oppskriften og i verkstedguiden.
       - Det er ikke testet mot UiB. Testene bruker en simulert modell og simulerte serversvar.
     - **Erfaring (7.3):** Erfaring kan registreres uten å velge miniatyr. Feltet `subject_id` finnes, men skjermen bruker det ikke ennå. Avkryssing av steg i verkstedguiden lagres ikke.
     - **Hovednavigasjon (7.1):** Toppfeltet har «Prosjekter» og «Bibliotek». Skissene har også «Research» og «Malinger», men de sidene finnes ikke ennå. På smale skjermer vises bare logoen, uten navnet.
@@ -128,5 +132,5 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 
 - Redigering av maleplanen (bit 4). «Lag maleplan» lager bare en tom versjon 1.
 - Palett og kilder. Agenten kan foreløpig ikke foreslå referanser, teknikker eller oppskrifter.
-- Biblioteket etter 7.4: bilder på teknikker, «Bruk i prosjekt» (7.7). Teknikksiden har ikke bilder, fordi datamodellen ikke har noe felt for det ennå.
+- Biblioteket etter 7.4: «Bruk i prosjekt» (7.7). Teknikksiden har ikke bilder, fordi datamodellen ikke har noe felt for det ennå.
 - Ny planversjon ved redigering. Det kommer i bit 4, og der blir problemet med fremdrift og avvik på tvers av versjoner synlig.

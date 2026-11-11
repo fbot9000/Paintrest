@@ -1,13 +1,13 @@
 import { CommandError } from '../domain/commands';
 import { newId, now } from '../domain/ids';
 import { describeOps, matchProduct, planProductRefs, productKey, proposalTitle, recipeProductRefs, variantsText } from '../domain/agent';
-import type { CatalogChangePayload, CatalogSubjectPayload, NormalisedProposal, PaintPlanPayload, PaletteItem, ProductRef, ProposalKind, RecipePayload, ReferenceSelectionPayload, SourceRead, SourceRef, SubjectFields, TechniquePayload } from '../domain/agent';
+import type { CatalogChangePayload, CatalogSubjectPayload, KnowledgeImage, NormalisedProposal, PaintPlanPayload, PaletteItem, ProductRef, ProposalKind, RecipePayload, ReferenceSelectionPayload, SourceRead, SourceRef, SubjectFields, TechniquePayload } from '../domain/agent';
 import type { AgentCommands, ApproveOptions, ProposalWrite, ResearchCommands } from '../domain/research';
 import type { ChangeAction, Id, MiniatureSubject, PaintChoice, ResearchProposal, ResultType, RowPatch, Tables, Uncertainty } from '../domain/types';
 import { attachedExpansions } from '../domain/views';
 import type { Store } from './store';
 import { revertPatches } from './store';
-import { addSourceLayers, attachImages, downloadImages, setCover, sourceFor } from './images-tx';
+import { addSourceLayers, attachImages, attachImagesTo, downloadImages, setCover, sourceFor } from './images-tx';
 import type { Downloaded } from './images-tx';
 
 /** Result types implemented in this version. See docs/AVVIK.md. */
@@ -452,6 +452,11 @@ function needsUser(t: Tables, p: ResearchProposal): string | null {
 /** Images are fetched before the transaction (see images-tx). */
 async function downloadSelected(store: Store, deps: ResearchDeps, proposal_id: Id, opts: ApproveOptions): Promise<Downloaded> {
   const p = store.getTables().research_proposal[proposal_id];
+  if (p && (p.result_type === 'technique' || p.result_type === 'recipe')) {
+    // Library drafts: the example pictures the user kept (default: all). None is fine.
+    const wanted = chosenImages((p.payload as { images?: KnowledgeImage[] }).images, opts.image_urls);
+    return wanted.length ? downloadImages(store, deps.fetchImage, wanted) : {};
+  }
   if (!p || p.result_type !== 'reference_selection') return {};
   const payload = p.payload as ReferenceSelectionPayload;
   const wanted = payload.images.filter((i) => !opts.image_urls || opts.image_urls.includes(i.image_url));
@@ -485,6 +490,13 @@ function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions, files
       : kind === 'technique'
       ? approveTechnique(t, ws, p, opts.primary_variant, userWho)
       : approveRecipe(t, ws, p, opts.product_choices ?? {}, opts.primary_variant, userWho);
+    // Example pictures go with the technique or recipe (visual_reference), with their pages as sources.
+    const images = chosenImages((p.payload as { images?: KnowledgeImage[] }).images, opts.image_urls);
+    if (images.length) {
+      attachImagesTo(t, ws, { type: kind, id: p.applied_target_id }, images.map((i) => ({
+        image_url: i.image_url, page_url: i.page_url, page_title: i.page_title, site: i.site, creator: null, caption: i.caption, kind: null,
+      })), files, p.task_id, (tt, id, a) => record(t, ws, tt, id, a, userWho));
+    }
     p.decision = 'approved';
     p.updated_at = now();
     p.last_error = null;
@@ -690,6 +702,10 @@ function linkMethodSources(t: Tables, ws: Id, target_type: 'technique' | 'recipe
   }
   // Summaries only for the pages that are now linked to the library.
   addSourceLayers(t, (read ?? []).filter((r) => linked.has(r.url) && writable.has(r.url)));
+}
+
+function chosenImages(images: KnowledgeImage[] | undefined, chosen: string[] | undefined): KnowledgeImage[] {
+  return (images ?? []).filter((i) => !chosen || chosen.includes(i.image_url));
 }
 
 /** The technique an improvement task is about (bit 7.6), if any. */

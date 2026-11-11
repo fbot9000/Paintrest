@@ -174,7 +174,7 @@ const MAX_LOOK = 8;
 const MAX_MESSAGES = 30;
 
 export function researchInstructions(context: unknown, resultTypes: string[], mode: WebMode, anyFocus: ImageFocus | PlanFocus | KnowledgeFocus | null = null, vision = false, imagesAttached = false, direct = false, hunt0: HuntState | null = null, imageSearch = false): string {
-  if (anyFocus?.kind === 'knowledge') return knowledgeInstructions(context, resultTypes, mode, anyFocus);
+  if (anyFocus?.kind === 'knowledge') return knowledgeInstructions(context, resultTypes, mode, anyFocus, imageSearch && mode !== 'none');
   const img = imageSearch && mode !== 'none';
   const focus = anyFocus?.kind === 'images' ? anyFocus : null;
   const plan = anyFocus?.kind === 'plan' ? anyFocus : null;
@@ -284,17 +284,20 @@ ${JSON.stringify(context)}`;
  * or a recipe, compare them, and draft one guide. The agent cannot change the
  * library; the user approves the draft (global zone, docs/AVVIK.md punkt 28).
  */
-export function knowledgeInstructions(context: unknown, resultTypes: string[], mode: WebMode, focus: KnowledgeFocus): string {
+export function knowledgeInstructions(context: unknown, resultTypes: string[], mode: WebMode, focus: KnowledgeFocus, img = false): string {
   const steps = MAX_KNOWLEDGE_STEPS;
   const twoDrafts = focus.target === 'recipe' && focus.paints === 'both' && !focus.revision;
   const tools = mode === 'hosted'
     ? `Du har et innebygd nettsøk-verktøy (web_search) som du bruker direkte. I tillegg kan Paintrest åpne sider for deg. Hvert svar fra deg er ETT JSON-objekt:
-  {"action": "open", "url": "https://…", "why": "kort grunn"} – Paintrest leser siden og gir deg teksten
-  {"action": "final", "message": "…", "proposals": [ … ]}     – ferdig svar til brukeren`
+  {"action": "open", "url": "https://…", "why": "kort grunn"} – Paintrest leser siden og gir deg teksten og bildelisten${img ? `
+  {"action": "image_search", "query": "…", "why": "kort grunn"} – bildesøk, gir bilde-URL-er med siden de kommer fra` : ''}
+  {"action": "final", "message": "…", "proposals": [ … ]}     – ferdig svar til brukeren
+Sider du bare leser med web_search, ser brukeren som «lest via UiB», uten bilder. Åpne de beste guidene med "open" også, så får du bildene.`
     : mode === 'search'
       ? `Du har nettilgang gjennom to verktøy. Hvert svar fra deg er ETT JSON-objekt:
   {"action": "search", "query": "…", "why": "kort grunn"}   – nettsøk (bruk gjerne engelske søkeord)
-  {"action": "open", "url": "https://…", "why": "kort grunn"} – les én side
+  {"action": "open", "url": "https://…", "why": "kort grunn"} – les én side og få tekst og bildeliste${img ? `
+  {"action": "image_search", "query": "…", "why": "kort grunn"} – bildesøk, gir bilde-URL-er med siden de kommer fra` : ''}
   {"action": "final", "message": "…", "proposals": [ … ]}     – ferdig svar til brukeren`
       : `Du har ikke nettilgang i dette oppsettet. Svar direkte med ett JSON-objekt {"action": "final", "message": "…", "proposals": [ … ]}.
 Alt du skriver, bygger da på det du vet fra før. Merk forslaget "synthesized", alle steg med "basis": "synthesized", og si tydelig i meldingen at det ikke er sjekket mot kilder.`;
@@ -320,6 +323,7 @@ ${paintRule(focus.paints ?? 'best', 'recipe')}`;
   "steps": [{"title": "Kort overskrift", "instruction": "Hva du gjør", "basis": "documented|synthesized"}],
   "note": "kort om hva kildene var uenige om",
   "comparison": {"common": "det kildene er enige om", "variants": [{"label": "Svamp for tekstur", "description": "hvordan denne varianten gjøres og hva den gir", "sources": ["https://…"], "primary": true}]},
+  "images": [{"image_url": "https://…", "page_url": "https://…", "caption": "hva bildet viser"}],
   "sources": [{"url": "https://…", "title": "…"}],
   "sources_read": [{"url": "https://…", "language": "en", "summary": "norsk sammendrag av hva siden viser og sier", "original_excerpt": "kort utdrag"}]}}`
     : `{"type": "recipe", "evidence": "documented|synthesized|unresolved", "uncertainty": [],
@@ -327,6 +331,7 @@ ${paintRule(focus.paints ?? 'best', 'recipe')}`;
   "paints": [{"product": {"manufacturer": "Citadel", "range": "Base", "name": "Rhinox Hide", "hex": "#3d2b23"}, "role": "base|shade|layer|highlight|wash|glaze|mix|other", "note": "for eksempel tynn ut"}],
   "steps": [{"instruction": "Hva du gjør", "paints": [1, 2], "technique": "T1 eller null"}],
   "comparison": {"common": "det kildene er enige om", "variants": [{"label": "…", "description": "…", "sources": ["https://…"], "primary": true}]},
+  "images": [{"image_url": "https://…", "page_url": "https://…", "caption": "hva bildet viser"}],
   "sources": [{"url": "https://…", "title": "…"}],
   "sources_read": [{"url": "https://…", "language": "en", "summary": "norsk sammendrag", "original_excerpt": "kort utdrag"}]}}
 "paints" i et steg er nummeret i fargerekken (1 er den første). "technique" er ref-en til en teknikk i "library.techniques", eller null.`;
@@ -345,7 +350,8 @@ Arbeid slik:
 3. Sammenlign: hva gjør kildene likt, og hvor er de uenige? Skriv det felles i "comparison.common", og hver ulik fremgangsmåte som en variant i "comparison.variants" med URL-ene til kildene som viser den. Merk én variant som utgangspunkt ("primary": true). Stegene i guiden følger utgangspunktet.
    I "sources_read" skal "summary" si kort hva kilden viser og hva den bidrar med (for eksempel «viser hele metoden i video», «bare produktråd»).
 4. Skill mellom det kildene viser og det du selv foreslår: "basis": "documented" bare når en åpnet kilde beskriver steget, ellers "synthesized".
-5. Lag ${twoDrafts ? 'forslag etter malingsvalget (to, med ulik "paint_choice")' : 'ETT forslag'} av typen ${focus.target}. Lag ikke andre forslagstyper.
+5. Eksempelbilder: velg 3–8 bilder som viser resultatet eller viktige steg, fra bildelisten på sider du har åpnet med "open"${img ? ' eller fra et bildesøk' : ''}. Legg dem i "images" med eksakt bilde-URL og sidens URL. Ikke gjett bilde-URL-er.
+6. Lag ${twoDrafts ? 'forslag etter malingsvalget (to, med ulik "paint_choice")' : 'ETT forslag'} av typen ${focus.target}. Lag ikke andre forslagstyper.
 
 Kildekrav:
 - Oppgi kildene du bygger på i "sources" med eksakt URL. Bare sider du har søkt fram eller åpnet, blir godtatt.
@@ -491,8 +497,8 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   let phaseSteps = 0;
   let huntNudges = 0;
   // Image search needs a Tavily or Brave key; it works next to UiB's own web search too.
-  // Library research works from text; it has no use for image search.
-  const imageSearchOn = !!deps.search?.configured() && !plan && !knowledge;
+  // Image search (Tavily/Brave key) also finds example pictures for the library.
+  const imageSearchOn = !!deps.search?.configured() && !plan;
   const imageHits = new Map<string, ImageHit>();
   // The user's own finds count as seen: the agent may look at them and use them as the anchor.
   for (const u of (focus?.user_images ?? []).slice(0, 12)) {
@@ -514,9 +520,11 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   const work: { role: 'user' | 'assistant'; content: string }[] = [];
   const opened = new Map<string, PageResult>();
   const searched = new Map<string, SearchHit>();
+  const hostedOpened = new Set<string>();
   const trace: TraceStep[] = [];
   let steps = 0;
   let nudged = false;
+  let readNudged = false;
   let model = input.model ?? '';
 
   if (hunt) emit({ type: 'phase', phase: 'official', text: 'Fase 1 av 2: finner det beste offisielle bildet' });
@@ -555,8 +563,18 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       trace.push({ action: 'search', target: q, result: 'via UiB' });
     }
     for (const c of out.citations ?? []) searched.set(normUrl(c.url), { title: c.title, url: c.url, snippet: '' });
-    if (out.searches?.length || out.citations?.length) {
-      emit({ type: 'search_done', query: (out.searches ?? []).join(' · ') || 'UiB nettsøk', hits: out.citations ?? [] });
+    // The pages behind each search (include: web_search_call.action.sources) count as found.
+    for (const c of out.search_sources ?? []) if (!searched.has(normUrl(c.url))) searched.set(normUrl(c.url), { title: c.title, url: c.url, snippet: '' });
+    // Pages UiB's tool opened itself: the model read them. Shown as steps, and accepted as read.
+    for (const u of out.hosted_opened ?? []) {
+      if (hostedOpened.has(normUrl(u))) continue;
+      hostedOpened.add(normUrl(u));
+      emit({ type: 'open', url: u, why: 'via UiB' });
+      trace.push({ action: 'open', target: u, result: 'Lest via UiB' });
+    }
+    if (out.searches?.length || out.citations?.length || out.search_sources?.length) {
+      const hits = [...(out.citations ?? []), ...(out.search_sources ?? [])];
+      emit({ type: 'search_done', query: (out.searches ?? []).join(' · ') || 'UiB nettsøk', hits: [...new Map(hits.map((h) => [h.url, h])).values()].slice(0, 20) });
     }
     const action = parseAction(out.text);
     work.push({ role: 'assistant', content: out.text });
@@ -614,8 +632,18 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       work.push({ role: 'user', content: 'Du er fortsatt i fase 1. Svar først med {"action": "anchor", …} (image_url kan være null). Deretter starter fase 2.' });
       continue;
     }
+    // Library research must read something before it finishes, when it can (once).
+    if (action.action === 'final' && knowledge && mode !== 'none' && !readNudged && opened.size === 0 && hostedOpened.size === 0
+      && action.proposals.length > 0 && steps < maxSteps) {
+      readNudged = true;
+      work.push({ role: 'user', content: 'Du har ikke åpnet noen sider ennå. Åpne minst to relevante sider med {"action": "open", …}'
+        + (imageSearchOn ? ', og gjerne et bildesøk med {"action": "image_search", …} for eksempelbilder,' : '')
+        + ' før du svarer med final. Bruk kildene du faktisk leser.' });
+      continue;
+    }
     if (action.action === 'final') {
-      const checked = verifyProposals(action.proposals, opened, searched, imageHits);
+      const checked = verifyProposals(action.proposals, opened, searched, imageHits, hostedOpened);
+      if (knowledge && mode === 'none') checked.warnings.unshift('Uten nettsøk: utkastet bygger bare på det modellen vet fra før. Slå på nettsøk under «AI og nettsøk».');
       if (focus && hunt) await finishHunt(checked, focus, hunt, opened, searched, deps.videoInfo, imageHits);
       emit(finalEvent(action.message, checked.proposals, model, checked.warnings, trace, opened));
       return;
@@ -774,7 +802,7 @@ export function normUrl(u: string): string {
  * that were opened or returned by search. Downgrades "documented" when
  * nothing was opened. Everything removed is reported as a warning.
  */
-export function verifyProposals(proposals: unknown[], opened: Map<string, PageResult>, searched: Map<string, SearchHit>, imageHits: Map<string, ImageHit> = new Map()) {
+export function verifyProposals(proposals: unknown[], opened: Map<string, PageResult>, searched: Map<string, SearchHit>, imageHits: Map<string, ImageHit> = new Map(), hostedOpened: Set<string> = new Set()) {
   const warnings: string[] = [];
   const out: unknown[] = [];
   for (const raw of proposals) {
@@ -783,15 +811,23 @@ export function verifyProposals(proposals: unknown[], opened: Map<string, PageRe
     const payload = (p.payload ?? {}) as Record<string, unknown>;
 
     if (Array.isArray(payload.sources)) {
-      const before = payload.sources.length;
+      const removed: string[] = [];
       payload.sources = payload.sources.flatMap((s: Record<string, unknown>) => {
         const url = typeof s?.url === 'string' ? normUrl(s.url) : '';
         const page = opened.get(url);
         const hit = searched.get(url);
-        if (!page && !hit) return [];
-        return [{ url: page?.url ?? hit!.url, title: page?.title ?? hit!.title, author: page?.author ?? null, opened: !!page }];
+        // Opened by UiB's own search tool: the model read it, but Paintrest did not get the text.
+        const viaUib = !page && hostedOpened.has(url);
+        if (!page && !hit && !viaUib) {
+          if (typeof s?.url === 'string') removed.push(s.url);
+          return [];
+        }
+        const title = page?.title ?? hit?.title ?? (typeof s.title === 'string' && s.title.trim() ? s.title.trim() : String(s.url));
+        return [{ url: page?.url ?? hit?.url ?? String(s.url), title, author: page?.author ?? null, opened: !!page || viaUib, ...(viaUib ? { via: 'uib' } : {}) }];
       });
-      if ((payload.sources as unknown[]).length < before) warnings.push(`Fjernet ${before - (payload.sources as unknown[]).length} kilde(r) som agenten ikke hadde søkt fram eller åpnet.`);
+      if (removed.length) {
+        warnings.push(`Fjernet ${removed.length} kilde(r) som agenten ikke hadde søkt fram eller åpnet: ${removed.slice(0, 5).join(' · ')}${removed.length > 5 ? ' …' : ''}`);
+      }
       if (p.evidence === 'documented' && !(payload.sources as { opened: boolean }[]).some((s) => s.opened)) {
         p.evidence = 'synthesized';
         warnings.push('Et forslag var merket «dokumentert» uten en åpnet kilde, og er endret til «foreslått av AI».');
@@ -823,7 +859,40 @@ export function verifyProposals(proposals: unknown[], opened: Map<string, PageRe
       }
     }
 
-    if ((p.type === 'paint_plan' || p.type === 'technique' || p.type === 'recipe') && Array.isArray(payload.sources_read)) {
+    if ((p.type === 'technique' || p.type === 'recipe') && Array.isArray(payload.sources_read)) {
+      // Pages read through UiB's tool may carry the agent's summary too (no original text from Paintrest).
+      payload.sources_read = payload.sources_read.flatMap((x: Record<string, unknown>) => {
+        const url = typeof x?.url === 'string' ? normUrl(x.url) : '';
+        const page = opened.get(url);
+        if (!page && !hostedOpened.has(url)) return [];
+        const site = page?.site ?? (() => { try { return new URL(String(x.url)).hostname.replace(/^www\./, ''); } catch { return ''; } })();
+        return [{ url: page?.url ?? String(x.url), title: page?.title ?? (typeof x.title === 'string' ? x.title : String(x.url)), site,
+          language: typeof x.language === 'string' ? x.language.slice(0, 12) : page?.language ?? null,
+          summary: typeof x.summary === 'string' ? x.summary.slice(0, 800) : null, original_excerpt: typeof x.original_excerpt === 'string' ? x.original_excerpt.slice(0, 600) : null }];
+      });
+    }
+
+    if ((p.type === 'technique' || p.type === 'recipe') && Array.isArray(payload.images)) {
+      // Example pictures: only from the image list of a page Paintrest opened, or from an image search.
+      const imgs = payload.images as Record<string, unknown>[];
+      const keptImages = imgs.flatMap((i) => {
+        const imageUrl = typeof i?.image_url === 'string' ? normUrl(i.image_url) : '';
+        const caption = typeof i?.caption === 'string' && i.caption.trim() ? i.caption.trim().slice(0, 300) : null;
+        const page = [...opened.values()].find((pg) => pg.images.some((x) => normUrl(x.url) === imageUrl));
+        const hit = imageHits.get(imageUrl);
+        if (page) {
+          const img = page.images.find((x) => normUrl(x.url) === imageUrl)!;
+          return [{ image_url: img.url, thumbnail_url: hit?.thumbnail_url ?? null, page_url: page.url, page_title: page.title, site: page.site,
+            caption: caption ?? img.caption ?? img.alt ?? null }];
+        }
+        if (hit) return [{ image_url: hit.image_url, thumbnail_url: hit.thumbnail_url, page_url: hit.page_url, page_title: hit.title || hit.site, site: hit.site, caption: caption ?? (hit.title || null) }];
+        return [];
+      }).slice(0, 12);
+      if (keptImages.length < imgs.length) warnings.push(`Fjernet ${imgs.length - keptImages.length} bilde(r) som ikke fantes på en side agenten åpnet eller i et bildesøk.`);
+      payload.images = keptImages;
+    }
+
+    if (p.type === 'paint_plan' && Array.isArray(payload.sources_read)) {
       payload.sources_read = payload.sources_read.flatMap((x: Record<string, unknown>) => {
         const page = typeof x?.url === 'string' ? opened.get(normUrl(x.url)) : undefined;
         if (!page) return [];

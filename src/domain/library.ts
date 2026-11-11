@@ -293,3 +293,25 @@ export function knowledgeTaskView(t: Tables, task_id: Id): KnowledgeTaskView | u
   if (!summary) return undefined;
   return { ...summary, messages: taskMessages(t, task_id), proposals: taskProposals(t, task_id) };
 }
+
+// ---------- Bilder (eksempelbilder på teknikker og oppskrifter) ----------
+
+export interface KnowledgeImageView {
+  asset_id: Id;
+  file_id: Id;
+  caption: string | null;
+  source: Source;
+}
+
+/** Example pictures linked to a technique or recipe (visual_reference), in the order they were added. */
+export function knowledgeImages(t: Tables, target_type: 'technique' | 'recipe', target_id: Id): KnowledgeImageView[] {
+  const links = Object.values(t.source_link).filter((l) => !l.deleted_at && l.target_type === target_type && l.target_id === target_id && l.use === 'visual_reference');
+  return links.flatMap((l) => {
+    const source = t.source[l.source_id];
+    if (!source || source.deleted_at) return [];
+    return t.source_link_asset.filter((x) => x.link_id === l.id).flatMap((x) => {
+      const a = t.source_asset[x.source_asset_id];
+      return a && !a.deleted_at && a.file_id ? [{ asset_id: a.id, file_id: a.file_id, caption: a.caption, source }] : [];
+    });
+  });
+}

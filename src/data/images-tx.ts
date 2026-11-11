@@ -72,6 +72,15 @@ export function sourceFor(t: Tables, ws: Id, ref: { url: string; title: string; 
 export function attachImages(t: Tables, ws: Id, subject_id: Id, images: ReferenceImage[], files: Downloaded, task_id: Id | null, log: Log): Record<string, Id> {
   const s = t.miniature_subject[subject_id];
   if (!s || s.deleted_at) throw new CommandError('Miniatyren finnes ikke');
+  return attachImagesTo(t, ws, { type: 'subject', id: subject_id }, images, files, task_id, log);
+}
+
+/**
+ * The same for any target: a miniature, or a technique or recipe in the library (bit 7).
+ * One visual_reference link per page, limited to the chosen images.
+ */
+export function attachImagesTo(t: Tables, ws: Id, target: { type: 'subject' | 'technique' | 'recipe'; id: Id }, images: ReferenceImage[], files: Downloaded, task_id: Id | null, log: Log): Record<string, Id> {
+  const subject_id = target.id;
   const byPage = new Map<string, ReferenceImage[]>();
   for (const img of images) byPage.set(img.page_url, [...(byPage.get(img.page_url) ?? []), img]);
   const assetByUrl: Record<string, Id> = {};
@@ -80,11 +89,11 @@ export function attachImages(t: Tables, ws: Id, subject_id: Id, images: Referenc
     const first = imgs[0]!;
     const source_id = sourceFor(t, ws, { url: page_url, title: first.page_title, creator: first.creator ?? first.site, kind: 'gallery' }, task_id, log);
     let link = Object.values(t.source_link).find(
-      (l) => !l.deleted_at && l.source_id === source_id && l.target_type === 'subject' && l.target_id === subject_id && l.use === 'visual_reference',
+      (l) => !l.deleted_at && l.source_id === source_id && l.target_type === target.type && l.target_id === subject_id && l.use === 'visual_reference',
     );
     if (!link) {
       const id = newId();
-      link = { id, source_id, target_type: 'subject', target_id: subject_id, use: 'visual_reference', layer_id: null, deleted_at: null };
+      link = { id, source_id, target_type: target.type, target_id: subject_id, use: 'visual_reference', layer_id: null, deleted_at: null };
       t.source_link[id] = link;
       log('source_link', id, 'attach');
     }

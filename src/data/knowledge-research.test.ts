@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildAgentContext, normaliseProposal, variantsText } from '../domain/agent';
+import { knowledgeImages } from '../domain/library';
 import type { AiGateway, ResearchEvent } from '../domain/ai';
 import { runAgentTurn } from './agent-runner';
 import { createLocalCommands } from './local-commands';
@@ -289,6 +290,27 @@ describe('research til biblioteket (bit 7.4)', () => {
     // A technique has no paints to choose.
     const tt = await research.startKnowledgeTask('technique');
     expect(store.getTables().task_scope[tt]!.paint_choice).toBeUndefined();
+  });
+
+  it('eksempelbilder: de valgte hentes og lagres på teknikken, med siden som kilde', async () => {
+    const p = memoryPersistence();
+    const store = new Store(await buildSampleData(p), p);
+    const fetched: string[] = [];
+    const research = createResearchCommands(store, { fetchImage: async (url) => { fetched.push(url); return new Blob(['x'], { type: 'image/jpeg' }); } });
+    const agent = createAgentCommands(store);
+    const task = await research.startKnowledgeTask('technique');
+    const img = (n: number) => ({ image_url: `https://blog.example/fire${n}.jpg`, page_url: 'https://blog.example/fire', page_title: 'Fire guide', site: 'blog.example', caption: `Bilde ${n}` });
+    const { ai } = fakeAi(() => [{ type: 'technique', payload: { name: 'Ild', images: [img(1), img(2), img(3)] } }]);
+    await runAgentTurn({ store, research, agent, ai }, task, 'Flammer');
+    const prop = Object.values(store.getTables().research_proposal).find((x) => x.task_id === task)!;
+    await research.approveProposal(prop.id, { image_urls: [img(1).image_url, img(3).image_url] });
+    expect(fetched).toEqual([img(1).image_url, img(3).image_url]);
+    const t = store.getTables();
+    const id = t.research_proposal[prop.id]!.applied_target_id!;
+    const imgs = knowledgeImages(t, 'technique', id);
+    expect(imgs.map((x) => x.caption)).toEqual(['Bilde 1', 'Bilde 3']);
+    expect(imgs[0]!.source.url).toBe('https://blog.example/fire');
+    expect(Object.values(t.source_link).find((l) => l.target_id === id && l.use === 'visual_reference')).toBeTruthy();
   });
 });
 

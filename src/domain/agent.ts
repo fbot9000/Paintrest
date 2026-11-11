@@ -32,6 +32,18 @@ export interface SourceRef {
   author: string | null;
   /** True when the agent opened the page, not only saw it in search results. */
   opened: boolean;
+  /** 'uib' when UiB's own web search opened the page (the model read it; Paintrest did not get the text). */
+  via?: 'uib' | null;
+}
+
+/** An example picture for a technique or recipe, from a page the agent opened or an image search (verified on the server). */
+export interface KnowledgeImage {
+  image_url: string;
+  thumbnail_url: string | null;
+  page_url: string;
+  page_title: string;
+  site: string;
+  caption: string | null;
 }
 
 export type ImageKind = 'concept_art' | 'official' | 'painted' | 'other';
@@ -187,6 +199,7 @@ export interface TechniquePayload {
   sources: SourceRef[];
   sources_read?: SourceRead[];
   comparison?: KnowledgeComparison | null;
+  images?: KnowledgeImage[];
 }
 
 export interface RecipePaintPayload {
@@ -214,6 +227,7 @@ export interface RecipePayload {
   sources: SourceRef[];
   sources_read?: SourceRead[];
   comparison?: KnowledgeComparison | null;
+  images?: KnowledgeImage[];
   /** «Med malinger du har» or «Beste valg», as the user chose. */
   paint_choice?: Exclude<PaintChoice, 'both'> | null;
 }
@@ -288,6 +302,7 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
     const sources = sourceRefs(o.sources);
     const read = sourcesRead(o.sources_read);
     const comparison = knowledgeComparison(o.comparison, sources);
+    const images = knowledgeImages(o.images);
     if (raw.type === 'technique') {
       const steps = arr(o.steps).flatMap((x): TechniqueStepPayload[] => {
         const st = obj(x);
@@ -299,7 +314,7 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
       const payload: TechniquePayload = {
         name: name.slice(0, 200), tags: list(o.tags, 12), desired_result: text(o.desired_result), use_area: text(o.use_area),
         materials: list(o.materials), variants: text(o.variants), risk_note: text(o.risk_note), steps, note: text(o.note),
-        sources, ...(read.length ? { sources_read: read } : {}), ...(comparison ? { comparison } : {}),
+        sources, ...(read.length ? { sources_read: read } : {}), ...(comparison ? { comparison } : {}), ...(images.length ? { images } : {}),
       };
       return { ok: true, value: { ...common, result_type: 'technique', payload } };
     }
@@ -321,7 +336,7 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
     }).slice(0, 40);
     const payload: RecipePayload = {
       name: name.slice(0, 200), tags: list(o.tags, 12), effect: text(o.effect), note: text(o.note), paints, steps,
-      sources, ...(read.length ? { sources_read: read } : {}), ...(comparison ? { comparison } : {}),
+      sources, ...(read.length ? { sources_read: read } : {}), ...(comparison ? { comparison } : {}), ...(images.length ? { images } : {}),
       paint_choice: paintChoice(o.paint_choice),
     };
     return { ok: true, value: { ...common, result_type: 'recipe', payload } };
@@ -802,6 +817,18 @@ function sourcesRead(v: unknown): SourceRead[] {
   });
 }
 
+function knowledgeImages(v: unknown): KnowledgeImage[] {
+  return arr(v).flatMap((x) => {
+    const o = obj(x);
+    const image_url = str(o.image_url).trim();
+    const page_url = str(o.page_url).trim();
+    if (!/^https?:\/\//.test(image_url) || !/^https?:\/\//.test(page_url)) return [];
+    const thumb = str(o.thumbnail_url).trim();
+    return [{ image_url, thumbnail_url: /^https?:\/\//.test(thumb) ? thumb : null, page_url, page_title: str(o.page_title).trim() || hostOf(page_url),
+      site: str(o.site).trim() || hostOf(page_url), caption: str(o.caption).trim().slice(0, 300) || null }];
+  }).slice(0, 12);
+}
+
 function paintChoice(v: unknown): Exclude<PaintChoice, 'both'> | null {
   return v === 'owned' || v === 'best' ? v : null;
 }
@@ -831,7 +858,7 @@ function sourceRefs(v: unknown): SourceRef[] {
     const o = obj(x);
     const url = str(o.url).trim();
     if (!/^https?:\/\//.test(url)) return [];
-    return [{ url, title: str(o.title).trim() || url, author: str(o.author).trim() || null, opened: o.opened === true }];
+    return [{ url, title: str(o.title).trim() || url, author: str(o.author).trim() || null, opened: o.opened === true, ...(o.via === 'uib' ? { via: 'uib' as const } : {}) }];
   });
 }
 function hostOf(u: string): string {
