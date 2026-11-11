@@ -86,7 +86,15 @@ export function PlanTab({ subject: s, game, run, planFileIds }: { subject: Minia
     }
   };
 
-  const start = () => startPlan(app, s, game, planFileIds);
+  const start = (paints: 'owned' | 'best') => startPlan(app, s, game, planFileIds, paints);
+  /** Two explicit choices instead of a hidden preference for paints the user owns. */
+  const startButtons = (label: string, variant: 'primary' | 'secondary' | 'ghost', disabled: boolean) => (
+    <span className="plan-start" role="group" aria-label={label}>
+      <span className="small muted">{label}</span>
+      <Button variant={variant} disabled={disabled} onClick={() => start('owned')} title={agentHelp}>Malinger jeg har</Button>
+      <Button variant={variant} disabled={disabled} onClick={() => start('best')} title={agentHelp}>Beste valg</Button>
+    </span>
+  );
   const n = planFileIds.length;
   const revision = hasPlan && !!data.proposal;
   const nextVersion = (current?.plan?.version_number ?? 0) + 1;
@@ -107,6 +115,7 @@ export function PlanTab({ subject: s, game, run, planFileIds }: { subject: Minia
           <div className="pd-status" role="region" aria-label="Forslag">
             <div className="pd-status-text">
               <strong>{revision ? `Forslag til versjon ${nextVersion}` : 'Forslag til maleplan'}</strong>
+              {draft.paint_choice && <span className="small">{draft.paint_choice === 'owned' ? 'Med malinger du har' : 'Beste valg'}</span>}
               {(revision || unresolved.length > 0 || dirty) && (
                 <span className="small">
                   {[
@@ -121,7 +130,7 @@ export function PlanTab({ subject: s, game, run, planFileIds }: { subject: Minia
             <div className="pd-status-actions">
               {dirty && <Button disabled={!!busy} onClick={() => act('save')}>{busy === 'save' ? 'Lagrer …' : 'Lagre'}</Button>}
               <Button variant="ghost" onClick={() => setEditAll((v) => !v)} aria-pressed={editAll}>{editAll ? 'Ferdig' : 'Rediger alt'}</Button>
-              <Button variant="ghost" disabled={!!busy || running} onClick={start} title={`Lag et nytt forslag. ${agentHelp}`}>Lag på nytt</Button>
+              {startButtons('Lag på nytt:', 'ghost', !!busy || running)}
               <Button variant="ghost" disabled={!!busy} onClick={() => app.research.rejectProposal(data.proposal!.id)}>Forkast</Button>
               <Button variant="primary" disabled={!!busy || unresolved.length > 0} onClick={() => act('approve')}
                 title={unresolved.length ? 'Velg produkt for de ukjente malingene først' : undefined}>
@@ -175,7 +184,7 @@ export function PlanTab({ subject: s, game, run, planFileIds }: { subject: Minia
         <>
           <div className="pd-plan-head">
             <span className="small muted">Versjon {current.plan?.version_number}</span>
-            <Button disabled={running} onClick={start} title={agentHelp}>{running ? 'Agenten jobber …' : 'Ny versjon med AI'}</Button>
+            {running ? <span className="small muted">Agenten jobber …</span> : startButtons('Ny versjon med AI:', 'secondary', false)}
           </div>
           {current.plan?.summary && <p className="pd-summary">{current.plan.summary}</p>}
           <PaletteStrip items={data.palette} onOpen={openPalette} />
@@ -185,7 +194,7 @@ export function PlanTab({ subject: s, game, run, planFileIds }: { subject: Minia
       ) : (
         <div className="ws-empty">
           <p>{running ? 'Agenten lager et forslag …' : 'Ingen maleplan ennå.'}</p>
-          {!running && <Button variant="primary" onClick={start} title={agentHelp}>Lag maleplan med AI</Button>}
+          {!running && startButtons('Lag maleplan med AI:', 'primary', false)}
         </div>
       )}
     </div>

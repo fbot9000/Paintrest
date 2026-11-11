@@ -39,6 +39,7 @@ export async function runAgentTurn(deps: {
     focus = {
       kind: 'knowledge', target: ctx.allowedTypes.includes('recipe') ? 'recipe' : 'technique',
       revision: tech && !tech.deleted_at ? { name: tech.name } : null,
+      paints: scope.paint_choice ?? null,
     };
   }
   const project = scope.work_project_id ? t.project[scope.work_project_id] : undefined;

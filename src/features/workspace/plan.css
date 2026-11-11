@@ -137,3 +137,6 @@ button.pd-palette { border: 0; background: none; padding: 2px 0; cursor: pointer
 .pd-flag { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: var(--warn); color: #fff; font-size: 10px; font-weight: 700; }
 .pd-step { padding-right: 60px; }
 .pd-status .btn { min-height: 36px; padding-inline: 12px; }
+
+/* Malingsvalg ved start (brukerbeslutning 11.11.2026): to tydelige valg, ingen skjult preferanse. */
+.plan-start { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }

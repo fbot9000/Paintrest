@@ -93,6 +93,14 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
     - **Hovednavigasjon (7.1):** Toppfeltet har «Prosjekter» og «Bibliotek». Skissene har også «Research» og «Malinger», men de sidene finnes ikke ennå. På smale skjermer vises bare logoen, uten navnet.
     - **Dokumentene bør oppdateres:** datamodell v3 og skjema §6 om teknikk og oppskrift. Dokumentene er ikke lest, så det er ikke kjent hvor mye dette avviker fra dem.
 
+30. **BRUKERBESLUTNING 11. november 2026: du velger malingene selv.** Om agenten skal holde seg til malinger du har, er et valg du tar aktivt. Det skal ikke skje i det skjulte.
+    - **Instruksene** har ikke lenger «foretrekk malinger brukeren eier». Har du ikke valgt, skal agenten velge det som passer best og si hvilke malinger du ikke har. Den skal ikke la eierstatus styre valget.
+    - **Oppskrifter i biblioteket:** Når du starter, velger du «Begge» (standard), «Bare det jeg har» eller «Beste valg». Du kan endre valget i researchen, og det gjelder fra neste melding. Valget lagres på oppgaven (`task_scope.paint_choice`, PROTOTYPE). «Begge» gir to utkast, merket «Med malinger du har» og «Beste valg». Hvert utkast viser eierstatus for hver maling. Et utkast med «bare det jeg har» varsler hvis det likevel har malinger du ikke eier.
+    - **Maleplan i verkstedet:** «Lag maleplan med AI» har to knapper, «Malinger jeg har» og «Beste valg». Forslaget viser hvilket valg det bygger på (`paint_choice` i nyttelasten). En miniatyr har én plan om gangen, så «Begge» finnes ikke der.
+    - **Agentpanelet i prosjektet:** Agenten følger det du skriver.
+    - **Tolkning:** Research til biblioteket bruker den vanlige betydningen av korte forespørsler (for eksempel «flammer» = ild), og sier hva den antok. Er det fortsatt uklart, spør den før den lager utkast. Katalogen, eierstatus og tidligere utkast skal ikke avgjøre hva du mener.
+    - **Kilder:** YouTube-adresser i ulike former (`youtu.be/…`, `watch?v=…&t=…`, `/shorts/…`) regnes som samme side, slik at en åpnet video ikke fjernes som kilde.
+
 ## Antakelser
 
 - **Klient:** React og TypeScript som webapp med hash-ruting. Det er godkjent av brukeren 9. november 2026.

@@ -5,6 +5,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useApp, useView } from '../../app/context';
 import { knowledgeTasks } from '../../domain/library';
 import type { KnowledgeTarget } from '../../domain/research';
+import type { PaintChoice } from '../../domain/types';
 import { Badge, Button, ErrorNote, Field, Segmented } from '../../ui/components';
 import { startRun } from './research-runs';
 
@@ -31,6 +32,7 @@ export function ResearchPage() {
   const [target, setTarget] = useState<KnowledgeTarget>(params.get('type') === 'recipe' ? 'recipe' : 'technique');
   const [idea, setIdea] = useState('');
   const [source, setSource] = useState('');
+  const [paints, setPaints] = useState<PaintChoice>('both');
   const [error, setError] = useState<string | null>(null);
   const status = useAiStatus();
   const tasks = useView((t) => knowledgeTasks(t));
@@ -40,7 +42,7 @@ export function ResearchPage() {
     if (!idea.trim()) return;
     setError(null);
     try {
-      const task = await app.research.startKnowledgeTask(target);
+      const task = await app.research.startKnowledgeTask(target, target === 'recipe' ? { paint_choice: paints } : {});
       const text = source.trim() ? `${idea.trim()}\n\nKilde: ${source.trim()}` : idea.trim();
       startRun({ store: app.store, research: app.research, agent: app.agent, ai: app.ai }, task, text);
       navigate(task);
@@ -74,6 +76,7 @@ export function ResearchPage() {
               placeholder={target === 'technique' ? 'For eksempel: svamp og oljemaling for tekstur' : 'For eksempel: varm rust på mørkt metall, med malinger jeg har'} />
           )}
         </Field>
+        {target === 'recipe' && <PaintChoicePicker value={paints} onChange={setPaints} />}
         <Field label="Kilde (valgfritt)" hint="En lenke til en video, artikkel eller et innlegg du har sett.">
           {(id) => <input id={id} value={source} onChange={(e) => setSource(e.target.value)} placeholder="https://…" />}
         </Field>
@@ -104,5 +107,29 @@ export function ResearchPage() {
         </section>
       )}
     </main>
+  );
+}
+
+export const PAINT_CHOICE_LABEL: Record<PaintChoice, string> = {
+  both: 'Begge', owned: 'Bare det jeg har', best: 'Beste valg',
+};
+
+/** The user's active choice of paints (brukerbeslutning 11.11.2026): never a hidden preference. */
+export function PaintChoicePicker({ value, onChange }: { value: PaintChoice; onChange: (v: PaintChoice) => void }) {
+  return (
+    <div className="paint-choice">
+      <span className="field-label">Malinger</span>
+      <Segmented
+        label="Malinger"
+        value={value}
+        onChange={onChange}
+        options={(['both', 'owned', 'best'] as PaintChoice[]).map((v) => ({ value: v, label: PAINT_CHOICE_LABEL[v] }))}
+      />
+      <p className="small muted">
+        {value === 'both' && 'To utkast side om side: ett med malinger du har, og ett med de beste malingene.'}
+        {value === 'owned' && 'Bare malinger du har. Agenten sier fra hvis det går ut over resultatet.'}
+        {value === 'best' && 'Malingene som gir best resultat. Du ser hvilke du ikke har.'}
+      </p>
+    </div>
   );
 }

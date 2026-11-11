@@ -183,6 +183,11 @@
 .change-before p { color: var(--muted); }
 .change-after { background: var(--moss-soft); }
 
+/* Malingsvalg (brukerbeslutning 11.11.2026) */
+.paint-choice { display: grid; gap: 6px; }
+.field-label { font-weight: 600; font-size: 14px; }
+.research-choice { display: grid; gap: 4px; padding: 14px 16px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--card); }
+
 /* Oppskrift */
 .recipe-strip { display: flex; gap: 3px; flex-wrap: wrap; }
 .recipe-strip-lg .swatch { border-radius: 6px; }

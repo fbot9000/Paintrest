@@ -3,7 +3,7 @@ import { newId, now } from '../domain/ids';
 import { describeOps, matchProduct, planProductRefs, productKey, proposalTitle, recipeProductRefs, variantsText } from '../domain/agent';
 import type { CatalogChangePayload, CatalogSubjectPayload, NormalisedProposal, PaintPlanPayload, PaletteItem, ProductRef, ProposalKind, RecipePayload, ReferenceSelectionPayload, SourceRead, SourceRef, SubjectFields, TechniquePayload } from '../domain/agent';
 import type { AgentCommands, ApproveOptions, ProposalWrite, ResearchCommands } from '../domain/research';
-import type { ChangeAction, Id, MiniatureSubject, ResearchProposal, ResultType, RowPatch, Tables, Uncertainty } from '../domain/types';
+import type { ChangeAction, Id, MiniatureSubject, PaintChoice, ResearchProposal, ResultType, RowPatch, Tables, Uncertainty } from '../domain/types';
 import { attachedExpansions } from '../domain/views';
 import type { Store } from './store';
 import { revertPatches } from './store';
@@ -17,6 +17,8 @@ import type { Downloaded } from './images-tx';
  * 10 November 2026, see docs/AVVIK.md). Nothing outside the project is reachable.
  */
 export const IMPLEMENTED_TYPES: ResultType[] = ['catalog_subject', 'paint_plan', 'reference_selection', 'catalog_change', 'plan_revision'];
+
+const PAINT_CHOICES: PaintChoice[] = ['both', 'owned', 'best'];
 
 type Who = { initiated_by: 'user' | 'agent'; task_id?: Id | null; proposal_id?: Id | null };
 
@@ -220,15 +222,31 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
       });
     },
 
-    async startKnowledgeTask(target) {
+    async startKnowledgeTask(target, opts = {}) {
       if (target !== 'technique' && target !== 'recipe') throw new CommandError('Ukjent researchtype');
+      const choice = opts.paint_choice ?? null;
+      if (choice && !PAINT_CHOICES.includes(choice)) throw new CommandError('Ukjent malingsvalg');
       return tx((t, ws) => {
         const id = newId();
         t.research_task[id] = { id, workspace_id: ws, status: 'open', created_at: now() };
-        t.task_scope[id] = { task_id: id, area_kind: 'new_knowledge', work_project_id: null, allow_new_knowledge: true };
+        t.task_scope[id] = {
+          task_id: id, area_kind: 'new_knowledge', work_project_id: null, allow_new_knowledge: true,
+          // Only recipes choose paints; the user picks this on the start screen.
+          ...(target === 'recipe' ? { paint_choice: choice ?? 'both' } : {}),
+        };
         t.task_result_type.push({ task_id: id, result_type: target });
         record(t, ws, 'research_task', id, 'create', { initiated_by: 'user', task_id: id });
         return id;
+      });
+    },
+
+    async setPaintChoice(task_id, choice) {
+      if (!PAINT_CHOICES.includes(choice)) throw new CommandError('Ukjent malingsvalg');
+      tx((t, ws) => {
+        const scope = must(t.task_scope[task_id], 'Oppgaven');
+        if (scope.area_kind !== 'new_knowledge') throw new CommandError('Malingsvalget gjelder research til biblioteket');
+        scope.paint_choice = choice;
+        record(t, ws, 'task_scope', task_id, 'update', { initiated_by: 'user', task_id });
       });
     },
 

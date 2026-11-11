@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { extract } from './fetch-page.ts';
 import type { PageResult } from './fetch-page.ts';
 import { isPrivateAddress } from './net-guard.ts';
-import { MAX_IMAGE_STEPS, OFFICIAL_STEPS, isRefusal, parseAction, runResearch } from './research-agent.ts';
+import { MAX_IMAGE_STEPS, OFFICIAL_STEPS, isRefusal, knowledgeInstructions, normUrl, parseAction, researchInstructions, runResearch, verifyProposals } from './research-agent.ts';
 import type { ResearchEvent } from './research-agent.ts';
 import { HostedToolError, hostedSearchOf, parseResponse } from './provider.ts';
 import type { ResponsesProvider } from './provider.ts';
@@ -572,3 +572,45 @@ describe('brukerens egne bilder', () => {
     expect(images).toEqual([]);
   });
 });
+
+describe('malingsvalg er brukerens (brukerbeslutning 11.11.2026)', () => {
+  it('ingen instruks har en skjult preferanse for malinger brukeren eier', () => {
+    const general = researchInstructions({}, ['paint_plan'], 'none');
+    const plan = researchInstructions({}, ['paint_plan'], 'none', { kind: 'plan', subject_ref: 'M1', subject_name: 'X', game: 'G', reference_images: [], revision: false });
+    const recipe = knowledgeInstructions({}, ['recipe'], 'none', { kind: 'knowledge', target: 'recipe' });
+    for (const text of [general, plan, recipe]) expect(text).not.toContain('Foretrekk malinger');
+    expect(general).toContain('La ikke eierstatus');
+  });
+
+  it('følger valget: bare det jeg har, beste valg, eller begge som to forslag', () => {
+    const owned = knowledgeInstructions({}, ['recipe'], 'none', { kind: 'knowledge', target: 'recipe', paints: 'owned' });
+    const best = knowledgeInstructions({}, ['recipe'], 'none', { kind: 'knowledge', target: 'recipe', paints: 'best' });
+    const both = knowledgeInstructions({}, ['recipe'], 'none', { kind: 'knowledge', target: 'recipe', paints: 'both' });
+    expect(owned).toContain('BARE MALINGER BRUKEREN HAR');
+    expect(best).toContain('Eierstatus skal ikke påvirke valget');
+    expect(both).toContain('Lag TO oppskrift-forslag');
+    expect(both).not.toContain('Lag ETT forslag av typen');
+    const plan = researchInstructions({}, ['paint_plan'], 'none', { kind: 'plan', subject_ref: 'M1', subject_name: 'X', game: 'G', reference_images: [], revision: false, paints: 'owned' });
+    expect(plan).toContain('BARE MALINGER BRUKEREN HAR');
+  });
+
+  it('bruker den vanlige tolkningen av korte forespørsler og sier hva den antok', () => {
+    const t = knowledgeInstructions({}, ['recipe'], 'none', { kind: 'knowledge', target: 'recipe', paints: 'best' });
+    expect(t).toContain('vanlige ildflammer');
+    expect(t).toContain('La ikke malingskatalogen');
+  });
+});
+
+describe('like adresser', () => {
+  it('regner ulike YouTube-adresser for samme video som én kilde', () => {
+    expect(normUrl('https://youtu.be/abcdefghijk')).toBe(normUrl('https://www.youtube.com/watch?v=abcdefghijk&t=30'));
+    const page = { ...PAGE, url: 'https://www.youtube.com/watch?v=abcdefghijk' };
+    const opened = new Map([[normUrl(page.url), page]]);
+    const r = verifyProposals([{ type: 'technique', evidence: 'documented', payload: { name: 'X', steps: [{ basis: 'documented' }], sources: [{ url: 'https://youtu.be/abcdefghijk', title: 'V' }] } }], opened, new Map());
+    const p = r.proposals[0] as { evidence: string; payload: { sources: { opened: boolean }[]; steps: { basis: string }[] } };
+    expect(p.payload.sources).toHaveLength(1);
+    expect(p.payload.sources[0]!.opened).toBe(true);
+    expect(p.payload.steps[0]!.basis).toBe('documented');
+  });
+});
+

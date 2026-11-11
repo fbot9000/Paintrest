@@ -76,7 +76,8 @@ Panelet til høyre i hvert prosjekt. Det bruker nøkkelen og standardmodellen fr
 
 «Bibliotek → Research» (eller «Research ny teknikk» og «Research ny oppskrift»). Beskriv hva du vil lære, og legg eventuelt ved en lenke. Agenten bruker samme nøkkel og nettsøk som i prosjektene.
 
-- Agenten leser biblioteket og malingskatalogen, ikke prosjektene. Den søker, åpner sider og lager ett utkast.
+- Agenten leser biblioteket og malingskatalogen, ikke prosjektene. Den søker, åpner sider og lager et utkast.
+- For oppskrifter velger du malinger: «Begge» (to utkast: med malinger du har, og beste valg), «Bare det jeg har» eller «Beste valg». Agenten velger aldri ut fra hva du eier uten at du har bedt om det.
 - Utkastet viser hver kilde, om agenten faktisk leste den, og hva den bidro med. En lenke du la ved, men som ikke kunne leses, vises med grunnen.
 - Er kildene uenige, vises fremgangsmåtene side om side. Du velger hvilken som er utgangspunktet.
 - Hvert steg er merket «Vist i kilde» eller «Forslag fra agenten».

@@ -5,11 +5,12 @@ import { useApp, useView } from '../../app/context';
 import { matchProduct, productKey, recipeProductRefs, variantsText } from '../../domain/agent';
 import type { KnowledgeComparison, ProductRef, RecipePayload, SourceRead, SourceRef, TechniquePayload } from '../../domain/agent';
 import { catalogProducts, knowledgeTaskView, techniqueDetail } from '../../domain/library';
+import { ownershipOf } from '../../domain/views';
 import type { Id, ResearchMessage, ResearchProposal } from '../../domain/types';
-import { Badge, Button, ErrorNote } from '../../ui/components';
+import { Badge, Button, ErrorNote, OwnershipFlag } from '../../ui/components';
 import { LiveSteps, Message } from '../agent/AgentPanel';
 import { EvidenceBadge } from './parts';
-import { AiStatusNote, useAiStatus } from './ResearchPage';
+import { AiStatusNote, PaintChoicePicker, useAiStatus } from './ResearchPage';
 import { clearRunError, startRun, stopRun, useRun } from './research-runs';
 
 /**
@@ -22,6 +23,7 @@ export function ResearchTaskPage() {
   const app = useApp();
   const view = useView((t) => knowledgeTaskView(t, taskId), [taskId]);
   const run = useRun(taskId);
+  const choice = useView((t) => t.task_scope[taskId]?.paint_choice ?? null, [taskId]);
   const status = useAiStatus();
   const [text, setText] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
@@ -60,6 +62,13 @@ export function ResearchTaskPage() {
         {run.running && <LiveSteps events={run.events} onStop={() => stopRun(taskId)} />}
         <div ref={endRef} />
       </section>
+
+      {view.target === 'recipe' && !view.revision_of && choice && (
+        <div className="research-choice">
+          <PaintChoicePicker value={choice} onChange={(v) => app.research.setPaintChoice(taskId, v)} />
+          <p className="small muted">Gjelder fra neste melding.</p>
+        </div>
+      )}
 
       <div className="research-input">
         <label htmlFor="research-msg" className="sr-only">Melding til agenten</label>
@@ -128,6 +137,9 @@ function DraftCard({ p, messages, revisionOf }: { p: ResearchProposal; messages:
           <Badge>{payload.sources.length} {payload.sources.length === 1 ? 'kilde' : 'kilder'}</Badge>
           {comparison && comparison.variants.length > 0 && <Badge tone="dark">{comparison.variants.length} {comparison.variants.length === 1 ? 'variant' : 'varianter'}</Badge>}
           <EvidenceBadge evidence={p.evidence} />
+          {'paint_choice' in payload && payload.paint_choice && (
+            <Badge tone={payload.paint_choice === 'owned' ? 'moss' : 'neutral'}>{payload.paint_choice === 'owned' ? 'Med malinger du har' : 'Beste valg'}</Badge>
+          )}
         </div>
       </div>
       {current
@@ -223,6 +235,12 @@ function TechniqueDraft({ x, comparison }: { x: TechniquePayload; comparison: Re
 
 function RecipeDraft({ x, comparison }: { x: RecipePayload; comparison: ReactNode }) {
   const techniques = useView((t) => Object.fromEntries(Object.values(t.technique).map((tq) => [tq.id, tq.name])));
+  // Shown for every paint, so the choice of paints is never hidden.
+  const owned = useView((t) => x.paints.map((pe) => {
+    const m = matchProduct(t, pe.product);
+    return m ? ownershipOf(t, m.id) : 'missing';
+  }), [x.paints]);
+  const notOwned = owned.filter((o) => o !== 'owns').length;
   return (
     <>
       <h2>{x.name}</h2>
@@ -231,6 +249,10 @@ function RecipeDraft({ x, comparison }: { x: RecipePayload; comparison: ReactNod
       {comparison}
       <div className="article-block">
         <span className="eyebrow">Fargerekke</span>
+        {x.paint_choice === 'owned' && notOwned > 0 && (
+          <p className="tech-uncertain small" role="note">Du valgte bare malinger du har, men {notOwned} av malingene står ikke som eid hos deg.</p>
+        )}
+        {x.paint_choice !== 'owned' && notOwned > 0 && <p className="small muted">{notOwned} av {x.paints.length} malinger har du ikke.</p>}
         <ol className="draft-paints">
           {x.paints.map((pe, i) => (
             <li key={i}>
@@ -238,6 +260,7 @@ function RecipeDraft({ x, comparison }: { x: RecipePayload; comparison: ReactNod
               <strong>{pe.product.name}</strong>
               <span className="small muted">{[pe.product.manufacturer, pe.product.range].filter(Boolean).join(' · ')}</span>
               {pe.note && <span className="small">– {pe.note}</span>}
+              {owned[i] === 'missing' ? <span className="own own-not_owned">Ikke i katalogen</span> : <OwnershipFlag ownership={owned[i] as 'owns' | 'not_owned' | 'unknown'} />}
             </li>
           ))}
         </ol>

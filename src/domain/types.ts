@@ -525,11 +525,20 @@ export interface ResearchTask {
 }
 
 /** Keyed by task_id. The agent has no write path to this row. */
+/**
+ * PROTOTYPE (brukerbeslutning 11.11.2026): which paints the agent may use. The user
+ * chooses this actively; the agent never prefers owned paints on its own.
+ * both = two drafts, one with paints you own and one with the best paints.
+ */
+export type PaintChoice = 'both' | 'owned' | 'best';
+
 export interface TaskScope {
   task_id: Id;
   area_kind: AreaKind;
   work_project_id: Id | null;
   allow_new_knowledge: boolean;
+  /** PROTOTYPE: the user's paint choice for recipe research (library tasks). */
+  paint_choice?: PaintChoice | null;
 }
 
 export interface TaskResultType {

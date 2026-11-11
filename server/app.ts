@@ -239,7 +239,8 @@ function parseFocus(v: unknown): ImageFocus | PlanFocus | KnowledgeFocus | null 
   const f = v as Record<string, unknown>;
   if (f.kind === 'knowledge') {
     const rev = f.revision && typeof f.revision === 'object' ? str((f.revision as Record<string, unknown>).name).slice(0, 200) : '';
-    return { kind: 'knowledge', target: f.target === 'recipe' ? 'recipe' : 'technique', revision: rev ? { name: rev } : null };
+    const paints = f.paints === 'both' || f.paints === 'owned' || f.paints === 'best' ? f.paints : null;
+    return { kind: 'knowledge', target: f.target === 'recipe' ? 'recipe' : 'technique', revision: rev ? { name: rev } : null, paints };
   }
   if (f.kind === 'plan') {
     return {
@@ -250,6 +251,7 @@ function parseFocus(v: unknown): ImageFocus | PlanFocus | KnowledgeFocus | null 
       reference_images: (Array.isArray(f.reference_images) ? f.reference_images : [])
         .filter((x): x is string => typeof x === 'string' && DATA_IMAGE.test(x) && x.length < 700_000).slice(0, 4),
       revision: f.revision === true,
+      paints: f.paints === 'owned' || f.paints === 'best' ? f.paints : null,
     };
   }
   if (f.kind !== 'images') return null;

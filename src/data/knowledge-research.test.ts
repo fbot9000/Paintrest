@@ -69,7 +69,7 @@ describe('research til biblioteket (bit 7.4)', () => {
     const { ai, seen } = fakeAi(() => [TECHNIQUE], [{ url: 'https://example.com/edge', title: 'Edge guide' }]);
     const before = Object.keys(store.getTables().technique).length;
     const r = await runAgentTurn({ store, research, agent, ai }, task, 'Hvordan gjør man kantlys?');
-    expect(seen[0]!.focus).toEqual({ kind: 'knowledge', target: 'technique', revision: null });
+    expect(seen[0]!.focus).toEqual({ kind: 'knowledge', target: 'technique', revision: null, paints: null });
     expect(seen[0]!.direct).toBe(false);
     expect(seen[0]!.context).toHaveProperty('library');
     expect(seen[0]!.context).not.toHaveProperty('miniatures');
@@ -257,6 +257,23 @@ describe('research til biblioteket (bit 7.4)', () => {
     const tech = Object.values(store.getTables().technique)[0]!;
     await cmd.deleteTechnique(tech.id);
     await expect(research.startTechniqueRevision(tech.id)).rejects.toThrow('slettet');
+  });
+
+  it('malingsvalget for oppskrifter er synlig og kan endres, og sendes til agenten', async () => {
+    const { store, research, agent } = await setup();
+    const task = await research.startKnowledgeTask('recipe');
+    expect(store.getTables().task_scope[task]!.paint_choice).toBe('both');
+    await research.setPaintChoice(task, 'owned');
+    const { ai, seen } = fakeAi(() => [{ type: 'recipe', payload: { name: 'Ild', paint_choice: 'owned', paints: ['Rhinox Hide'] } }]);
+    await runAgentTurn({ store, research, agent, ai }, task, 'Flammer');
+    expect((seen[0]!.focus as { paints: string }).paints).toBe('owned');
+    expect(seen[0]!.context.paint_choice).toBe('owned');
+    const prop = Object.values(store.getTables().research_proposal).find((p) => p.task_id === task)!;
+    expect((prop.payload as { paint_choice: string }).paint_choice).toBe('owned');
+    await expect(research.setPaintChoice(task, 'alt' as never)).rejects.toThrow('Ukjent');
+    // A technique has no paints to choose.
+    const tt = await research.startKnowledgeTask('technique');
+    expect(store.getTables().task_scope[tt]!.paint_choice).toBeUndefined();
   });
 });
 

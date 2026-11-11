@@ -8,7 +8,7 @@
 import type { NormalisedProposal } from './agent';
 import type { CatalogSubjectPayload, PaintPlanPayload, SourceRead } from './agent';
 import type { PageSeen } from './ai';
-import type { Id } from './types';
+import type { Id, PaintChoice } from './types';
 
 export interface ApproveOptions {
   /** productKey → existing product id, or 'create' to create an unconfirmed product. */
@@ -37,7 +37,9 @@ export interface ResearchCommands {
    * A library task (bit 7.4): area new_knowledge, no work project, and one result type
    * (technique or recipe). The agent only drafts; the user approves into the library.
    */
-  startKnowledgeTask(target: KnowledgeTarget): Promise<Id>;
+  startKnowledgeTask(target: KnowledgeTarget, opts?: { paint_choice?: PaintChoice }): Promise<Id>;
+  /** The user changes which paints a recipe task may use; applies from the next turn. */
+  setPaintChoice(task_id: Id, choice: PaintChoice): Promise<void>;
   /**
    * Bit 7.6: a library task that improves one technique, for example after an experience.
    * The agent drafts a changed technique; approving writes it into the technique.

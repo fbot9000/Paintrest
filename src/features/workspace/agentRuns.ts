@@ -48,13 +48,15 @@ export function startImageHunt(app: App, s: MiniatureSubject, game: string, refe
   });
 }
 
-export function startPlan(app: App, s: MiniatureSubject, game: string, fileIds: (Id | null)[]) {
+/** paints: the user's active choice (brukerbeslutning 11.11.2026); the agent has no hidden preference. */
+export function startPlan(app: App, s: MiniatureSubject, game: string, fileIds: (Id | null)[], paints: 'owned' | 'best') {
   runs.start(s.id, 'plan', async (onEvent, signal) => {
     const task = await ensureTask(app, s.project_id);
     const ref = refOf(app, task, s.id, s.name);
     const reference_images = (await Promise.all(fileIds.map((f) => imageDataUrl(app.store.getTables(), app.cmd, f)))).filter((x): x is string => !!x);
-    const prompt = `Lag en maleplan for «${s.name}» fra «${game}» som gjenskaper uttrykket i bildene jeg har valgt: arbeidsmåte, deler og steg med eksakte malinger, og en palett.`;
+    const prompt = `Lag en maleplan for «${s.name}» fra «${game}» som gjenskaper uttrykket i bildene jeg har valgt: arbeidsmåte, deler og steg med eksakte malinger, og en palett. `
+      + (paints === 'owned' ? 'Bruk bare malinger jeg har.' : 'Velg de malingene som gir best resultat, uansett hva jeg har.');
     await runAgentTurn({ store: app.store, research: app.research, agent: app.agent, ai: app.ai }, task, prompt, onEvent, signal,
-      { kind: 'plan', subject_ref: ref, subject_name: s.name, game, reference_images, revision: !!s.current_plan_version_id });
+      { kind: 'plan', subject_ref: ref, subject_name: s.name, game, reference_images, revision: !!s.current_plan_version_id, paints });
   });
 }

@@ -56,9 +56,9 @@ export interface AgentTurnInput {
     | { kind: 'images'; subject_ref: string; subject_name: string; game: string; reference_image?: string | null;
         /** Pictures the user found themselves (for example from Google Images), with their pages. */
         user_images?: { image_url: string; page_url: string; title: string }[] }
-    | { kind: 'plan'; subject_ref: string; subject_name: string; game: string; reference_images: string[]; revision: boolean }
+    | { kind: 'plan'; subject_ref: string; subject_name: string; game: string; reference_images: string[]; revision: boolean; paints?: 'owned' | 'best' | null }
     /** Library research (bit 7.4): a technique or recipe for the user's own library. */
-    | { kind: 'knowledge'; target: 'technique' | 'recipe'; revision?: { name: string } | null }
+    | { kind: 'knowledge'; target: 'technique' | 'recipe'; revision?: { name: string } | null; paints?: 'both' | 'owned' | 'best' | null }
     | null;
 }
 

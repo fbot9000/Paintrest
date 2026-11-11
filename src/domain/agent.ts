@@ -4,7 +4,7 @@
  * Pure functions only; writes live in data/agent-commands.ts and data/research-commands.ts.
  */
 import type {
-  ElementKind, Evidence, Grouping, Id, MaterialRole, PaintProduct, ResultType, StepBasis, Tables, Uncertainty,
+  ElementKind, Evidence, Grouping, Id, MaterialRole, PaintChoice, PaintProduct, ResultType, StepBasis, Tables, Uncertainty,
 } from './types';
 import { attachedExpansions, liveSubjects, ownershipOf } from './views';
 
@@ -134,6 +134,8 @@ export interface PaintPlanPayload {
   summary?: string | null;
   palette?: PaletteItem[];
   sources_read?: SourceRead[];
+  /** Which paints the plan is built from, as the user chose (owned or best). */
+  paint_choice?: Exclude<PaintChoice, 'both'> | null;
 }
 
 /** What the server hands back for each proposal, before validation. */
@@ -212,6 +214,8 @@ export interface RecipePayload {
   sources: SourceRef[];
   sources_read?: SourceRead[];
   comparison?: KnowledgeComparison | null;
+  /** «Med malinger du har» or «Beste valg», as the user chose. */
+  paint_choice?: Exclude<PaintChoice, 'both'> | null;
 }
 
 /**
@@ -318,6 +322,7 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
     const payload: RecipePayload = {
       name: name.slice(0, 200), tags: list(o.tags, 12), effect: text(o.effect), note: text(o.note), paints, steps,
       sources, ...(read.length ? { sources_read: read } : {}), ...(comparison ? { comparison } : {}),
+      paint_choice: paintChoice(o.paint_choice),
     };
     return { ok: true, value: { ...common, result_type: 'recipe', payload } };
   }
@@ -437,6 +442,7 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
     return { ok: true, value: { ...common, result_type: 'paint_plan', payload: {
       subject_id, elements, note: str(o.note).trim() || null, sources: sourceRefs(o.sources),
       summary: str(o.summary).trim() || null, palette, sources_read: sourcesRead(o.sources_read),
+      paint_choice: paintChoice(o.paint_choice),
     } } };
   }
 
@@ -640,6 +646,7 @@ function knowledgeContext(t: Tables, task_id: Id, allowedTypes: ResultType[]): A
     allowedTypes,
     data: {
       ...(revision ? { technique_to_improve: revision } : {}),
+      ...(t.task_scope[task_id]?.paint_choice ? { paint_choice: t.task_scope[task_id]!.paint_choice } : {}),
       library: { techniques, recipes },
       paints,
       your_pending_proposals: pending,
@@ -793,6 +800,10 @@ function sourcesRead(v: unknown): SourceRead[] {
     return [{ url, title: str(so.title).trim() || url, site: str(so.site).trim() || hostOf(url), language: str(so.language).trim() || null,
       summary: str(so.summary).trim() || null, original_excerpt: str(so.original_excerpt).trim() || null }];
   });
+}
+
+function paintChoice(v: unknown): Exclude<PaintChoice, 'both'> | null {
+  return v === 'owned' || v === 'best' ? v : null;
 }
 
 /** Variants may only point to sources in the draft. Exactly one variant is the starting point. */

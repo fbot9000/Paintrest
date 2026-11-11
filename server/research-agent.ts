@@ -72,6 +72,8 @@ export interface PlanFocus {
   reference_images: string[];
   /** True when the miniature already has an approved plan that is opened for revision. */
   revision: boolean;
+  /** The user's choice: only paints they own, or the best paints regardless. */
+  paints?: 'owned' | 'best' | null;
 }
 
 /** Library research (bit 7.4): a technique or a recipe for the user's own library. */
@@ -80,6 +82,8 @@ export interface KnowledgeFocus {
   target: 'technique' | 'recipe';
   /** Bit 7.6: improve this technique from the library instead of drafting a new one. */
   revision?: { name: string } | null;
+  /** Recipes: the user's paint choice. both = two drafts (owned / best). */
+  paints?: 'both' | 'owned' | 'best' | null;
 }
 
 export interface ImageFocus {
@@ -145,6 +149,27 @@ export const OFFICIAL_STEPS = 10;
 export const MAX_VIDEOS = 8;
 export const MAX_PLAN_STEPS = 16;
 export const MAX_KNOWLEDGE_STEPS = 16;
+
+/**
+ * Which paints to use is the user's choice, never a hidden preference
+ * (brukerbeslutning 11.11.2026). The agent says in its message which choice it followed.
+ */
+export function paintRule(choice: 'both' | 'owned' | 'best' | null | undefined, kind: 'recipe' | 'plan' | 'general'): string {
+  const what = kind === 'recipe' ? 'oppskrift' : 'maleplan';
+  if (choice === 'owned') {
+    return `MALINGSVALG (valgt av brukeren): BARE MALINGER BRUKEREN HAR (ownership "owns" i "paints"). Bruk ikke andre malinger. Går det ut over resultatet, si hva som mangler og hva det betyr, i meldingen og i "uncertainty". Sett "paint_choice": "owned" i payload.`;
+  }
+  if (choice === 'best') {
+    return `MALINGSVALG (valgt av brukeren): BESTE VALG. Velg malingene som gir best resultat, uavhengig av hva brukeren har. Eierstatus skal ikke påvirke valget. Si i meldingen hvilke av dem brukeren ikke har. Sett "paint_choice": "best" i payload.`;
+  }
+  if (choice === 'both') {
+    return `MALINGSVALG (valgt av brukeren): BEGGE. Lag TO ${what}-forslag:
+  1. "paint_choice": "owned" – bare malinger brukeren har (ownership "owns"). Si hva som mangler hvis resultatet blir dårligere.
+  2. "paint_choice": "best" – malingene som gir best resultat, uavhengig av hva brukeren har.
+Gi dem samme navn med «– med malinger du har» og «– beste valg» til slutt. Har brukeren allerede alle de beste malingene, lag bare ett forslag med "paint_choice": "best" og si det i meldingen.`;
+  }
+  return `Malingsvalg: Brukeren bestemmer om du skal holde deg til malinger brukeren har. La ikke eierstatus ("ownership") styre valget ditt på egen hånd. Har brukeren ikke sagt noe, velg malingene som passer best, og si i meldingen hvilke brukeren ikke har. Ber brukeren om malinger de har, eller om begge deler, gjør det.`;
+}
 const MAX_LOOK = 8;
 const MAX_MESSAGES = 30;
 
@@ -200,12 +225,14 @@ Arbeid slik:
 1. Analyser uttrykket: hvilke deler og fargesoner figuren har (for eksempel kappe, hud, rustning, våpen, base), hvilke farger, hvor mørk og kontrastrik den er, og eventuelle effekter (glød, OSL, rust).
 2. Let etter maleguider for denne figuren eller lignende uttrykk${mode !== 'none' ? ' (åpne known_sources først; koreanske og japanske malere oppgir ofte malingene sine, og agenten må oversette)' : ''}. Bruk det kildene faktisk sier om malinger og metode.
 3. Velg en arbeidsmåte som passer (for eksempel svart grunning med zenithal og slapchop, kontrastmaling, eller lagvis med glasur) og begrunn kort.
-4. Lag ETT paint_plan-forslag for ${plan.subject_ref}${plan.revision ? ' (ny versjon av den åpnede planen)' : ''}: felles operasjoner først (grunning, zenithal, avslutning), så én del per fargesone. Hvert steg har en konkret instruks og eksakte malinger med produsent, serie og navn, og rolle. Foretrekk malinger med ownership "owns". Mangler brukeren en maling, foreslå den du mener er best, og nevn et eiet alternativ i "uncertainty".
+4. Lag ETT paint_plan-forslag for ${plan.subject_ref}${plan.revision ? ' (ny versjon av den åpnede planen)' : ''}: felles operasjoner først (grunning, zenithal, avslutning), så én del per fargesone. Hvert steg har en konkret instruks og eksakte malinger med produsent, serie og navn, og rolle. Følg malingsvalget nedenfor.
 5. Legg i payload:
    "summary": norsk sammendrag av arbeidsmåte og fargevalg (3–6 setninger),
    "palette": [{"product": {"manufacturer": "…", "range": "…", "name": "…", "hex": "#rrggbb"}, "role_label": "kappe – skygge", "part": "Kappe"}] – én rad per maling planen bruker, med omtrentlig farge,
-   "sources" og "sources_read" (med norsk sammendrag) for kildene du brukte.
+   "sources" og "sources_read" (med norsk sammendrag) for kildene du brukte,
+   "paint_choice": "owned" eller "best" etter malingsvalget.
    Gi også "hex" (omtrentlig farge) på hvert "product" i stegene.
+${paintRule(plan.paints ?? null, 'plan')}
 Lag ikke andre forslagstyper i dette oppdraget.` : '';
   return `Du er researchagenten i Paintrest, et personlig arbeidsverktøy for miniatyrmaling.
 Du hjelper brukeren å kartlegge miniatyrer i brettspillprosjekter, finne referansebilder og lage maleplaner med eksakte malingsprodukter.
@@ -217,7 +244,8 @@ Regler for forslag:
 - Du arbeider fritt INNE I DETTE PROSJEKTET mens brukeren setter det opp. Du kan lage, endre, dele, slå sammen og slette miniatyrer, og lage nye versjoner av maleplaner, også for det som allerede er godkjent. Ikke be brukeren gjøre endringer manuelt; gjør det selv gjennom "proposals".
 ${direct ? '- Endringene dine i prosjektet tas i bruk MED EN GANG, og brukeren kan angre hele runden med ett klikk. Si kort i meldingen hva du endret. Bildeutvalg og malinger som ikke finnes i katalogen venter på brukeren.' : '- Forslagene dine godkjennes av brukeren før de tas i bruk.'}
 - Du kan ikke endre noe utenfor prosjektet: andre prosjekter, malingskatalogen eller biblioteket.
-- Ikke dikt opp malingsnavn. Bruk eksakte produktnavn med produsent. Foretrekk malinger brukeren eier (ownership "owns").
+- Ikke dikt opp malingsnavn. Bruk eksakte produktnavn med produsent.
+- ${paintRule(null, 'general')}
 - Miniatyrer i prosjektet refereres med "ref" (M1, M2 …). Bruk aldri andre id-er.
 - Tillatte forslagstyper: ${resultTypes.join(', ') || 'ingen'}. Lag ett forslag per maleplan eller per bildeutvalg; samle relaterte katalogendringer (for eksempel en deling) i ett catalog_change-forslag.
 - Ikke foreslå nye miniatyrer som allerede finnes i "miniatures" (sammenlign navn); endre dem heller med catalog_change.
@@ -258,6 +286,7 @@ ${JSON.stringify(context)}`;
  */
 export function knowledgeInstructions(context: unknown, resultTypes: string[], mode: WebMode, focus: KnowledgeFocus): string {
   const steps = MAX_KNOWLEDGE_STEPS;
+  const twoDrafts = focus.target === 'recipe' && focus.paints === 'both' && !focus.revision;
   const tools = mode === 'hosted'
     ? `Du har et innebygd nettsøk-verktøy (web_search) som du bruker direkte. I tillegg kan Paintrest åpne sider for deg. Hvert svar fra deg er ETT JSON-objekt:
   {"action": "open", "url": "https://…", "why": "kort grunn"} – Paintrest leser siden og gir deg teksten
@@ -282,7 +311,8 @@ Hele teknikken står i "technique_to_improve", sammen med brukerens erfaringer (
 En teknikk er en metode (for eksempel tørrbørsting, OSL, svamp for tekstur), uavhengig av spill og av bestemte malinger. Materialene er generelle ("finporet svamp", "oljemaling"). Bestemte malingsprodukter hører hjemme i en oppskrift, ikke i teknikken.`
     : `OPPDRAG: OPPSKRIFT til brukerens bibliotek.
 En oppskrift er en FARGEREKKE: bestemte malinger i rekkefølge, med produsent, serie og navn. Den kan i tillegg ha STEG som viser hvordan fargerekken brukes for å få en bestemt effekt. Er det bare en fargerekke, la "steps" være tom.
-Foretrekk malinger brukeren eier (ownership "owns" i "paints"). Ikke dikt opp malingsnavn. Mangler brukeren en maling, foreslå den du mener er best, og nevn et eiet alternativ i "uncertainty".`;
+Ikke dikt opp malingsnavn.
+${paintRule(focus.paints ?? 'best', 'recipe')}`;
   const shape = focus.target === 'technique'
     ? `{"type": "technique", "evidence": "documented|synthesized|unresolved", "uncertainty": [{"path": "steps", "reason": "…"}],
  "payload": {"name": "…", "tags": ["tekstur"], "desired_result": "hva teknikken gir", "use_area": "hvor den passer",
@@ -293,7 +323,7 @@ Foretrekk malinger brukeren eier (ownership "owns" i "paints"). Ikke dikt opp ma
   "sources": [{"url": "https://…", "title": "…"}],
   "sources_read": [{"url": "https://…", "language": "en", "summary": "norsk sammendrag av hva siden viser og sier", "original_excerpt": "kort utdrag"}]}}`
     : `{"type": "recipe", "evidence": "documented|synthesized|unresolved", "uncertainty": [],
- "payload": {"name": "…", "tags": ["hud"], "effect": "hva oppskriften gir, eller null for en ren fargerekke", "note": null,
+ "payload": {"name": "…", "tags": ["hud"], "effect": "hva oppskriften gir, eller null for en ren fargerekke", "note": null, "paint_choice": "owned|best",
   "paints": [{"product": {"manufacturer": "Citadel", "range": "Base", "name": "Rhinox Hide", "hex": "#3d2b23"}, "role": "base|shade|layer|highlight|wash|glaze|mix|other", "note": "for eksempel tynn ut"}],
   "steps": [{"instruction": "Hva du gjør", "paints": [1, 2], "technique": "T1 eller null"}],
   "comparison": {"common": "det kildene er enige om", "variants": [{"label": "…", "description": "…", "sources": ["https://…"], "primary": true}]},
@@ -301,7 +331,7 @@ Foretrekk malinger brukeren eier (ownership "owns" i "paints"). Ikke dikt opp ma
   "sources_read": [{"url": "https://…", "language": "en", "summary": "norsk sammendrag", "original_excerpt": "kort utdrag"}]}}
 "paints" i et steg er nummeret i fargerekken (1 er den første). "technique" er ref-en til en teknikk i "library.techniques", eller null.`;
   return `Du er researchagenten i Paintrest, et personlig arbeidsverktøy for miniatyrmaling.
-Brukeren har sett noe og vil vite hvordan det gjøres. Du finner flere kilder, sammenligner dem og lager ETT samlet utkast som brukeren kan teste ved malebordet.
+Brukeren har sett noe og vil vite hvordan det gjøres. Du finner flere kilder, sammenligner dem og lager ${twoDrafts ? 'utkast' : 'ETT samlet utkast'} som brukeren kan teste ved malebordet.
 Svar alltid på norsk bokmål.
 
 ${what}
@@ -315,12 +345,17 @@ Arbeid slik:
 3. Sammenlign: hva gjør kildene likt, og hvor er de uenige? Skriv det felles i "comparison.common", og hver ulik fremgangsmåte som en variant i "comparison.variants" med URL-ene til kildene som viser den. Merk én variant som utgangspunkt ("primary": true). Stegene i guiden følger utgangspunktet.
    I "sources_read" skal "summary" si kort hva kilden viser og hva den bidrar med (for eksempel «viser hele metoden i video», «bare produktråd»).
 4. Skill mellom det kildene viser og det du selv foreslår: "basis": "documented" bare når en åpnet kilde beskriver steget, ellers "synthesized".
-5. Lag ETT forslag av typen ${focus.target}. Lag ikke andre forslagstyper.
+5. Lag ${twoDrafts ? 'forslag etter malingsvalget (to, med ulik "paint_choice")' : 'ETT forslag'} av typen ${focus.target}. Lag ikke andre forslagstyper.
 
 Kildekrav:
 - Oppgi kildene du bygger på i "sources" med eksakt URL. Bare sider du har søkt fram eller åpnet, blir godtatt.
 - Bruk "documented" på forslaget bare når åpnede kilder sier det. Det kildene ikke sier, skriv i "uncertainty".
 - Sikkerhet (løsemidler, ventilasjon, tørking) skal stå i "risk_note" når det er relevant.` : ''}
+
+Tolkning:
+- Er forespørselen kort eller kan forstås på flere måter, bruk den vanlige betydningen (for eksempel betyr «flammer» vanlige ildflammer i rødt, oransje og gult). Si i meldingen hva du antok, slik at brukeren kan rette det.
+- La ikke malingskatalogen, eierstatus, tidligere utkast eller biblioteket avgjøre hva brukeren mener.
+- Er det fortsatt uklart hva brukeren vil ha, still ETT kort spørsmål i meldingen og lag ikke forslag ennå.
 
 Regler:
 - Du kan ikke endre biblioteket, prosjektene eller malingskatalogen. Utkastet ditt lagres først når brukeren godkjenner det.
@@ -722,6 +757,9 @@ export function isRefusal(text: string): boolean {
 }
 
 export function normUrl(u: string): string {
+  // youtu.be/ID, /shorts/ID and watch?v=ID&t=… are the same video.
+  const yt = youtubeId(u);
+  if (yt) return `https://www.youtube.com/watch?v=${yt}`;
   try {
     const x = new URL(u);
     x.hash = '';
