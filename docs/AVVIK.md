@@ -96,7 +96,7 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
       - **Eksempelbilder:** Utkastet kan ha `images`, og bare bilder fra bildelisten på en side Paintrest åpnet eller fra et bildesøk godtas. Bildesøk (Tavily/Brave) er nå også på for research til biblioteket. Bildene du har krysset av, hentes og lagres som `source_asset` med en `visual_reference`-lenke til teknikken eller oppskriften. De vises i artikkelen, på oppskriften og i verkstedguiden.
       - Det er ikke testet mot UiB. Testene bruker en simulert modell og simulerte serversvar.
     - **Erfaring (7.3):** Erfaring kan registreres uten å velge miniatyr. Feltet `subject_id` finnes, men skjermen bruker det ikke ennå. Avkryssing av steg i verkstedguiden lagres ikke.
-    - **Hovednavigasjon (7.1):** Toppfeltet har «Prosjekter» og «Bibliotek». Skissene har også «Research» og «Malinger», men de sidene finnes ikke ennå. På smale skjermer vises bare logoen, uten navnet.
+    - **Hovednavigasjon (7.1):** Toppfeltet har «Prosjekter», «Malinger» (fra 11.11.2026) og «Bibliotek». Skissene har også «Research», men den siden finnes ikke ennå. På smale skjermer vises bare logoen, uten navnet.
     - **Dokumentene bør oppdateres:** datamodell v3 og skjema §6 om teknikk og oppskrift. Dokumentene er ikke lest, så det er ikke kjent hvor mye dette avviker fra dem.
 
 30. **BRUKERBESLUTNING 11. november 2026: du velger malingene selv.** Om agenten skal holde seg til malinger du har, er et valg du tar aktivt. Det skal ikke skje i det skjulte.
@@ -106,6 +106,20 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
     - **Agentpanelet i prosjektet:** Agenten følger det du skriver.
     - **Tolkning:** Research til biblioteket bruker den vanlige betydningen av korte forespørsler (for eksempel «flammer» = ild), og sier hva den antok. Er det fortsatt uklart, spør den før den lager utkast. Katalogen, eierstatus og tidligere utkast skal ikke avgjøre hva du mener.
     - **Kilder:** YouTube-adresser i ulike former (`youtu.be/…`, `watch?v=…&t=…`, `/shorts/…`) regnes som samme side, slik at en åpnet video ikke fjernes som kilde.
+
+33. **BRUKERBESLUTNING 11. november 2026: malingssamlingen er brukerens egen, og eksempeldataene har ingen malinger.**
+    - **Eksempeldata:** `buildSampleData` lager ikke lenger malinger, og eksempelplanene har steg uten malinger. Eksempeloppskriftene er fjernet, fordi de bare var fargerekker med eksempelmalinger. Testene ber om de gamle eksempelmalingene med `examplePaints: true`.
+    - **Eksempelmalinger i eksisterende data** kjennes igjen ved at de ble laget i samme øyeblikk som arbeidsrommet (`paint_product.created_at = workspace.created_at`) og ikke har noen `change_record`. En maling brukeren har endret eller satt eierskap på, regnes som brukerens. «Fjern eksempelmalingene» skjuler dem (`deleted_at`) og fjerner `inventory_entry`-radene, fordi eierskapet aldri var brukerens. Ingenting fjernes automatisk ved oppstart: brukeren trykker selv.
+    - **Tilbakestill eksempeldata beholder malingssamlingen** (`paint_product`, `inventory_entry` og deres `change_record`), men ikke eksempelmalingene. Resten erstattes som før.
+    - **Nye felt på `paint_product`, ikke i skjemaet:** `product_code` (produsentens kode eller varenummer) og `swatch_estimated` (fargen er AI-ens anslag, ikke valgt av brukeren). Begge er valgfrie, så eldre data trenger ingen migrering.
+    - **Identitet og dubletter:** Samme maling kjennes igjen på kode (med samme produsent), ellers på navn der produsent, serie og kode ikke motsier hverandre. Navn sammenlignes uten store bokstaver, aksenter og tegnsetting («Bugman's Glow» = «bugmans glow»), og noen produsentnavn regnes som like («The Army Painter» = «Army Painter», «Games Workshop» = «Citadel»). Også skjulte malinger matches: en import eller et nytt tillegg tar den skjulte raden i bruk igjen, slik at planer og oppskrifter som bruker den, følger med. Rader med produsent og kode matches før rader uten.
+    - **`identity_status`:** En maling brukeren legger inn eller lagrer i skjemaet med produsent og navn, blir `confirmed`. I en import blir den `confirmed` bare når den har produsent og AI-en ikke har tvil igjen. Malinger agenten oppretter fra en plan, er fortsatt `unconfirmed`.
+    - **Import med AI (`POST /api/paints/interpret`):** Ett modellkall per del, uten nettsøk. Modellen svarer med JSON (`read`: malinger, linjer den hoppet over og spørsmål; `discuss`: endringer `update`/`add`/`remove`, besvarte spørsmål og nye spørsmål). Serveren fjerner linjer som ikke var med i forespørselen, ukjente typer og ugyldige farger, og merker felt som ikke står i brukerens tekst som gjettet, også når modellen ikke gjorde det. Kan svaret ikke leses, spør serveren én gang til, og klienten deler så delen i to. Instruksene og svarformatet er ikke testet mot UiB; testene bruker en simulert modell.
+    - **Utkastet lagres i nettleseren (localStorage), ikke i datamappen.** Det er ikke kanoniske data før brukeren lagrer. Ulempen er at et utkast ikke følger med til en annen maskin eller nettleser.
+    - **Import uten AI** leser regneark med kjente kolonnenavn (norske og engelske) eller ett navn per linje. Den gjetter ingenting.
+    - **Filer:** `.xlsx` leses i nettleseren uten bibliotek (zip-katalogen og `DecompressionStream('deflate-raw')`), bare celleverdier. `.xls`, `.ods`, `.numbers`, PDF og Word leses ikke; brukeren blir bedt om å lagre som CSV/.xlsx eller lime inn teksten.
+    - **Malingstyper:** Skjemaets `product_kind` er beholdt. AI-en legger wash under `shade`, speedpaint og Xpress under `contrast`, lakk og medium under `medium`, effekter og tekstur under `technical`, og ink og dry under `other`. Serien (`range_name`) beholder det presise navnet. Om typene skal utvides (for eksempel `ink`, `dry`, `air`), bør avgjøres før arbeidet med malekjeder.
+    - **Ikke bygget ennå:** produktbilder og forslag til malekjeder. Feltene som trengs for det (produsent, serie, kode, type, farge), finnes nå.
 
 ## Antakelser
 
@@ -125,7 +139,8 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 - **Brave Image Search er ikke testet mot den ekte tjenesten.** Feltene (`results[].title`, `url`, `source`, `thumbnail.src`, `properties.url`) er hentet fra Braves dokumentasjon slik den er gjengitt i søkeresultater 10. november 2026. Selve dokumentasjonssidene kunne ikke åpnes fra utviklingsmiljøet. Om bildefilene fra Reddit og BoardGameGeek lar seg hente direkte, er ikke kjent. Er de stengt, brukes Braves lille kopi.
 - **Søketjenestene:** Endepunktene er hentet fra dokumentasjonen til Tavily (`POST /search`, Bearer) og Brave (`GET /res/v1/web/search`, `X-Subscription-Token`). De er ikke testet mot de ekte tjenestene, fordi utviklingsmiljøet blokkerte all utgående trafikk. Prisene (Tavily: 1 000 gratis kreditter i måneden, Brave: kreditt på 5 dollar i måneden og kredittkort) er sjekket mot oppslag 9. november 2026.
 - **BGG:** Oppslaget er simulert. Navnene og thing-id-ene (9000xx) er oppdiktet.
-- **Eksempeldata:** Spillet og kildene er plassholdere hentet fra Figma. Fargene på fargeprøvene er tilnærminger. Malingsnavnene er Citadel-produkter. Det er ikke sjekket om navnene er i produksjon i dag.
+- **Eksempeldata:** Spillet og kildene er plassholdere hentet fra Figma. Eksempeldataene har ingen malinger lenger (avvik 33). De gamle eksempelmalingene, som bare testene bruker, er Citadel-navn med omtrentlige farger; det er ikke sjekket om de er i produksjon i dag.
+- **Fargene AI-en foreslår er anslag.** De vises med «≈» i samlingen og merkes som gjettet i importen. De er ikke sjekket mot produsentens farger.
 - **Skrift:** DM Serif Display, DM Sans og DM Mono, lastet fra Google Fonts. Valget er gjort ut fra skjermbildene i Figma og ikke kontrollert mot filen.
 
 ## Ikke bygget ennå

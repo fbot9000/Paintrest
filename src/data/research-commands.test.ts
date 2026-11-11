@@ -12,7 +12,7 @@ import { panelTask, subjectTask } from '../domain/tasks';
 
 async function setup() {
   const p = memoryPersistence();
-  const store = new Store(await buildSampleData(p), p);
+  const store = new Store(await buildSampleData(p, { examplePaints: true }), p);
   const t0 = store.getTables();
   const project = Object.values(t0.project).find((x) => t0.game[x.game_id]!.primary_name.startsWith('Avalon'))!;
   const research = createResearchCommands(store, {
@@ -335,7 +335,7 @@ describe('kontekst og migrering', () => {
 
   it('migrerer v1-data uten å miste prosjekter', async () => {
     const p = memoryPersistence();
-    const s = await buildSampleData(p);
+    const s = await buildSampleData(p, { examplePaints: true });
     const v1 = { ...s, schema_version: 1, tables: { ...s.tables } } as typeof s;
     delete (v1.tables as Partial<typeof s.tables>).research_task;
     delete (v1.tables as Partial<typeof s.tables>).technique;

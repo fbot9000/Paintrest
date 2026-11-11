@@ -10,6 +10,7 @@ import type { DataStore } from './data-store.ts';
 import { hostedSearchOf } from './provider.ts';
 import type { ResponsesProvider } from './provider.ts';
 import { runResearch } from './research-agent.ts';
+import { interpretPaints, parseInterpretRequest } from './paint-import.ts';
 import { lookAtImages } from './vision.ts';
 import type { ImageFocus, KnowledgeFocus, PlanFocus, ResearchEvent, ResearchInput } from './research-agent.ts';
 import { SEARCH_PROVIDERS } from './search.ts';
@@ -17,6 +18,7 @@ import type { SearchProviderId, WebSearch } from './search.ts';
 
 const MAX_BODY = 64 * 1024;
 const MAX_AGENT_BODY = 3 * 1024 * 1024;
+const MAX_PAINT_BODY = 1024 * 1024;
 const MAX_STATE_BODY = 200 * 1024 * 1024;
 const MAX_FILE_BODY = 30 * 1024 * 1024;
 
@@ -177,6 +179,13 @@ export function createHandler(d: AppDeps) {
           const body = await readJson(req);
           const page = await d.openPage(str(body.url));
           return json(res, 200, { url: page.url, title: page.title, site: page.site, author: page.author, images: page.images });
+        }
+
+        // ---------- Malingssamlingen: AI-tolkning av en liste ----------
+        case 'POST /api/paints/interpret': {
+          const body = await readJson(req, MAX_PAINT_BODY);
+          const input = parseInterpretRequest(body);
+          return json(res, 200, await interpretPaints(d.provider, input, str(body.model) || undefined));
         }
 
         case 'POST /api/agent/run': {

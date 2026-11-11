@@ -56,6 +56,13 @@ export interface PaintProduct {
    * but the schema has no column for it. Nullable hex colour.
    */
   swatch_hex: string | null;
+  /**
+   * PROTOTYPE (malingssamlingen, 11.11.2026): the maker's product code or item number
+   * (Vallejo 70.950, Army Painter WP3001). Not in skjema. Absent = unknown.
+   */
+  product_code?: string | null;
+  /** PROTOTYPE: true when swatch_hex is the AI's estimate, not a colour the user chose. */
+  swatch_estimated?: boolean;
   created_at: Timestamp;
   deleted_at: Timestamp | null;
 }
