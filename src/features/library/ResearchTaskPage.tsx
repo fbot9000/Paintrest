@@ -43,47 +43,61 @@ export function ResearchTaskPage() {
   const done = view.proposals.filter((p) => p.decision !== 'pending');
 
   return (
-    <main className="page tech-page">
-      <div className="tech-head">
-        <span className="eyebrow">
-          <Link to="/bibliotek/research">Research</Link> / {view.revision_of
-            ? <Link to={`/bibliotek/teknikker/${view.revision_of.id}`}>{view.revision_of.name}</Link>
-            : view.target === 'technique' ? 'Teknikk' : 'Oppskrift'}
-        </span>
-        <h1>{view.title}</h1>
-      </div>
-      <AiStatusNote status={status} />
-      <ErrorNote error={run.error} onClose={() => clearRunError(taskId)} />
+    <main className="page research-page">
+      <div className="research-layout">
+        <div className="research-work">
+          <div className="tech-head">
+            <span className="eyebrow">
+              <Link to="/bibliotek/research">Research</Link> / {view.revision_of
+                ? <Link to={`/bibliotek/teknikker/${view.revision_of.id}`}>{view.revision_of.name}</Link>
+                : view.target === 'technique' ? 'Teknikk' : 'Oppskrift'}
+            </span>
+            <h1>{view.title}</h1>
+          </div>
+          <AiStatusNote status={status} />
+          <ErrorNote error={run.error} onClose={() => clearRunError(taskId)} />
 
-      {pending.map((p) => <DraftCard key={p.id} p={p} messages={view.messages} revisionOf={view.revision_of?.id ?? null} />)}
+          {pending.length > 0 && (
+            <div className={`drafts ${pending.length > 1 ? 'drafts-many' : ''}`}>
+              {pending.map((p) => <DraftCard key={p.id} p={p} messages={view.messages} revisionOf={view.revision_of?.id ?? null} />)}
+            </div>
+          )}
+          {pending.length === 0 && !run.running && view.proposals.length === 0 && (
+            <p className="muted">Ingen utkast ennå. Agenten svarer i samtalen{status === 'ready' ? '' : ' når den er tilgjengelig'}.</p>
+          )}
 
-      <section className="research-chat" aria-label="Samtale med agenten">
-        {view.messages.map((m) => <Message key={m.id} m={m} />)}
-        {run.running && <LiveSteps events={run.events} onStop={() => stopRun(taskId)} />}
-        <div ref={endRef} />
-      </section>
-
-      {view.target === 'recipe' && !view.revision_of && choice && (
-        <div className="research-choice">
-          <PaintChoicePicker value={choice} onChange={(v) => app.research.setPaintChoice(taskId, v)} />
-          <p className="small muted">Gjelder fra neste melding.</p>
+          {done.length > 0 && (
+            <section className="tech-section">
+              <h2>Behandlet</h2>
+              {done.map((p) => <DoneLine key={p.id} p={p} />)}
+            </section>
+          )}
         </div>
-      )}
 
-      <div className="research-input">
-        <label htmlFor="research-msg" className="sr-only">Melding til agenten</label>
-        <textarea id="research-msg" value={text} rows={2} placeholder="Spør, rett eller be om mer research"
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send(); }} />
-        <Button variant="primary" disabled={!text.trim() || run.running || status !== 'ready'} onClick={send}>Send</Button>
+        {/* Skisse 03: the conversation in its own column on wide screens, always in reach. */}
+        <aside className="research-side" aria-label="Samtale med agenten">
+          <section className="research-chat">
+            {view.messages.map((m) => <Message key={m.id} m={m} />)}
+            {run.running && <LiveSteps events={run.events} onStop={() => stopRun(taskId)} />}
+            <div ref={endRef} />
+          </section>
+
+          {view.target === 'recipe' && !view.revision_of && choice && (
+            <div className="research-choice">
+              <PaintChoicePicker value={choice} onChange={(v) => app.research.setPaintChoice(taskId, v)} />
+              <p className="small muted">Gjelder fra neste melding.</p>
+            </div>
+          )}
+
+          <div className="research-input">
+            <label htmlFor="research-msg" className="sr-only">Melding til agenten</label>
+            <textarea id="research-msg" value={text} rows={2} placeholder="Spør, rett eller be om mer research"
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send(); }} />
+            <Button variant="primary" disabled={!text.trim() || run.running || status !== 'ready'} onClick={send}>Send</Button>
+          </div>
+        </aside>
       </div>
-
-      {done.length > 0 && (
-        <section className="tech-section">
-          <h2>Behandlet</h2>
-          {done.map((p) => <DoneLine key={p.id} p={p} />)}
-        </section>
-      )}
     </main>
   );
 }
@@ -127,14 +141,20 @@ function DraftCard({ p, messages, revisionOf }: { p: ResearchProposal; messages:
     ...(comparison?.variants.length ? { primary_variant: primary } : {}),
   }));
 
+  // The source column only takes space when there is something in it.
+  const hasSources = payload.sources.length > 0 || missingUserLinks(payload.sources, messages).length > 0;
+
   return (
-    <article className="card draft-card">
-      <SourceInspector sources={payload.sources} read={payload.sources_read ?? []} messages={messages} />
+    <div className="draft-wrap">
+    <article className={`card draft-card ${hasSources ? 'has-sources' : ''}`}>
+      {hasSources && <SourceInspector sources={payload.sources} read={payload.sources_read ?? []} messages={messages} />}
       <div className="draft-main tech-section">
       <div className="tech-head-row">
         <span className="eyebrow">{current ? 'Forslag til endring' : `Utkast fra agenten · ${p.result_type === 'technique' ? 'teknikk' : 'oppskrift'}`}</span>
         <div className="tech-badges">
-          <Badge>{payload.sources.length} {payload.sources.length === 1 ? 'kilde' : 'kilder'}</Badge>
+          {hasSources
+            ? <Badge>{payload.sources.length} {payload.sources.length === 1 ? 'kilde' : 'kilder'}</Badge>
+            : <span title="Agenten oppga ingen kilder. Utkastet bygger på det den vet fra før."><Badge tone="warn">Ingen kilder</Badge></span>}
           {comparison && comparison.variants.length > 0 && <Badge tone="dark">{comparison.variants.length} {comparison.variants.length === 1 ? 'variant' : 'varianter'}</Badge>}
           <EvidenceBadge evidence={p.evidence} />
           {'paint_choice' in payload && payload.paint_choice && (
@@ -177,6 +197,7 @@ function DraftCard({ p, messages, revisionOf }: { p: ResearchProposal; messages:
       <p className="small muted draft-hint">{current ? 'Endringene skrives inn i teknikken. Erfaringer og status blir værende.' : 'Lagres som utkast. Du kan endre alt etterpå.'}</p>
       </div>
     </article>
+    </div>
   );
 }
 
@@ -201,6 +222,8 @@ function TechniqueDraft({ x, comparison }: { x: TechniquePayload; comparison: Re
       {x.desired_result && <p className="tech-lead">{x.desired_result}</p>}
       {x.tags.length > 0 && <div className="tech-badges">{x.tags.map((t) => <Badge key={t}>{t}</Badge>)}</div>}
       {comparison}
+      <div className="draft-lists draft-lists-tech">
+      <div className="draft-col">
       {x.use_area && <div className="article-block"><span className="eyebrow">Bruksområde</span><p>{x.use_area}</p></div>}
       {x.materials.length > 0 && (
         <div className="article-block">
@@ -208,6 +231,7 @@ function TechniqueDraft({ x, comparison }: { x: TechniquePayload; comparison: Re
           <ul className="article-materials">{x.materials.map((m, i) => <li key={i}>{m}</li>)}</ul>
         </div>
       )}
+      </div>
       {x.steps.length > 0 && (
         <div className="article-block">
           <span className="eyebrow">Slik gjør du</span>
@@ -226,6 +250,7 @@ function TechniqueDraft({ x, comparison }: { x: TechniquePayload; comparison: Re
           </ol>
         </div>
       )}
+      </div>
       {x.variants && !x.comparison?.variants.length && <div className="article-block"><span className="eyebrow">Varianter</span><p className="pre-line">{x.variants}</p></div>}
       {x.risk_note && <div className="tech-risk-note"><span className="eyebrow">Forbehold</span><p className="pre-line">{x.risk_note}</p></div>}
       {x.note && <p className="small muted">{x.note}</p>}
@@ -247,6 +272,7 @@ function RecipeDraft({ x, comparison }: { x: RecipePayload; comparison: ReactNod
       {x.effect && <p className="tech-lead">{x.effect}</p>}
       {x.tags.length > 0 && <div className="tech-badges">{x.tags.map((t) => <Badge key={t}>{t}</Badge>)}</div>}
       {comparison}
+      <div className="draft-lists">
       <div className="article-block">
         <span className="eyebrow">Fargerekke</span>
         {x.paint_choice === 'owned' && notOwned > 0 && (
@@ -257,9 +283,10 @@ function RecipeDraft({ x, comparison }: { x: RecipePayload; comparison: ReactNod
           {x.paints.map((pe, i) => (
             <li key={i}>
               <span className="swatch" style={{ width: 18, height: 18, background: pe.product.hex ?? undefined }} aria-hidden />
-              <strong>{pe.product.name}</strong>
-              <span className="small muted">{[pe.product.manufacturer, pe.product.range].filter(Boolean).join(' · ')}</span>
-              {pe.note && <span className="small">– {pe.note}</span>}
+              <span className="draft-paint-text">
+                <span><strong>{pe.product.name}</strong> <span className="small muted">{[pe.product.manufacturer, pe.product.range].filter(Boolean).join(' · ')}</span></span>
+                {pe.note && <span className="small muted">{pe.note}</span>}
+              </span>
               {owned[i] === 'missing' ? <span className="own own-not_owned">Ikke i katalogen</span> : <OwnershipFlag ownership={owned[i] as 'owns' | 'not_owned' | 'unknown'} />}
             </li>
           ))}
@@ -282,6 +309,7 @@ function RecipeDraft({ x, comparison }: { x: RecipePayload; comparison: ReactNod
           </ol>
         </div>
       )}
+      </div>
       {x.note && <p className="small muted">{x.note}</p>}
     </>
   );
@@ -339,6 +367,16 @@ function userLinks(messages: ResearchMessage[]): string[] {
   return [...new Set(urls.map((u) => u.replace(/[.,;:]+$/, '')))];
 }
 
+function urlKey(u: string): string {
+  return u.replace(/\/+$/, '').replace(/^https?:\/\/(www\.)?/, '').toLowerCase();
+}
+
+/** The user's links that are not among the draft's sources (not read, or read but not used). */
+function missingUserLinks(sources: SourceRef[], messages: ResearchMessage[]): string[] {
+  const inDraft = new Set(sources.map((s) => urlKey(s.url)));
+  return userLinks(messages).filter((u) => !inDraft.has(urlKey(u)));
+}
+
 /** What happened when the agent tried to open a page, from the trace on its replies. */
 function openResult(messages: ResearchMessage[], url: string): string | null {
   const key = (u: string) => u.replace(/\/+$/, '').replace(/^https?:\/\/(www\.)?/, '').toLowerCase();
@@ -353,8 +391,7 @@ function openResult(messages: ResearchMessage[], url: string): string | null {
 function SourceInspector({ sources, read, messages }: { sources: SourceRef[]; read: SourceRead[]; messages: ResearchMessage[] }) {
   const key = (u: string) => u.replace(/\/+$/, '').replace(/^https?:\/\/(www\.)?/, '').toLowerCase();
   const summary = new Map(read.map((r) => [key(r.url), r.summary]));
-  const inDraft = new Set(sources.map((s) => key(s.url)));
-  const missingUser = userLinks(messages).filter((u) => !inDraft.has(key(u)));
+  const missingUser = missingUserLinks(sources, messages);
   return (
     <aside className="source-inspector" aria-label="Kilder">
       <span className="eyebrow">Kilder</span>
@@ -372,7 +409,6 @@ function SourceInspector({ sources, read, messages }: { sources: SourceRef[]; re
           </div>
         );
       })}
-      {sources.length === 0 && missingUser.length === 0 && <p className="small muted">Agenten oppga ingen kilder. Utkastet bygger på det den vet fra før.</p>}
       {sources.map((s, i) => (
         <div key={s.url} className="source-card">
           <span className="eyebrow">Kilde {String(i + 1).padStart(2, '0')}</span>
@@ -399,7 +435,7 @@ function Comparison({ c, sources, primary, onPick }:
       <span className="eyebrow">Fremgangsmåter</span>
       {c.common && <p><strong>Felles for kildene:</strong> {c.common}</p>}
       {c.variants.length > 0 && (
-        <div className="variant-grid" role="radiogroup" aria-label="Velg utgangspunkt">
+        <div className="variant-grid" data-count={c.variants.length} role="radiogroup" aria-label="Velg utgangspunkt">
           {c.variants.map((v, i) => {
             const on = i === primary;
             const refs = v.sources.map(number).filter((n) => n > 0);

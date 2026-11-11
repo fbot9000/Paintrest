@@ -139,11 +139,44 @@
   background: var(--card); border: 1px solid var(--line); border-radius: var(--r-sm);
 }
 .research-input textarea:focus { outline: none; border-color: var(--fore); box-shadow: 0 0 0 3px var(--moss-soft); }
+/* The draft adapts to its own width (container queries), so it works both alone and two side by side. */
+.draft-wrap { container-type: inline-size; min-width: 0; }
 .draft-card {
   border-color: var(--warn-soft); box-shadow: var(--shadow); padding: 0; overflow: hidden;
-  display: grid; grid-template-columns: 280px minmax(0, 1fr);
+  display: grid; grid-template-columns: minmax(0, 1fr);
 }
-.draft-main { padding: 20px; align-content: start; }
+.draft-main { padding: 20px; align-content: start; container-type: inline-size; min-width: 0; }
+/* Narrow draft: sources after the content, so two drafts side by side line up for comparison. */
+.draft-card .source-inspector { order: 2; border-right: 0; border-top: 1px solid var(--line); }
+.draft-card .source-inspector .source-note { margin-top: 0; }
+@container (min-width: 820px) {
+  .draft-card.has-sources { grid-template-columns: 260px minmax(0, 1fr); }
+  .draft-card .source-inspector { order: 0; border-right: 1px solid var(--line); border-top: 0; }
+  .draft-card .source-inspector .source-note { margin-top: auto; }
+}
+/* Lists side by side when the draft is wide: paint sequence and method, or materials and steps. */
+.draft-lists { display: grid; gap: 16px 28px; align-items: start; }
+.draft-col { display: grid; gap: 16px; align-content: start; }
+@container (min-width: 640px) {
+  .draft-lists { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); }
+  .draft-lists-tech { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+}
+
+/* Research page: full width; the conversation gets its own column on wide screens (skisse 03). */
+.project-main .page.research-page { max-width: none; }
+.research-layout { display: grid; gap: 24px; }
+.research-work { display: grid; gap: 20px; align-content: start; min-width: 0; }
+.research-side { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.drafts { display: grid; gap: 20px; align-items: start; }
+.drafts-many { grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr)); }
+@media (min-width: 1400px) {
+  .research-layout { grid-template-columns: minmax(0, 1fr) 400px; align-items: start; }
+  .research-side {
+    position: sticky; top: 76px; max-height: calc(100dvh - 92px);
+    display: flex; flex-direction: column;
+  }
+  .research-side .research-chat { flex: 1 1 auto; min-height: 160px; overflow-y: auto; align-content: start; }
+}
 
 /* Kildeinspektør og fremgangsmåter (bit 7.5, skisse 03) */
 .source-inspector { display: flex; flex-direction: column; gap: 10px; padding: 20px 16px; background: var(--panel); border-right: 1px solid var(--line); }
@@ -156,6 +189,10 @@
 .source-note { margin-top: auto; padding-top: 8px; }
 .comparison { gap: 10px; }
 .variant-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+/* Four variants: 2 × 2, or one row when there is room, never 3 + 1. */
+.variant-grid[data-count="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@container (min-width: 900px) { .variant-grid[data-count="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@container (max-width: 420px) { .variant-grid[data-count="4"] { grid-template-columns: minmax(0, 1fr); } }
 .variant-card {
   display: grid; gap: 6px; align-content: start; text-align: left; padding: 14px; cursor: pointer;
   border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper);
@@ -165,7 +202,9 @@
 .variant-pick { color: var(--fore); font-weight: 500; }
 .draft-card h2 { font-size: 26px; }
 .draft-paints { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
-.draft-paints li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.draft-paints li { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 4px 0; }
+.draft-paints li .swatch { margin-top: 2px; }
+.draft-paint-text { display: grid; gap: 2px; min-width: 0; }
 .draft-missing { display: grid; gap: 8px; padding: 12px 14px; border-radius: var(--r-md); background: var(--panel); }
 .draft-missing-row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
 .draft-missing-row select { min-height: 40px; padding: 0 8px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-sm); max-width: 100%; }
@@ -224,8 +263,6 @@
 
 @media (max-width: 860px) {
   .change-row { grid-template-columns: 1fr; }
-  .draft-card { grid-template-columns: 1fr; }
-  .source-inspector { border-right: 0; border-bottom: 1px solid var(--line); }
   .article-top { grid-template-columns: 1fr; }
   .recipe-paint { grid-template-columns: 28px minmax(0, 1fr); }
   .recipe-paint > :nth-child(n+3) { grid-column: 2; }
