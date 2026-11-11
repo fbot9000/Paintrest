@@ -668,6 +668,8 @@ export interface ResearchProposal {
   change_set_id?: Id | null;
   /** PROTOTYPE (bit 7.4): the technique or recipe created when a library draft was approved. */
   applied_target_id?: Id | null;
+  /** PROTOTYPE: 'images' when an image proposal closed by itself because every picture was used or set aside. */
+  closed_by?: 'images' | null;
 }
 
 export interface ContextRef {

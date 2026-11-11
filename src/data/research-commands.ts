@@ -5,6 +5,7 @@ import type { CatalogChangePayload, CatalogSubjectPayload, KnowledgeImage, Norma
 import type { AgentCommands, ApproveOptions, ProposalWrite, ResearchCommands } from '../domain/research';
 import type { ChangeAction, Id, MiniatureSubject, PaintChoice, ResearchProposal, ResultType, RowPatch, Tables, Uncertainty } from '../domain/types';
 import { attachedExpansions } from '../domain/views';
+import { openImages, pendingImageProposals, savedImageUrls } from '../domain/review';
 import type { Store } from './store';
 import { revertPatches } from './store';
 import { addSourceLayers, attachImages, attachImagesTo, downloadImages, setCover, sourceBelongsTo, sourceFor } from './images-tx';
@@ -292,6 +293,28 @@ export interface ResearchDeps {
 export function createResearchCommands(store: Store, deps: ResearchDeps = {}): ResearchCommands {
   const tx = store.transaction.bind(store);
 
+  /** «Forkast» on single pictures: kept in the proposal as set aside, so it can be undone. */
+  const setAside = (project_id: Id, urls: string[], aside: boolean) => {
+    tx((t, ws) => {
+      const who: Who = { initiated_by: 'user', task_id: null };
+      // Taking pictures back (also undoing «legg på») reopens a proposal that closed because they were its last.
+      const proposals = Object.values(t.research_proposal).filter((p) => p.result_type === 'reference_selection'
+        && t.task_scope[p.task_id]?.work_project_id === project_id && t.research_task[p.task_id]?.status === 'open'
+        && (p.decision === 'pending' || (!aside && p.closed_by === 'images')));
+      for (const p of proposals) {
+        const pl = p.payload as ReferenceSelectionPayload;
+        if (!pl.images.some((i) => urls.includes(i.image_url))) continue;
+        const before = new Set(pl.dismissed ?? []);
+        for (const u of urls) { if (aside) before.add(u); else before.delete(u); }
+        pl.dismissed = [...before];
+        if (!aside && p.closed_by === 'images') { p.decision = 'pending'; p.closed_by = null; }
+        p.updated_at = now();
+        record(t, ws, 'research_proposal', p.id, 'update', { ...who, task_id: p.task_id, proposal_id: p.id });
+      }
+      settleImageProposals(t, ws, project_id);
+    });
+  };
+
   return {
     async startTask(project_id, focus) {
       return tx((t, ws) => {
@@ -508,6 +531,34 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
       });
     },
 
+    async placeImages(subject_id, images, opts = {}) {
+      if (!images.length) throw new CommandError('Velg minst ett bilde');
+      const files = await downloadImages(store, deps.fetchImage, images);
+      return tx((t, ws) => {
+        const s = must(t.miniature_subject[subject_id], 'Miniatyren');
+        if (s.deleted_at) throw new CommandError('Miniatyren er slettet');
+        const who: Who = { initiated_by: 'user', task_id: null };
+        const log = (tt: string, id: Id, a: ChangeAction) => record(t, ws, tt, id, a, who);
+        const assets = attachImages(t, ws, subject_id, images, files, null, log);
+        // The agent's summaries of the pages the pictures came from go with them.
+        const pages = new Set(images.map((i) => i.page_url));
+        addSourceLayers(t, pendingImageProposals(t, s.project_id).flatMap((p) => ((p.payload as ReferenceSelectionPayload).sources_read ?? []).filter((x) => pages.has(x.url))), s.project_id);
+        const cover = opts.cover_image_url ?? (opts.auto_cover && !s.official_asset_id ? images[0]!.image_url : undefined);
+        if (cover && assets[cover]) setCover(t, subject_id, assets[cover]!, log);
+        log('miniature_subject', subject_id, 'update');
+        settleImageProposals(t, ws, s.project_id);
+        return assets;
+      });
+    },
+
+    async dismissImages(project_id, image_urls) {
+      setAside(project_id, image_urls, true);
+    },
+
+    async restoreImages(project_id, image_urls) {
+      setAside(project_id, image_urls, false);
+    },
+
     async rejectProposal(proposal_id) {
       tx((t, ws) => {
         const p = must(t.research_proposal[proposal_id], 'Forslaget');
@@ -535,6 +586,23 @@ function needsUser(t: Tables, p: ResearchProposal): string | null {
     if (missing.length) return `Malinger som ikke finnes i katalogen: ${missing.map((m) => m.name).join(', ')}`;
   }
   return null;
+}
+
+/**
+ * Image proposals are used picture by picture. One that has nothing left (every picture saved on a
+ * miniature or set aside, and no videos or guides) is closed: approved when any of its pictures were
+ * saved, otherwise rejected. `closed_by: 'images'` lets a set-aside picture taken back reopen it.
+ */
+function settleImageProposals(t: Tables, ws: Id, project_id: Id) {
+  const saved = savedImageUrls(t, project_id);
+  for (const p of pendingImageProposals(t, project_id)) {
+    const pl = p.payload as ReferenceSelectionPayload;
+    if (openImages(p, saved).length || pl.videos?.length || pl.guides?.length) continue;
+    p.decision = pl.images.some((i) => saved.has(i.image_url)) ? 'approved' : 'rejected';
+    p.closed_by = 'images';
+    p.updated_at = now();
+    record(t, ws, 'research_proposal', p.id, 'update', { initiated_by: 'user', task_id: p.task_id, proposal_id: p.id });
+  }
 }
 
 /** Godkjenning (skjema §8). One proposal, one transaction. */

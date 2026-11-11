@@ -105,6 +105,8 @@ export interface ReferenceSelectionPayload {
   sources_read?: SourceRead[];
   videos?: VideoRef[];
   guides?: GuideRef[];
+  /** PROTOTYPE: pictures the user set aside («Forkast» on one picture); the rest of the proposal stays. */
+  dismissed?: string[];
 }
 
 export interface CatalogSubjectPayload {

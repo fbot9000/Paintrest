@@ -2,12 +2,17 @@ import type { ReactNode } from 'react';
 import { NavLink, Outlet, useParams } from 'react-router';
 import { useView } from '../../app/context';
 import { projectSummary } from '../../domain/views';
+import { imagePool } from '../../domain/review';
 import { Badge } from '../../ui/components';
 import { AgentPanel, AgentPanelProvider, useAgentPanel } from '../agent/AgentPanel';
 
 export function ProjectLayout() {
   const { projectId = '' } = useParams();
-  const p = useView((t) => projectSummary(t, projectId), [projectId]);
+  const p = useView((t) => {
+    const sum = projectSummary(t, projectId);
+    // Found pictures not yet on a miniature.
+    return sum ? { ...sum, pool: imagePool(t, projectId).filter((x) => !x.placed_on.length).length } : null;
+  }, [projectId]);
   if (!p) {
     return <main className="page"><h1>Fant ikke prosjektet</h1><p><NavLink to="/">Til prosjektene</NavLink></p></main>;
   }
@@ -22,7 +27,7 @@ export function ProjectLayout() {
         </div>
         <NavLink to="spill">Spill og illustrasjon</NavLink>
         <NavLink to="miniatyrer">Miniatyrer <span className="small">{p.subject_count || ''}</span></NavLink>
-        <NavLink to="kilder">Kilder og bilder <span className="soon">snart</span></NavLink>
+        <NavLink to="bilder">Fordel bilder <span className="small">{p.pool || ''}</span></NavLink>
         <NavLink to="palett">Palett og prosess <span className="soon">snart</span></NavLink>
       </nav>
       <div className="project-main">

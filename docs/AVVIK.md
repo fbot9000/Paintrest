@@ -163,6 +163,13 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
     - **Slett for godt (brukerønske 11.11.2026):** En skjult maling kan slettes fysisk (`purgeProducts`). Det går bare for skjulte malinger, så det alltid er to trinn. Dialogen viser hvilke planer (alle versjoner), oppskrifter og paletter som bruker malingen. I samme transaksjon fjernes `step_material`, `mix_component` (og en `mix_group` uten komponenter), åpne avvik som bytter til eller fra malingen, `palette_entry`, `recipe_paint` (og pekerne fra `recipe_step.paint_ids`) og `inventory_entry`. Stegene og oppskriftene blir stående. Forseglede avvik og `paint_completion.deviation_snapshot` er historikk og røres ikke; visningene hopper over en maling som ikke finnes. `change_record` får `delete`. Det tas en sikkerhetskopi av datamappen før slettingen. Dette avviker fra skjema §6, som bare tillater fysisk sletting uten historisk bruk: her bestemmer brukeren, etter å ha sett hva som endres.
     - **Ikke bygget ennå:** produktbilder og forslag til malekjeder. Feltene som trengs for det (produsent, serie, kode, type, farge), finnes nå.
 
+36. **BRUKERØNSKE 11. november 2026: bildeforslag brukes bilde for bilde («Fordel bildene»).**
+    - **Lagring er ikke godkjenning:** Å lagre bilder fra et bildeforslag (`reference_selection`), på tavlen eller i Bilder-fanen, er ikke lenger en godkjenning av hele forslaget. `placeImages` laster ned bildene og lenker dem til miniatyren (`visual_reference`), med agentens sammendrag av sidene. Forslaget står fortsatt og venter på de andre bildene sine. Før dette forsvant resten av bildene i et forslag når ett ble lagret.
+    - **Forkast:** Et forkastet enkeltbilde legges i `payload.dismissed` (PROTOTYPE), slik at det kan angres.
+    - **Forslaget lukker seg selv:** Når alle bildene er lagret på en miniatyr i prosjektet eller forkastet, og forslaget verken har videoer eller maleguider, får det `decision = approved` hvis noen bilder ble lagret, ellers `rejected`. Det får også `closed_by = 'images'` (PROTOTYPE). Angrer du (tar et bilde tilbake), åpnes et slikt forslag igjen. Et forslag du selv har forkastet med «Forkast», åpnes ikke igjen.
+    - **Regel for brukt:** Et bilde som er lagret på én miniatyr, regnes som brukt i alle forslag. Det havner under «Brukt» på tavlen og kan legges på flere miniatyrer derfra.
+    - **Prosjektmenyen:** «Fordel bilder» erstatter plassholderen «Kilder og bilder» (bit 6). Ruten `kilder` viser den samme siden. Resten av bit 6 (kildene for seg) finnes ikke ennå.
+
 ## Antakelser
 
 - **Klient:** React og TypeScript som webapp med hash-ruting. Det er godkjent av brukeren 9. november 2026.

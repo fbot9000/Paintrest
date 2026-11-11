@@ -6,6 +6,7 @@ import { GamePage } from '../features/game/GamePage';
 import { MiniaturesPage } from '../features/miniatures/MiniaturesPage';
 import { PaintingMode } from '../features/painting/PaintingMode';
 import { NotYetPage } from '../features/projects/NotYetPage';
+import { DistributePage } from '../features/images/DistributePage';
 import { AiSettingsPage } from '../features/settings/AiSettingsPage';
 import { LibraryLayout } from '../features/library/LibraryLayout';
 import { TechniquesPage } from '../features/library/TechniquesPage';
@@ -59,7 +60,8 @@ const routes = [
           { index: true, element: <Navigate to="spill" replace /> },
           { path: 'spill', element: <GamePage /> },
           { path: 'miniatyrer', element: <MiniaturesPage /> },
-          { path: 'kilder', element: <NotYetPage title="Kilder og bilder" slice="bit 6" /> },
+          { path: 'bilder', element: <DistributePage /> },
+          { path: 'kilder', element: <DistributePage /> },
           { path: 'palett', element: <NotYetPage title="Palett og prosess" slice="bit 3" /> },
         ],
       },
