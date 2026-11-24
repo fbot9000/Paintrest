@@ -202,6 +202,15 @@ Flere av punktene er skrevet av agenter som ikke hadde dokumentene (se avvik 33 
     - **Oppskriftene malingen er med i** regnes ut fra `recipe_paint` (`recipesWithPaint`). Slettede oppskrifter er ikke med.
     - **Testing:** Ikke testet mot UiB. Flyten er kjørt i nettleseren mot en simulert modell: knappen, researchen, utkastet, «Lagre i biblioteket» og listen over oppskrifter på malingen.
 
+44. **«Planen virker ikke» i Painting Mode** (O-13, spec §5, datamodell §14).
+    - **Ikke målrettet research i Painting Mode:** Kildedokumentene ville at knappen skulle åpne målrettet research for én plan. Her starter den en kjøring i miniatyrens egen planoppgave (`subject_focus.kind = 'plan'`, avvik 32), med planen åpnet som revisjonsmål (`openRevisionTarget`). Da blir forslaget en `plan_revision` med `base_version_id`, og godkjenningen stopper hvis en nyere versjon er godkjent i mellomtiden. Kjøringen tar ikke forslaget i bruk selv (avvik 27 gjelder bare agentpanelet).
+    - **Forslaget godkjennes i verkstedet, ikke i Painting Mode.** Painting Mode viser bare at agenten jobber, at et forslag venter, eller at kjøringen feilet, med lenke til Maleplan. Det følger prinsipp A10 (Painting Mode viser beslutningene, ikke nye AI-valg). Antatt av agenten.
+    - **Til modellen:** `PlanFocus.problem` (`text`, og `part` eller null for hele planen) står i instruksen for en ny versjon. Agenten bes løse akkurat det og beholde resten. Serveren kutter teksten til 1500 tegn og delnavnet til 120.
+    - **Bildene:** Painting Mode sender de fire første referansebildene (illustrasjonen først). I verkstedet velger du bildene selv.
+    - **Planoppgaven gjelder én miniatyr:** Et planforslag for en annen miniatyr i miniatyrens egen planoppgave avvises. Før kunne agenten i verkstedets planoppgave lage en plan for hvilken som helst miniatyr i prosjektet.
+    - **O-9:** `useAgentActions` (`suggestPlan`, `revisePlan`) og `compose` i agentpanelet er fjernet. De ble aldri kalt.
+    - **Testing:** Enhetstester for instruksen, `parseFocus`, omfanget og at gjeldende versjon og ferdigstillingene står til forslaget er godkjent. Hele kjeden er kjørt i nettleseren mot en simulert modell (en lokal tjener som svarer som Responses API). Kjeden gikk fra knappen og dialogen, via forslaget som venter og avvikspanelet i verkstedet, til godkjenning og versjon 2 i Painting Mode. Ikke testet mot UiB.
+
 ## Antakelser
 
 - **Klient:** React og TypeScript som webapp med hash-ruting. Det er godkjent av brukeren 9. november 2026 ([beslutningen](beslutninger/2026-11-09-klient-react-og-typescript.md)).
