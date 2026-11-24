@@ -44,5 +44,5 @@ Brukerens beslutninger går foran kildedokumentene. Kildedokumentene er historis
 ## Det du må vite om miljøet
 
 - Skymiljøet når ikke UiB, Brave, Tavily, YouTube, Kickstarter, Gamefound eller Naver. AI-delene er bare testet mot etterligninger. Si det, og ikke påstå noe annet.
-- Skymiljøet får ikke slette brancher på GitHub. Si fra til brukeren hvilke brancher som kan slettes.
+- Skymiljøet får ikke slette brancher eller pushe tagger på GitHub (403). Si fra til brukeren hvilke brancher som kan slettes. En testversjon identifiseres med commit-hashen.
 - Appens egen agent har egne regler: [grunnreglene for agentens frihet](docs/beslutninger/2026-11-10-grunnregler-for-agentens-frihet.md).

@@ -107,7 +107,7 @@ Agenten som lager testversjonen:
    - **Test dette:** høyst ti punkter, det viktigste først, til sammen omtrent en halvtime. Bare det brukeren merker.
    - **Valg agentene tok selv:** de nye «Antatt av agenten»-punktene i AVVIK.md siden forrige testversjon, med én linje hver. Brukeren godtar eller endrer dem samlet.
    - **Ikke testet:** det som bare er testet mot etterligninger, og kjente feil.
-3. Lager taggen `testversjon-<nr>` på commiten og pusher den (`git tag testversjon-<nr> && git push origin testversjon-<nr>`). Avvises taggen, står commit-hashen i dokumentet i stedet.
+3. Skriver commit-hashen til testversjonen i dokumentet, under «Slik starter du». Skymiljøet får ikke pushe tagger (403, prøvd 24. november 2026), så det lages ingen tagg.
 4. Sier fra til brukeren at testversjonen er klar, med lenke til dokumentet.
 
 ## Maler
