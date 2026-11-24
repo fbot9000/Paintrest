@@ -10,7 +10,7 @@ import type {
   DeviationKind, DeviationPayload, Evidence, ExperienceOutcome, GameCoverSource, Grouping, Id, IdentityStatus, KnowledgeStatus,
   MaterialRole, Ownership, ProductKind, StepBasis, Uncertainty,
 } from './types';
-import type { ReferenceImage } from './agent';
+import type { PaintPlanPayload, ReferenceImage } from './agent';
 
 export interface BggCandidate {
   thing_id: number;
@@ -243,6 +243,14 @@ export interface Commands extends KnowledgeCommands {
 
   // Plan og malevisning
   createEmptyPlan(subject_id: Id): Promise<Id>;
+  /**
+   * O-1: saves the user's own edit of the plan as a new approved version. The current version
+   * (base_version_id; null for the first plan) becomes superseded and is not changed. Refused if
+   * a newer version was approved meanwhile. Open deviations in `baked_deviation_ids` become part
+   * of the plan; the rest follow as deviations. Ticks and group counts follow for parts found in
+   * both versions. Returns the new version id.
+   */
+  savePlanVersion(subject_id: Id, input: { base_version_id: Id | null; payload: PaintPlanPayload; baked_deviation_ids: Id[] }): Promise<Id>;
   setInProgress(subject_id: Id, in_progress: boolean): Promise<void>;
   setPartDone(subject_id: Id, element_id: Id, done: boolean): Promise<void>;
   openPart(subject_id: Id, element_id: Id): Promise<void>;

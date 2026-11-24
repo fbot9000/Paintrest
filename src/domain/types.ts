@@ -302,6 +302,15 @@ export interface LocalDeviation {
   payload: DeviationPayload;
   created_at: Timestamp;
   sealed_at: Timestamp | null;
+  /**
+   * PROTOTYPE (beslutning 24.11.2026): set on an open deviation when its plan version is
+   * superseded. «baked»: the user made it part of the new version. «carried»: it was copied
+   * to the new version as an open deviation (`carried_from_id` on the copy). Not in skjema.
+   */
+  closed_in_version_id?: Id | null;
+  closed_as?: 'baked' | 'carried' | null;
+  /** PROTOTYPE: the deviation on the earlier version this one was carried over from. */
+  carried_from_id?: Id | null;
 }
 
 export interface PartProgress {

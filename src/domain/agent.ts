@@ -16,6 +16,8 @@ export interface ProductRef {
   name: string;
   /** Approximate colour from the agent; used as swatch when the product is created. */
   hex?: string | null;
+  /** PROTOTYPE: the exact catalogue product, when the plan was written in Paintrest (not by the agent). */
+  product_id?: Id | null;
 }
 
 /** One paint in the miniature's palette, with what it is used for. */
@@ -133,12 +135,16 @@ export interface PlanMaterialPayload {
 
 export interface PlanStepPayload {
   instruction: string;
+  /** PROTOTYPE: the step in the current version this one was edited from (user edits only). */
+  from_step_id?: Id | null;
   materials: PlanMaterialPayload[];
   mix: { label: string | null; components: { product: ProductRef; parts: number }[] } | null;
 }
 
 export interface PlanElementPayload {
   kind: ElementKind;
+  /** PROTOTYPE: the part in the current version this one was edited from (user edits only). */
+  from_element_id?: Id | null;
   name: string;
   steps: PlanStepPayload[];
 }
@@ -505,6 +511,7 @@ export function normaliseProposal(raw: RawProposal, subjectRefs: Record<string, 
 // ---------- Produkter ----------
 
 export function productKey(p: ProductRef): string {
+  if (p.product_id) return `id:${p.product_id}`;
   return `${(p.manufacturer ?? '').trim().toLowerCase()}|${p.name.trim().toLowerCase()}`;
 }
 
@@ -513,6 +520,8 @@ export function productKey(p: ProductRef): string {
  * have one, must match too. Ambiguous matches return null: the user decides.
  */
 export function matchProduct(t: Tables, ref: ProductRef): PaintProduct | null {
+  // A plan written in Paintrest names the exact product, also one that is hidden from the catalogue.
+  if (ref.product_id && t.paint_product[ref.product_id]) return t.paint_product[ref.product_id]!;
   const name = ref.name.trim().toLowerCase();
   const maker = ref.manufacturer?.trim().toLowerCase() || null;
   const hits = Object.values(t.paint_product).filter((p) => {

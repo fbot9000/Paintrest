@@ -11,6 +11,10 @@ import type { Store } from './store';
 import { buildSampleData } from './seed';
 import { attachImages, downloadImages, setCover, sourceFor } from './images-tx';
 import { must, record } from './tx-helpers';
+import { writePlanVersion } from './plan-version';
+import { matchProduct, planProductRefs, productKey } from '../domain/agent';
+import type { PaintPlanPayload } from '../domain/agent';
+import { cleanPlanPayload } from '../domain/plan-versions';
 import { createKnowledgeCommands } from './knowledge-commands';
 
 function clean(v: string | null | undefined): string | null {
@@ -789,6 +793,32 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
         s.plan_state = 'approved';
         record(t, ws, { target_type: 'paint_plan', target_id: subject_id, action: 'new_version', to_version_id: id });
         return id;
+      });
+    },
+
+    async savePlanVersion(subject_id, input) {
+      return tx((t, ws) => {
+        const s = must(t.miniature_subject[subject_id], 'Miniatyren');
+        if (s.deleted_at) throw new CommandError('Miniatyren er slettet');
+        // skjema §8 step 4: never on top of a version the user has not seen.
+        if ((s.current_plan_version_id ?? null) !== input.base_version_id) {
+          throw new CommandError('Planen har fått en ny versjon mens du redigerte. Åpne den nye versjonen og rediger på nytt.');
+        }
+        if (input.payload.subject_id !== subject_id) throw new CommandError('Planen hører til en annen miniatyr');
+        let payload: PaintPlanPayload;
+        try { payload = cleanPlanPayload(input.payload); } catch (e) { throw new CommandError((e as Error).message); }
+        // A plan written in Paintrest uses paints from the catalogue (prinsipp A3).
+        const products: Record<string, Id> = {};
+        const missing: string[] = [];
+        for (const ref of planProductRefs(payload)) {
+          const p = matchProduct(t, ref);
+          if (p) products[productKey(ref)] = p.id; else missing.push(ref.name);
+        }
+        if (missing.length) throw new CommandError(`Velg malingen fra katalogen: ${missing.join(', ')}`);
+        return writePlanVersion(t, {
+          subject: s, payload, products, origin: 'user', baked: input.baked_deviation_ids,
+          record: (target_type, target_id, action, from, to) => record(t, ws, { target_type, target_id, action, from_version_id: from, to_version_id: to }),
+        });
       });
     },
 

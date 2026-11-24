@@ -6,6 +6,8 @@ import type { AgentCommands, ApproveOptions, ProposalWrite, ResearchCommands } f
 import type { ChangeAction, Id, MiniatureSubject, PaintChoice, ResearchProposal, ResultType, RowPatch, Tables, Uncertainty } from '../domain/types';
 import { attachedExpansions } from '../domain/views';
 import { openImages, pendingImageProposals, savedImageUrls } from '../domain/review';
+import { cleanPlanPayload, openDeviations } from '../domain/plan-versions';
+import { writePlanVersion } from './plan-version';
 import type { Store } from './store';
 import { revertPatches } from './store';
 import { addSourceLayers, attachImages, attachImagesTo, downloadImages, setCover, sourceBelongsTo, sourceFor } from './images-tx';
@@ -465,11 +467,9 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
         const before = p.payload as PaintPlanPayload;
         // The subject and task cannot be changed by curation; only content.
         if (payload.subject_id !== before.subject_id) throw new CommandError('Miniatyren kan ikke byttes');
-        const elements = payload.elements
-          .map((e) => ({ ...e, name: e.name.trim() || 'Del', steps: e.steps.filter((st) => st.instruction.trim() || st.materials.length || st.mix) }))
-          .filter((e) => e.steps.length);
-        if (!elements.length) throw new CommandError('Planen må ha minst ett steg');
-        p.payload = { ...before, ...payload, elements };
+        let cleaned: PaintPlanPayload;
+        try { cleaned = cleanPlanPayload(payload); } catch (e) { throw new CommandError((e as Error).message); }
+        p.payload = { ...before, ...payload, elements: cleaned.elements };
         p.updated_at = now();
       });
     },
@@ -594,6 +594,10 @@ function needsUser(t: Tables, p: ResearchProposal): string | null {
   if (p.result_type === 'paint_plan' || p.result_type === 'plan_revision') {
     const missing = planProductRefs(p.payload as PaintPlanPayload).filter((r) => !matchProduct(t, r));
     if (missing.length) return `Malinger som ikke finnes i katalogen: ${missing.map((m) => m.name).join(', ')}`;
+    // The user chooses which open deviations become part of the new version (beslutning 24.11.2026).
+    const s = t.miniature_subject[(p.payload as PaintPlanPayload).subject_id];
+    const open = s?.current_plan_version_id ? openDeviations(t, s.current_plan_version_id).length : 0;
+    if (open) return `Planen har ${open} åpne avvik fra Painting Mode. Du velger hvilke som skal bli en del av planen`;
   }
   return null;
 }
@@ -724,33 +728,11 @@ function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions, files
       throw new CommandError('En nyere versjon av planen er godkjent etter at forslaget ble laget. Be agenten om et nytt forslag.');
     }
     const products = resolveProducts(t, ws, planProductRefs(plan), opts.product_choices ?? {}, who);
-    const prev = s.current_plan_version_id ? t.paint_plan_version[s.current_plan_version_id] : undefined;
-    const version_number = Math.max(0, ...Object.values(t.paint_plan_version).filter((v) => v.subject_id === s.id).map((v) => v.version_number)) + 1;
-    const pv = newId();
-    t.paint_plan_version[pv] = {
-      id: pv, subject_id: s.id, version_number, state: 'approved', origin: 'proposal',
-      supersedes_id: prev?.id ?? null, created_at: now(), summary: plan.summary ?? null,
-    };
-    plan.elements.forEach((el, ei) => {
-      const eid = newId();
-      t.plan_element[eid] = { id: eid, plan_version_id: pv, kind: el.kind, position: ei, name: el.name };
-      el.steps.forEach((st, si) => {
-        const sid = newId();
-        t.plan_step[sid] = { id: sid, element_id: eid, position: si, instruction: st.instruction, technique_version_id: null, recipe_version_id: null };
-        st.materials.forEach((m, mi) => {
-          const mid = newId();
-          t.step_material[mid] = { id: mid, step_id: sid, position: mi, product_id: products[productKey(m.product)]!, role: m.role, role_label: m.role_label };
-        });
-        if (st.mix) {
-          const gid = newId();
-          t.mix_group[gid] = { id: gid, step_id: sid, label: st.mix.label };
-          st.mix.components.forEach((c, ci) => t.mix_component.push({ mix_group_id: gid, position: ci, product_id: products[productKey(c.product)]!, parts: c.parts }));
-        }
-      });
+    // Ticks, group counts and the deviations the user did not bake in follow (beslutning 24.11.2026).
+    writePlanVersion(t, {
+      subject: s, payload: plan, products, origin: 'proposal', baked: opts.baked_deviation_ids ?? [],
+      record: (tt, id, a, from, to) => record(t, ws, tt, id, a, tt === 'local_deviation' ? { ...who, initiated_by: 'user' } : who, from, to),
     });
-    if (prev) prev.state = 'superseded';
-    s.current_plan_version_id = pv;
-    s.plan_state = 'approved';
     addPalette(t, ws, project_id, s.id, plan.palette ?? [], products, who);
     for (const src of plan.sources ?? []) {
       const source_id = sourceFor(t, ws, { url: src.url, title: src.title, creator: src.author, kind: 'article' }, p.task_id, (tt, id, a) => record(t, ws, tt, id, a, who));
@@ -761,7 +743,6 @@ function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions, files
       }
     }
     addSourceLayers(t, plan.sources_read ?? [], project_id);
-    record(t, ws, 'paint_plan', s.id, 'new_version', who, prev?.id ?? null, pv);
   }
 
   p.decision = 'approved';

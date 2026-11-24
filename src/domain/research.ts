@@ -21,6 +21,8 @@ export interface ApproveOptions {
   cover_image_url?: string;
   /** technique/recipe (bit 7.5): the variant the user wants to test first (index in comparison.variants). */
   primary_variant?: number;
+  /** paint plan (O-1): open deviations on the current version that become part of the new version. The rest follow as deviations. */
+  baked_deviation_ids?: Id[];
 }
 
 export interface ApplyResult {
