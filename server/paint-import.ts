@@ -12,7 +12,7 @@
 import { UserError } from './credential-store.ts';
 import type { ResponsesMessage, ResponsesProvider } from './provider.ts';
 
-export const PAINT_KINDS = ['primer', 'base', 'layer', 'shade', 'contrast', 'technical', 'metallic', 'medium', 'other'] as const;
+export const PAINT_KINDS = ['primer', 'base', 'layer', 'shade', 'contrast', 'technical', 'metallic', 'ink', 'dry', 'air', 'medium', 'other'] as const;
 type Kind = typeof PAINT_KINDS[number];
 const GUESS_FIELDS = ['maker', 'range', 'name', 'code', 'kind', 'finish', 'hex'] as const;
 type GuessField = typeof GUESS_FIELDS[number];
@@ -64,14 +64,14 @@ const FIELDS = `- "maker": produsenten (Citadel, Vallejo, The Army Painter, AK I
 - "range": serien (Base, Layer, Shade, Contrast, Dry, Technical, Model Color, Game Color, Model Air, Xpress Color, Warpaints Fanatic, Speedpaint, 3rd Gen …)
 - "name": produktnavnet slik produsenten skriver det, med riktig stavemåte og store bokstaver
 - "code": produktkode eller varenummer (70.950, 72.051, WP3001, AK11001), ellers null
-- "kind": én av primer, base, layer, shade, contrast, technical, metallic, medium, other
+- "kind": én av primer, base, layer, shade, contrast, technical, metallic, ink, dry, air, medium, other
 - "finish": matt, satin, blank, metallisk … når teksten sier det eller det er kjent for produktet, ellers null
 - "hex": omtrentlig farge i flasken som "#rrggbb" når du kjenner malingen, ellers null
 - "own": "owns", eller "not_owned" når teksten sier at brukeren ikke har den (ønskeliste, tom, skal kjøpe)
 - "guessed": feltene du har fylt inn fra egen kunnskap og ikke fra teksten, for eksempel ["maker", "range", "kind", "hex"]. "hex" er nesten alltid gjettet. Har du rettet en skrivefeil i navnet, er "name" gjettet.
 - "unsure": kort norsk setning om hva du er usikker på, eller null`;
 
-const KIND_RULES = `Typer: wash og shade → shade; contrast, speedpaint, xpress → contrast; air → layer (metallic når den er metallisk); alle metalliske farger → metallic; primer og spray → primer; lakk, medium, thinner, glaze medium → medium; technical, effekt, tekstur, blod, rust → technical; ink, dry og alt annet → other.`;
+const KIND_RULES = `Typer: wash og shade → shade; contrast, speedpaint, xpress → contrast; ink og blekk → ink; dry og drybrush → dry; air og airbrush → air; alle metalliske farger → metallic, også metalliske air- og dry-malinger; primer og spray → primer; lakk, medium, thinner, glaze medium → medium; technical, effekt, tekstur, blod, rust → technical; alt annet → other.`;
 
 export function readInstructions(): string {
   return `Du hjelper brukeren å legge inn malingssamlingen sin i Paintrest, et verktøy for å male miniatyrer.
@@ -169,9 +169,9 @@ function norm(s: string | null | undefined): string {
 }
 
 const KIND_WORDS: Record<Kind, RegExp> = {
-  primer: /primer|spray|grunn/, base: /\bbase\b|foundation/, layer: /layer|\bair\b/, shade: /shade|wash/,
+  primer: /primer|spray|grunn/, base: /\bbase\b|foundation/, layer: /layer/, shade: /shade|wash/,
   contrast: /contrast|speedpaint|xpress|speed paint/, technical: /technical|teknisk|effect|effekt|texture|tekstur/,
-  metallic: /metal|metall/, medium: /medium|varnish|lakk|thinner/, other: /$^/,
+  metallic: /metal|metall/, ink: /\bink\b|blekk/, dry: /\bdry\b|drybrush|t[oø]rrb[oø]rst/, air: /\bair\b|airbrush/, medium: /medium|varnish|lakk|thinner/, other: /$^/,
 };
 
 export function kindOf(v: unknown): Kind {

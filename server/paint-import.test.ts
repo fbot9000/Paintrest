@@ -70,7 +70,9 @@ describe('lese en malingsliste', () => {
 
   it('typer fra fritekst', () => {
     expect(['Contrast', 'speedpaint', 'Metallic', 'Spray primer', 'Lakk', 'Technical', 'Ink', 'layer'].map(kindOf))
-      .toEqual(['contrast', 'contrast', 'metallic', 'primer', 'medium', 'technical', 'other', 'layer']);
+      .toEqual(['contrast', 'contrast', 'metallic', 'primer', 'medium', 'technical', 'ink', 'layer']);
+    expect(['ink', 'dry', 'air', 'Model Air', 'Dry', 'Drybrush', 'Airbrush', 'Metallic Air', 'Blekk', 'Tørrbørsting', 'Wash', 'ukjent'].map(kindOf))
+      .toEqual(['ink', 'dry', 'air', 'air', 'dry', 'dry', 'air', 'metallic', 'ink', 'dry', 'shade', 'other']);
     expect(parseJsonObject('tekst {"a":1} mer')).toEqual({ a: 1 });
   });
 });

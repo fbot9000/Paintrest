@@ -6,7 +6,7 @@ import { Store, emptyTables } from './store';
 import type { ImportPaintInput } from '../domain/commands';
 import type { PaintDiscussResult, PaintReadResult, PaintWire } from '../domain/ai';
 import {
-  addReadResult, applyDiscussResult, chunkRequest, editRow, findProduct, importInputs, newDraft, paintRows, usageDetail,
+  addReadResult, applyDiscussResult, chunkRequest, editRow, findProduct, importInputs, kindsIn, newDraft, paintRows, usageDetail,
   breakLongLine, planChunks, plannedImport, productUsage, rowsWithoutAi, sampleProducts, splitCells, splitLines, tableForAi, uncoveredLines,
 } from '../domain/paints';
 import type { ImportDraft } from '../domain/paints';
@@ -157,6 +157,23 @@ describe('enkeltmalinger', () => {
     expect(paintRows(store.getTables()).map((r) => r.product.name)).toEqual(['Grønn glasur fra hylla']);
     await cmd.restoreProduct(b);
     expect(paintRows(store.getTables())).toHaveLength(2);
+  });
+
+  it('typene ink, dry og air kan lagres og filtreres, og eldre malinger beholder typen sin', async () => {
+    const { store, cmd } = emptyStore();
+    const old = await cmd.createProduct({ name: 'Gammel ink', manufacturer: 'Citadel', confirmed: true });
+    await cmd.importProducts([
+      paint({ manufacturer: 'Citadel', range_name: 'Dry', name: 'Necron Compound', product_kind: 'dry' }),
+      paint({ manufacturer: 'Vallejo', range_name: 'Model Air', name: 'Black', product_code: '71.057', product_kind: 'air' }),
+      paint({ manufacturer: 'The Army Painter', range_name: 'Warpaints Fanatic', name: 'Red Tone', product_kind: 'ink' }),
+    ]);
+    const t = store.getTables();
+    expect(t.paint_product[old]!.product_kind).toBe('other');
+    expect(kindsIn(t).map((k) => [k.kind, k.count])).toEqual([['ink', 1], ['dry', 1], ['air', 1], ['other', 1]]);
+    expect(paintRows(t, { kind: 'air' }).map((r) => r.product.name)).toEqual(['Black']);
+    expect(paintRows(t, { query: 'airbrush' }).map((r) => r.product.name)).toEqual(['Black']);
+    await cmd.updateProduct(old, { product_kind: 'ink' });
+    expect(paintRows(store.getTables(), { kind: 'ink' })).toHaveLength(2);
   });
 });
 
@@ -319,6 +336,8 @@ describe('import uten AI', () => {
       ['Vallejo', 'Model Color', 'Black; matt', '70.950', 'shade', 'owns', [2]],
       ['Citadel', 'Base', 'Abaddon Black', null, 'base', 'not_owned', [3]],
     ]);
+    const kinds = rowsWithoutAi(splitLines('Navn;Type\nA;Ink\nB;Dry\nC;Model Air\nD;Tørrbørsting\nE;Layer'));
+    expect(kinds.map((r) => r.product_kind)).toEqual(['ink', 'dry', 'air', 'dry', 'layer']);
   });
 
   it('leser én maling per linje og fjerner punkttegn', () => {

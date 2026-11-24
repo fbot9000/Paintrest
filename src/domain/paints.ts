@@ -9,11 +9,12 @@ import type { ImportPaintInput } from './commands';
 import type { Id, Ownership, PaintProduct, ProductKind, Tables } from './types';
 import { ownershipOf } from './views';
 
-export const PRODUCT_KINDS: ProductKind[] = ['primer', 'base', 'layer', 'shade', 'contrast', 'technical', 'metallic', 'medium', 'other'];
+export const PRODUCT_KINDS: ProductKind[] = ['primer', 'base', 'layer', 'shade', 'contrast', 'technical', 'metallic', 'ink', 'dry', 'air', 'medium', 'other'];
 
 export const KIND_LABEL: Record<ProductKind, string> = {
   primer: 'Grunning', base: 'Base', layer: 'Layer', shade: 'Shade / wash', contrast: 'Contrast / speedpaint',
-  technical: 'Teknisk / effekt', metallic: 'Metallisk', medium: 'Medium / lakk', other: 'Annet',
+  technical: 'Teknisk / effekt', metallic: 'Metallisk',
+  ink: 'Ink / blekk', dry: 'Dry / tørrbørsting', air: 'Air / airbrush', medium: 'Medium / lakk', other: 'Annet',
 };
 
 export const OWNERSHIP_LABEL: Record<Ownership, string> = { owns: 'Har', not_owned: 'Har ikke', unknown: 'Ukjent' };
@@ -122,6 +123,7 @@ export interface PaintFilter {
   ownership?: OwnershipFilter;
   /** makerKey of the maker, or '' for paints without one. */
   maker?: string | null;
+  kind?: ProductKind | null;
 }
 
 export function liveProducts(t: Tables): PaintProduct[] {
@@ -141,6 +143,7 @@ export function paintRows(t: Tables, f: PaintFilter = {}): PaintRow[] {
     .map((product) => ({ product, ownership: ownershipOf(t, product.id) }))
     .filter((r) => !f.ownership || f.ownership === 'all' || r.ownership === f.ownership)
     .filter((r) => f.maker == null || makerKey(r.product.manufacturer) === f.maker)
+    .filter((r) => f.kind == null || r.product.product_kind === f.kind)
     .filter((r) => {
       if (!words.length) return true;
       const p = r.product;
@@ -157,6 +160,13 @@ export function paintCounts(t: Tables): Record<OwnershipFilter, number> {
     c[ownershipOf(t, p.id)]++;
   }
   return c;
+}
+
+/** The kinds in the catalogue, in the order of PRODUCT_KINDS, with how many paints have each. */
+export function kindsIn(t: Tables): { kind: ProductKind; label: string; count: number }[] {
+  const c = new Map<ProductKind, number>();
+  for (const p of liveProducts(t)) c.set(p.product_kind, (c.get(p.product_kind) ?? 0) + 1);
+  return PRODUCT_KINDS.filter((k) => c.has(k)).map((kind) => ({ kind, label: KIND_LABEL[kind], count: c.get(kind)! }));
 }
 
 /** Makers in the catalogue, with the spelling used most often. '' = no maker. */
@@ -751,6 +761,11 @@ function guessKind(s: string): ProductKind {
   if (/primer|spray|grunn/.test(k)) return 'primer';
   if (/technical|teknisk|effect|effekt|texture/.test(k)) return 'technical';
   if (/medium|varnish|lakk|thinner/.test(k)) return 'medium';
+  if (/\bink\b|blekk/.test(k)) return 'ink';
+  if (/\bdry\b|drybrush|t[oø]rrb[oø]rst/.test(k)) return 'dry';
+  if (/\bair\b|airbrush/.test(k)) return 'air';
+  if (/layer/.test(k)) return 'layer';
+  if (/\bbase\b/.test(k)) return 'base';
   return 'other';
 }
 

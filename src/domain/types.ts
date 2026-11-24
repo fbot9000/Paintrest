@@ -37,7 +37,7 @@ export interface StoredFile {
 
 export type ProductKind =
   | 'primer' | 'base' | 'layer' | 'shade' | 'contrast'
-  | 'technical' | 'metallic' | 'medium' | 'other';
+  | 'technical' | 'metallic' | 'ink' | 'dry' | 'air' | 'medium' | 'other';
 
 export type IdentityStatus = 'unconfirmed' | 'confirmed';
 

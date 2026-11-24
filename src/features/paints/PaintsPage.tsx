@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { useApp, useCommand, useView } from '../../app/context';
-import { KIND_LABEL, OWNERSHIP_LABEL, hiddenProducts, makersIn, normText, paintCounts, paintLabel, paintRows, productUsage, sampleProducts, usageDetail, usageText } from '../../domain/paints';
+import { KIND_LABEL, OWNERSHIP_LABEL, hiddenProducts, kindsIn, makersIn, normText, paintCounts, paintLabel, paintRows, productUsage, sampleProducts, usageDetail, usageText } from '../../domain/paints';
 import type { OwnershipFilter, PaintRow } from '../../domain/paints';
-import type { Id, Ownership, PaintProduct } from '../../domain/types';
+import type { Id, Ownership, PaintProduct, ProductKind } from '../../domain/types';
 import { Badge, Button, Dialog, ErrorNote, Swatch } from '../../ui/components';
 import { Chip, SearchBox } from '../library/parts';
 import { EMPTY_PAINT, PaintForm, valueOf } from './PaintForm';
@@ -23,6 +23,7 @@ export function PaintsPage() {
   const [query, setQuery] = useState('');
   const [own, setOwn] = useState<OwnershipFilter>('all');
   const [maker, setMaker] = useState<string | null>(null);
+  const [kind, setKind] = useState<ProductKind | null>(null);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Id | null>(null);
   const [purge, setPurge] = useState<Id[] | null>(null);
@@ -31,15 +32,19 @@ export function PaintsPage() {
 
   const data = useView((t) => {
     const samples = sampleProducts(t);
+    const kinds = kindsIn(t);
+    // A kind filter only applies while its chip is shown.
+    const shownKind = kinds.length > 1 && kinds.some((k) => k.kind === kind) ? kind : null;
     return {
-      rows: paintRows(t, { query, ownership: own, maker }),
+      rows: paintRows(t, { query, ownership: own, maker, kind: shownKind }),
       counts: paintCounts(t),
       makers: makersIn(t),
+      kinds,
       hidden: hiddenProducts(t),
       samples,
       sampleUsage: usageText(productUsage(t, samples.map((p) => p.id))),
     };
-  }, [query, own, maker]);
+  }, [query, own, maker, kind]);
 
   const groups = useMemo(() => {
     const out: { maker: string; rows: PaintRow[] }[] = [];
@@ -134,6 +139,12 @@ export function PaintsPage() {
             {data.makers.length > 1 && data.makers.map((m) => (
               <Chip key={m.key} on={maker === m.key} onClick={() => setMaker(maker === m.key ? null : m.key)}>
                 {m.name} <span className="chip-count">{m.count}</span>
+              </Chip>
+            ))}
+            {data.kinds.length > 1 && <span className="filters-sep" />}
+            {data.kinds.length > 1 && data.kinds.map((k) => (
+              <Chip key={k.kind} on={kind === k.kind} onClick={() => setKind(kind === k.kind ? null : k.kind)}>
+                {k.label} <span className="chip-count">{k.count}</span>
               </Chip>
             ))}
           </div>

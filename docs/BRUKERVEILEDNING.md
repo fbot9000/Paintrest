@@ -174,6 +174,8 @@ Panelet viser hvert søk og hver side mens agenten jobber, og du kan stoppe den.
 
 «Malinger» i toppfeltet viser alle malingene i katalogen og om du har dem («Har», «Har ikke», «Ukjent»). Agenten bruker listen når den lager maleplaner og oppskrifter.
 
+- **Filtre:** eierskap, produsent og type. Typene er grunning, base, layer, shade / wash, contrast / speedpaint, teknisk / effekt, metallisk, ink, dry, air, medium / lakk og annet. Filteret for produsent og type vises når samlingen har mer enn én. Søket finner også typen («airbrush», «dry»).
+
 - **Eksempelmalingene fra testdataene** (14 Citadel-malinger og «Grønn glasur fra hylla») vises med et eget varsel og knappen «Fjern eksempelmalingene». De skjules, og eierstatusen fjernes. Planer og oppskrifter som bruker dem, beholder dem. Legger du inn den samme malingen selv senere, tas den skjulte raden i bruk igjen, og planene peker da på din.
 - **En og en:** «Legg til maling». Produsent, serie, navn, kode, type, finish, farge og om du har den. Produsent, serie og type blir stående til neste maling. «Fyll ut med AI» fyller inn tomme felt (også en omtrentlig farge), og feltene AI-en fylte inn er merket til du endrer dem. Finnes malingen fra før, sier skjemaet det, og du får ingen dobbel.
 - **Rediger, skjul og slett:** trykk på en maling. Eierstatus endres rett i listen. Skjulte malinger kan gjenopprettes eller slettes for godt. Før en sletting viser appen hvilke planer, oppskrifter og paletter som mister malingen (stegene blir stående), og serveren tar en sikkerhetskopi av datamappen først.
