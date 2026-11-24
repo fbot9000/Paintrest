@@ -159,7 +159,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-12 Tester og bygg på GitHub ved hver push til main
 
-- **Status:** ledig
+- **Status:** pågår (spor B, 24. november 2026)
 - **Avhenger av:** –
 - **Berører:** `.github/workflows/`
 - **Ferdig når:** GitHub kjører `npm test` og `npm run build` ved hver push til `main`, og en rød `main` er synlig.
