@@ -1,6 +1,8 @@
 # Bit 7 Kunnskap: datamodell og byggeplan (utkast)
 
-Status: revidert 11. november 2026 etter tilbakemelding, og sjekket mot koden 24. november 2026. **7.0–7.6 er bygget**: typer, migrering til v5, kommandoer (`src/data/knowledge-commands.ts`), lesefunksjoner (`src/domain/library.ts`), tester, bibliotekets sider for teknikker og oppskrifter, teknikkartikkel, verkstedguide, erfaring og research med agenten (`src/features/library/`, `server/research-agent.ts`). **7.7 gjenstår.** Det venter på bit 4. Resten er forslag.
+Status: revidert 11. november 2026 etter tilbakemelding, og sjekket mot koden 24. november 2026. **7.0–7.6 er bygget**: typer, migrering til v5, kommandoer (`src/data/knowledge-commands.ts`), lesefunksjoner (`src/domain/library.ts`), tester, bibliotekets sider for teknikker og oppskrifter, teknikkartikkel, verkstedguide, erfaring og research med agenten (`src/features/library/`, `server/research-agent.ts`). **7.7 gjenstår**: oppgave O-2 i [OPPGAVER.md](OPPGAVER.md). Det venter på bit 4.
+
+Dokumentet er beholdt som referanse for datamodellen for biblioteket. Status står i [STATUS.md](STATUS.md), ikke her.
 
 ## Grunnlag
 

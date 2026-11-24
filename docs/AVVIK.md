@@ -1,19 +1,6 @@
 # Avvik og antakelser i prototypen
 
-## Grunnregler for agentens frihet (brukerbeslutning 10. november 2026)
-
-Agenten skal ha mye frihet. Dokumentene er for strenge på dette punktet. To ting skal likevel alltid gjelde:
-
-1. **Ingen skade på det som ikke hører til oppgaven.** Agenten endrer bare i prosjektet den jobber i. Andre spill, deres miniatyrer, planer og kilder, malingskatalogen og biblioteket (teknikker og oppskrifter) endres ikke. Agenten kan bare foreslå endringer der.
-   - **Håndheves av:** `checkScope` (alle forslag), `needsUser` (katalogen) og `sourceBelongsTo`. Den siste sørger for at oversettelser og sammendrag bare legges på kilder som hører til prosjektet.
-   - **Unntak:** gjenbrukes en nettside som et annet spill også har lagret, deles kilde-raden. Den kan få en ny lenke og bli markert som lagret, men innholdet endres ikke.
-2. **Ingenting skjer i bakgrunnen uten at du ser det.** Agenten kjører bare når du starter den, fra panelet, bildevisningen eller maleplanen. Alt den endrer eller lagrer, vises i panelet:
-   - endringer som «Agenten endret …» med Angre
-   - forslag som venter på deg
-   - nye kilder som «Lagret N sider som kilder …»
-   - søk og sider under «Vis hvordan agenten fant dette»
-
-
+Brukerens beslutninger står i [beslutninger/](beslutninger/), én fil per beslutning. Grunnreglene for agentens frihet står i [beslutninger/2026-11-10-grunnregler-for-agentens-frihet.md](beslutninger/2026-11-10-grunnregler-for-agentens-frihet.md). Punktene merket BRUKERBESLUTNING under viser hva beslutningen betyr i koden.
 
 Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokumentene ikke tar, eller avviker fra dem. Hvert punkt bør avgjøres før koden mot den ekte databasen skrives.
 
@@ -51,7 +38,7 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
     - lenker med `use = method` til kildene som ble brukt
     - farge (`swatch_hex`) fra agenten på malinger som opprettes som ubekreftet. Fargen er omtrentlig.
 26. **Du kan redigere planforslaget før godkjenning** (`editPlanProposal`): arbeidsmåte, deler, steg, malinger og roller, og palett. Miniatyren forslaget gjelder, kan ikke byttes.
-27. **BRUKERBESLUTNING 10. november 2026: agenten får stor frihet inne i prosjektet.** Mens et prosjekt settes opp, kan agenten foreslå å lage, endre, dele, slå sammen og slette miniatyrer (`catalog_change`, ny resultattype). Den kan også foreslå nye versjoner av godkjente maleplaner (`plan_revision`) uten at brukeren først åpner planen som revisjonsmål.
+27. **BRUKERBESLUTNING 10. november 2026: agenten får stor frihet inne i prosjektet.** ([beslutningen](beslutninger/2026-11-10-agenten-far-stor-frihet-i-prosjektet.md)) Mens et prosjekt settes opp, kan agenten foreslå å lage, endre, dele, slå sammen og slette miniatyrer (`catalog_change`, ny resultattype). Den kan også foreslå nye versjoner av godkjente maleplaner (`plan_revision`) uten at brukeren først åpner planen som revisjonsmål.
     - **Hva det avviker fra:** Dette erstatter regelen om revisjonsmål i skjema §3 og §7 og datamodell v3 §12, for objekter i arbeidsprosjektet.
     - **Det som står fast:**
       - Alt er forslag som brukeren godkjenner. Det går med ett klikk, og «Godkjenn alle» finnes for forslag som ikke trenger valg.
@@ -60,7 +47,7 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
       - Sletting skjuler bare, og miniatyren kan gjenopprettes. Deling og sammenslåing lager nye miniatyrer og skjuler originalene.
       - Agenten kan ikke røre noe utenfor arbeidsprosjektet: andre prosjekter, malingskatalogen (nye malinger krever fortsatt brukerens valg) eller biblioteket.
     - **Dokumentene bør oppdateres:** «Paintrest – databaseskjema og arkitektur» §3 og §7, og datamodell v3 §12.
-28. **BRUKERBESLUTNING 10. november 2026: agenten endrer direkte, med angre.** Det er tre soner:
+28. **BRUKERBESLUTNING 10. november 2026: agenten endrer direkte, med angre.** ([beslutningen](beslutninger/2026-11-10-agenten-endrer-direkte-med-angre.md)) Det er tre soner:
     - **Åpen:** alt i arbeidsprosjektet. I runder fra agentpanelet tar Paintrest agentens endringer i bruk med en gang: nye, endrede, delte, sammenslåtte og slettede miniatyrer, og maleplaner der alle malingene finnes i katalogen. Hver runde blir ett endringssett (`agent_change_set`, ny tabell i v4). Endringssettet lagrer før- og etterbildet av hver rad som ble endret, og «Angre» fører alt tilbake samlet. Angre nektes uten å endre noe hvis en rad er endret etterpå. Forslagene ligger igjen som logg (`change_set_id`), og `change_record` skrives som før, med `undo` ved angre.
     - **Ferdig:** ikke i bruk ennå. Brukeren har sagt at ingenting er ferdig foreløpig. Hva som skal gjøre noe ferdig og låst (for eksempel «maleklar», at malingen er i gang, eller at katalogen er ferdig), avgjøres senere.
     - **Globalt:** malingskatalog, bibliotek og andre prosjekter. Agenten foreslår, og brukeren godkjenner.
@@ -68,7 +55,7 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
     Bildeutvalg og planer med malinger som ikke finnes i katalogen, er fortsatt forslag. Det samme gjelder runder brukeren starter fra en egen visning (bildejakt og maleplan), der brukeren går gjennom forslaget der.
     
     Dette avviker fra datamodell v3 §3, §12 og §13, og fra skjema §2 og §8, der agenten aldri skriver kanoniske data uten godkjenning. Dokumentene bør oppdateres.
-29. **BRUKERBESLUTNING 10. november 2026: dataene ligger i en fast datamappe, `~/Paintrest`.** Paintrest-serveren eier dataene: `data.json` (hele tilstanden, med revisjonsnummer), `files/` (bildene) og `backups/` (de 30 siste kopiene). Nøklene kopieres hit fra `.paintrest-data/`. Dette er et filbasert mellomsteg før en ekte database, og det har tre følger:
+29. **BRUKERBESLUTNING 10. november 2026: dataene ligger i en fast datamappe, `~/Paintrest`.** ([beslutningen](beslutninger/2026-11-10-fast-datamappe.md)) Paintrest-serveren eier dataene: `data.json` (hele tilstanden, med revisjonsnummer), `files/` (bildene) og `backups/` (de 30 siste kopiene). Nøklene kopieres hit fra `.paintrest-data/`. Dette er et filbasert mellomsteg før en ekte database, og det har tre følger:
     - **Hele tilstanden lagres hver gang.** Skjemaets tabeller og radformat er de samme, så overgangen til SQLite eller PostgreSQL blir en flytting av rader, ikke en ny modell. Valget av database og tilgang fra iPad utenfor maskinen er ikke tatt.
     - **Samtidighet med revisjon, ikke sammenslåing.** En lagring som bygger på en gammel revisjon, avvises (409), og appen ber brukeren laste inn på nytt. Endringer fra den fanen etter konflikten lagres ikke. Skjemaets `content_revision` per rad er uendret.
     - **Bilder slettes aldri.** Fjernede bilder flyttes til `files/trash/`. Skjemaet har ingen regel for opprydding.
@@ -77,9 +64,9 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 
 31. **Bildesøk og bilder uten åpnet side.** Agenten har handlingen `image_search` (Brave Image Search, eller bilder per resultat fra Tavily). Et bilde fra bildesøket kan foreslås og lagres uten at siden er åpnet. Kilden blir siden bildet kom fra, slik søketjenesten oppga den. Det er en oppmykning av kildekravet fra avvik 23: før måtte bildet stå på en side agenten hadde lest. Serveren sjekker fortsatt at hvert bilde faktisk kom fra et søk eller en åpnet side i samme runde. Forslaget kan ha `thumbnail_url` (søketjenestens lille kopi), som brukes når originalen ikke kan hentes.
 
-32. **BRUKERBESLUTNING 11. november 2026: egne oppgaver for verkstedet.** Bildejakt og maleplan får hver sin `research_task` per miniatyr, merket med `task_scope.subject_focus` (`{ subject_id, kind: 'images' | 'plan' }`). Agentpanelet bruker bare oppgaver uten merke. Da deler en tur i panelet aldri samtale med en kjøring i verkstedet, og de kan gå samtidig uten å blande historikken. Skjemaet har ikke feltet. Feltet er valgfritt, så eldre data trenger ingen migrering. En åpen oppgave fra før blir panelets.
+32. **BRUKERBESLUTNING 11. november 2026: egne oppgaver for verkstedet.** ([beslutningen](beslutninger/2026-11-11-egne-oppgaver-for-verkstedet.md)) Bildejakt og maleplan får hver sin `research_task` per miniatyr, merket med `task_scope.subject_focus` (`{ subject_id, kind: 'images' | 'plan' }`). Agentpanelet bruker bare oppgaver uten merke. Da deler en tur i panelet aldri samtale med en kjøring i verkstedet, og de kan gå samtidig uten å blande historikken. Skjemaet har ikke feltet. Feltet er valgfritt, så eldre data trenger ingen migrering. En åpen oppgave fra før blir panelets.
 
-33. **BRUKERBESLUTNING 11. november 2026: biblioteket er ikke låst (bit 7.0).** Teknikker og oppskrifter har ingen versjonstabeller. Brukeren endrer dem direkte, og `change_record` tar vare på historikken. Om de skal låses, vurderes senere. Plan og begrunnelse står i [BIT7-KUNNSKAP.md](BIT7-KUNNSKAP.md).
+33. **BRUKERBESLUTNING 11. november 2026: biblioteket er ikke låst (bit 7.0).** ([beslutningen](beslutninger/2026-11-11-biblioteket-er-ikke-last.md)) Teknikker og oppskrifter har ingen versjonstabeller. Brukeren endrer dem direkte, og `change_record` tar vare på historikken. Om de skal låses, vurderes senere. Plan og begrunnelse står i [BIT7-KUNNSKAP.md](BIT7-KUNNSKAP.md).
     - **Nye tabeller i v5:** `technique`, `technique_step`, `technique_experience`, `recipe`, `recipe_paint` og `recipe_step`.
     - **«Godkjent» er et merke** (`status: draft | approved`), ikke en lås. En godkjent teknikk eller oppskrift kan fortsatt endres.
     - **En oppskrift er en fargerekke** (`recipe_paint`). Den kan i tillegg ha en fremgangsmåte (`recipe_step`), der hvert steg kan bruke malinger fra fargerekken og peke på en teknikk.
@@ -102,7 +89,7 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
     - **Hovednavigasjon (7.1):** Toppfeltet har «Prosjekter», «Malinger» (fra 11.11.2026) og «Bibliotek». Skissene har også «Research» i toppfeltet, men den finnes ikke der ennå. Research til biblioteket ligger under «Bibliotek» (`/bibliotek/research`). På smale skjermer vises bare logoen, uten navnet.
     - **Dokumentene bør oppdateres:** datamodell v3 og skjema §6 om teknikk og oppskrift. Dokumentene er ikke lest, så det er ikke kjent hvor mye dette avviker fra dem.
 
-34. **BRUKERBESLUTNING 11. november 2026: du velger malingene selv.** Om agenten skal holde seg til malinger du har, er et valg du tar aktivt. Det skal ikke skje i det skjulte.
+34. **BRUKERBESLUTNING 11. november 2026: du velger malingene selv.** ([beslutningen](beslutninger/2026-11-11-du-velger-malingene-selv.md)) Om agenten skal holde seg til malinger du har, er et valg du tar aktivt. Det skal ikke skje i det skjulte.
     - **Instruksene** har ikke lenger «foretrekk malinger brukeren eier». Har du ikke valgt, skal agenten velge det som passer best og si hvilke malinger du ikke har. Den skal ikke la eierstatus styre valget.
     - **Oppskrifter i biblioteket:** Når du starter, velger du «Begge» (standard), «Bare det jeg har» eller «Beste valg». Du kan endre valget i researchen, og det gjelder fra neste melding. Valget lagres på oppgaven (`task_scope.paint_choice`, PROTOTYPE). «Begge» gir to utkast, merket «Med malinger du har» og «Beste valg». Hvert utkast viser eierstatus for hver maling. Et utkast med «bare det jeg har» varsler hvis det likevel har malinger du ikke eier.
     - **Maleplan i verkstedet:** «Lag maleplan med AI» har to knapper, «Malinger jeg har» og «Beste valg». Forslaget viser hvilket valg det bygger på (`paint_choice` i nyttelasten). En miniatyr har én plan om gangen, så «Begge» finnes ikke der.
@@ -151,7 +138,7 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
       - **Utvidelser:** Instruksen sier at bare figurer fra grunnspillet og utvidelsene i prosjektet skal foreslås. Foreslår agenten likevel en ukjent utvidelse, står det på forslaget, og miniatyren får en usikkerhet når den legges til.
     - **Testing:** Det er ikke testet mot UiB. Hele kjeden er kjørt i nettleseren mot en simulert modell, et simulert bildesøk og lokale sider. Kjeden går fra knappen, via kartlegging og lagring, til bildejakt og maleplan som bygger på resultatet.
 
-37. **BRUKERBESLUTNING 11. november 2026: malingssamlingen er brukerens egen, og eksempeldataene har ingen malinger.**
+37. **BRUKERBESLUTNING 11. november 2026: malingssamlingen er brukerens egen, og eksempeldataene har ingen malinger.** ([beslutningen](beslutninger/2026-11-11-malingssamlingen-er-brukerens-egen.md))
     - **Eksempeldata:** `buildSampleData` lager ikke lenger malinger, og eksempelplanene har steg uten malinger. Eksempeloppskriftene er fjernet, fordi de bare var fargerekker med eksempelmalinger. Testene ber om de gamle eksempelmalingene med `examplePaints: true`.
     - **Eksempelmalinger i eksisterende data** kjennes igjen ved at de ble laget i samme øyeblikk som arbeidsrommet (`paint_product.created_at = workspace.created_at`) og ikke har noen `change_record`. En maling brukeren har endret eller satt eierskap på, regnes som brukerens. «Fjern eksempelmalingene» skjuler dem (`deleted_at`) og fjerner `inventory_entry`-radene, fordi eierskapet aldri var brukerens. Ingenting fjernes automatisk ved oppstart: brukeren trykker selv.
     - **Tilbakestill eksempeldata beholder malingssamlingen** (`paint_product`, `inventory_entry` og deres `change_record`), men ikke eksempelmalingene. Resten erstattes som før.
@@ -183,7 +170,7 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 
 ## Antakelser
 
-- **Klient:** React og TypeScript som webapp med hash-ruting. Det er godkjent av brukeren 9. november 2026.
+- **Klient:** React og TypeScript som webapp med hash-ruting. Det er godkjent av brukeren 9. november 2026 ([beslutningen](beslutninger/2026-11-09-klient-react-og-typescript.md)).
 - **Lagring:** Med serveren ligger dataene i `~/Paintrest` (se avvik 29). Uten serveren ligger de i nettleseren (IndexedDB). Det finnes ingen synkronisering mellom maskiner.
 - **UiB-API-et:** Adresse, endepunkter og Bearer-autentisering er oppgitt av brukeren. Svarformatet (`data[].id` fra `/models`, og `output[].content[].text` eller `output_text` fra `/responses`) følger OpenAI-konvensjonen. Det er ikke testet mot UiB, fordi nettverket i utviklingsmiljøet blokkerte adressen. Testene bruker en simulert tjeneste.
 - **Agentens svarformat:** Modellen blir bedt om å svare med ett JSON-objekt. Formatet er ikke lagt inn som `text.format`/`json_schema`, fordi det er ukjent om alle modellene hos UiB støtter det. Svar som ikke kan tolkes, vises som vanlig tekst, og eventuelle forslag i dem leses ikke inn.
@@ -205,15 +192,4 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
 
 ## Ikke bygget ennå
 
-Sjekket mot koden 24. november 2026.
-
-- **Redigering av en godkjent maleplan (bit 4).** Du kan redigere agentens planforslag før du godkjenner det (avvik 26), og agenten kan foreslå nye versjoner (avvik 27). Du kan ikke redigere en godkjent plan selv. «Lag maleplan» på miniatyrkortet lager bare en tom versjon 1 og åpner Painting Mode.
-- **Ny planversjon når du redigerer selv.** Det kommer i bit 4. Agenten lager allerede nye versjoner (avvik 27). Hvordan fremdrift og avvik følger med til en ny versjon, er ikke gjennomgått.
-- **Palett og prosess for prosjektet (bit 3).** Siden er en plassholder («snart» i prosjektmenyen). Paletten per miniatyr finnes i verkstedet (Palett-fanen, `scope_kind = subjects`).
-- **Kildene for seg (resten av bit 6).** «Fordel bilder» finnes (avvik 38), og kildene vises i verkstedet. En egen side for kildene finnes ikke.
-- **Biblioteket:**
-  - «Bruk i prosjekt» (7.7). Plansteg peker aldri på en teknikk eller oppskrift (`technique_version_id` og `recipe_version_id` er alltid `null`).
-  - Oppskrifter kan ikke forbedres med agenten. Det kan bare teknikker (7.6).
-  - Erfaring knyttes ikke til en miniatyr, og avkryssing i verkstedguiden lagres ikke (avvik 33).
-  - Prosjektoppgaver kan ikke foreslå teknikker eller oppskrifter. Det gjør bare research til biblioteket.
-- **Malingssamlingen:** produktbilder og forslag til malekjeder (avvik 37).
+Hva som er bygget, står i [STATUS.md](STATUS.md). Hva som gjenstår, står i [OPPGAVER.md](OPPGAVER.md).
