@@ -20,6 +20,7 @@ import { RecipePage } from '../features/library/RecipePage';
 import { Workspace } from '../features/workspace/Workspace';
 import { PaintsPage } from '../features/paints/PaintsPage';
 import { ImportPage } from '../features/paints/ImportPage';
+import { ShoppingPage } from '../features/paints/ShoppingPage';
 import { Button, Dialog } from '../ui/components';
 import { useCommand } from './context';
 import { useSaveStatus } from './saveStatus';
@@ -37,6 +38,7 @@ const routes = [
       { path: 'innstillinger', element: <AiSettingsPage /> },
       { path: 'malinger', element: <PaintsPage /> },
       { path: 'malinger/import', element: <ImportPage /> },
+      { path: 'malinger/handleliste', element: <ShoppingPage /> },
       { path: 'p/:projectId/m/:subjectId', element: <Workspace /> },
       { path: 'p/:projectId/m/:subjectId/:tab', element: <Workspace /> },
       {

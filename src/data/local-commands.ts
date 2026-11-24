@@ -4,18 +4,19 @@ import { newId, now } from '../domain/ids';
 import { AUTO, isAutoName, nextAutoName } from '../domain/naming';
 import { bySpecificity, findProduct, sampleProducts } from '../domain/paints';
 import type {
-  GameCoverSource, Id, LocalDeviation, MiniatureSubject, Ownership, OwnershipSource, Tables,
+  GameCoverSource, Id, LocalDeviation, MiniatureSubject,
 } from '../domain/types';
 import { currentPlanVersion, liveExpansionsOfGame, ownershipOf } from '../domain/views';
 import type { Store } from './store';
 import { buildSampleData } from './seed';
 import { attachImages, downloadImages, setCover, sourceFor } from './images-tx';
-import { must, record } from './tx-helpers';
+import { must, record, setOwn } from './tx-helpers';
 import { writePlanVersion } from './plan-version';
 import { matchProduct, planProductRefs, productKey } from '../domain/agent';
 import type { PaintPlanPayload } from '../domain/agent';
 import { cleanPlanPayload } from '../domain/plan-versions';
 import { createKnowledgeCommands } from './knowledge-commands';
+import { createShoppingCommands } from './shopping-commands';
 
 function clean(v: string | null | undefined): string | null {
   return v?.trim() || null;
@@ -45,18 +46,6 @@ function coverSourceOf(s: GameCoverSource): GameCoverSource {
 
 function hex(v: string | null | undefined): string | null {
   return v && /^#[0-9a-f]{6}$/i.test(v.trim()) ? v.trim().toLowerCase() : null;
-}
-
-/** One inventory row per paint (skjema §6, inventory_entry). */
-function setOwn(t: Tables, ws: string, product_id: string, ownership: Ownership, source: OwnershipSource): void {
-  const e = t.inventory_entry.find((x) => x.product_id === product_id && x.workspace_id === ws);
-  if (e) {
-    e.ownership = ownership;
-    e.ownership_source = source;
-    e.updated_at = now();
-  } else {
-    t.inventory_entry.push({ workspace_id: ws, product_id, ownership, ownership_source: source, updated_at: now() });
-  }
 }
 
 function normaliseSubject(s: MiniatureSubject): void {
@@ -90,6 +79,7 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
 
   const commands: Commands = {
     ...createKnowledgeCommands(store),
+    ...createShoppingCommands(store),
 
     // ---------- Prosjekt ----------
     async createProject(input) {

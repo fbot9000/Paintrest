@@ -189,6 +189,16 @@ Panelet viser hvert søk og hver side mens agenten jobber, og du kan stoppe den.
 - **Uten AI:** «Les uten AI» tar ett navn per linje, eller et regneark med kolonnenavn (Produsent, Serie, Navn, Kode, Type, Har). Du kan be AI-en om hjelp med resten etterpå.
 - Utkastet av importen ligger i nettleseren (localStorage) til du lagrer eller forkaster det. Det tåler at du laster siden på nytt, men følger ikke med til en annen maskin.
 
+## Handlelisten
+
+«Handleliste» øverst i malingssamlingen. Listen har én rad per maling, sortert etter prioritet: nødvendig, anbefalt og ønskeliste.
+
+- **Fra planene:** Malinger du ikke har, eller ikke vet om du har, og som den godkjente maleplanen til en miniatyr bruker, står på listen som «nødvendig». Raden sier hvilke miniatyrer som trenger den. Ferdigmalte miniatyrer teller ikke. Når du har malingen, eller ingen plan bruker den lenger, forsvinner den fra listen.
+- **Legg til selv:** «Legg til maling». Velg en maling fra samlingen, prioritet og eventuelt et prosjekt. Finnes den ikke i samlingen, legg den inn der først, gjerne som «Har ikke».
+- **Prioritet:** endres på raden, også for malinger fra planene.
+- **Filter per prosjekt:** vises når listen har malinger fra et prosjekt.
+- **«Kjøpt»** setter malingen som din, og tar den av listen. **«Fjern»** finnes bare for malinger du har lagt til selv og som ingen plan trenger.
+
 ## Research til biblioteket
 
 «Bibliotek → Research» (eller «Research ny teknikk» og «Research ny oppskrift»). Beskriv hva du vil lære, og legg eventuelt ved en lenke. Agenten bruker samme nøkkel og nettsøk som i prosjektene.

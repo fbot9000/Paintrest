@@ -8,7 +8,7 @@
  */
 import type {
   DeviationKind, DeviationPayload, Evidence, ExperienceOutcome, GameCoverSource, Grouping, Id, IdentityStatus, KnowledgeStatus,
-  MaterialRole, Ownership, ProductKind, StepBasis, Uncertainty,
+  MaterialRole, Ownership, ProductKind, ShoppingPriority, StepBasis, Uncertainty,
 } from './types';
 import type { PaintPlanPayload, ReferenceImage } from './agent';
 
@@ -171,7 +171,22 @@ export interface KnowledgeCommands {
   restoreRecipe(recipe_id: Id): Promise<void>;
 }
 
-export interface Commands extends KnowledgeCommands {
+/** Handlelisten (O-14). Every command is one transaction and writes change_record. */
+export interface ShoppingCommands {
+  /**
+   * Puts a paint on the list yourself, or updates it if it is there. Projects are
+   * added to the ones it has. Returns the shopping_need id.
+   */
+  addToShoppingList(product_id: Id, input?: { priority?: ShoppingPriority; note?: string | null; project_ids?: Id[] }): Promise<Id>;
+  /** Changes the priority, also for a paint that is on the list because a plan needs it. */
+  setShoppingPriority(product_id: Id, priority: ShoppingPriority): Promise<void>;
+  /** Takes off what you added yourself. A paint the plans need stays, as «nødvendig». */
+  removeFromShoppingList(product_id: Id): Promise<void>;
+  /** «Kjøpt»: you own the paints (inventory source `purchase`), and they leave the list. */
+  markPurchased(product_ids: Id[]): Promise<void>;
+}
+
+export interface Commands extends KnowledgeCommands, ShoppingCommands {
   // Prosjekt
   createProject(input?: { name?: string }): Promise<{ project_id: Id; game_id: Id }>;
   deleteProject(project_id: Id): Promise<void>;

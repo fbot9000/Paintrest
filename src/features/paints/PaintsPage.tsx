@@ -9,6 +9,7 @@ import { Chip, SearchBox } from '../library/parts';
 import { EMPTY_PAINT, PaintForm, valueOf } from './PaintForm';
 import type { PaintValue } from './PaintForm';
 import { useImport } from './importStore';
+import { shoppingList } from '../../domain/shopping';
 import './paints.css';
 
 const FILTERS: { value: OwnershipFilter; label: string }[] = [
@@ -40,6 +41,7 @@ export function PaintsPage() {
       counts: paintCounts(t),
       makers: makersIn(t),
       kinds,
+      shopping: shoppingList(t).length,
       hidden: hiddenProducts(t),
       samples,
       sampleUsage: usageText(productUsage(t, samples.map((p) => p.id))),
@@ -80,6 +82,7 @@ export function PaintsPage() {
           </p>
         </div>
         <div className="head-actions">
+          <Link className="btn btn-secondary" to="handleliste">Handleliste{data.shopping ? ` (${data.shopping})` : ''}</Link>
           <Link className="btn btn-secondary" to="import">{draft ? 'Fortsett importen' : 'Importer en liste'}</Link>
           <Button variant="primary" icon="+" onClick={() => { setAdding(true); setEditing(null); }}>Legg til maling</Button>
         </div>

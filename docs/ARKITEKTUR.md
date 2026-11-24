@@ -8,8 +8,9 @@ Hvordan koden er bygd opp, hvor dataene ligger, og hvordan AI-nøkkelen beskytte
 src/domain/types.ts      tabellene fra skjema §6 (snake_case, samme navn)
 src/domain/commands.ts   brukerkommandoene: grensesnittet skjermene skriver gjennom
 src/domain/views.ts      lesefunksjoner (skjema §9)
+src/domain/shopping.ts   handlelisten: hva som står på den, regnet ut fra planene og shopping_need
 src/domain/research.ts   kommandoene for agentens oppgaver og forslag
-src/data/local-*.ts      v0-implementasjon av kommandolaget
+src/data/local-*.ts      v0-implementasjon av kommandolaget (også knowledge- og shopping-commands.ts)
 src/data/research-commands.ts   sjekker omfanget og godkjenner forslag (kjører i nettleseren)
 src/data/server-persistence.ts  lagring gjennom Paintrest-serveren, med revisjon
 src/data/seed.ts         eksempeldata

@@ -170,6 +170,15 @@ Flere av punktene er skrevet av agenter som ikke hadde dokumentene (se avvik 33 
     - **Agentene får nettsiden:** `website` er lagt til i prosjektets kontekst (`project.website`) når den finnes.
     - **Testing:** Det er ikke testet mot UiB eller ekte søketjenester. Hele kjeden er kjørt i nettleseren mot en simulert modell, et simulert Brave-søk og en lokal utgiverside: knappen, fremdriften, forslagene, «Bruk valgte», nedlastingen av bildet og lagringen i datamappen.
 
+40. **BRUKERBESLUTNING 24. november 2026: handlelisten fylles fra planene og manuelt** ([beslutningen](beslutninger/2026-11-24-handleliste-fra-planene-og-manuelt.md), O-14). Skjemaversjon 6.
+    - **Tabellene** `shopping_need` og `shopping_need_project` fra skjema §6, med `product_id` unik per arbeidsrom og `priority` (`necessary`, `recommended`, `wishlist`).
+    - **Nye felt, ikke i skjemaet:** `origin` (`manual` når du la til malingen selv, `plan` når raden bare holder prioriteten for en maling planene trenger), `created_at` og `updated_at`.
+    - **Behovene fra planene lagres ikke.** De regnes ut fra gjeldende, godkjente planversjon for hver miniatyr (`step_material` og `mix_component`). Slik kan de ikke bli stående når planen eller eierskapet endres. Kildedokumentene sier ikke om behovet skal lagres.
+    - **Antatt av agenten:** Malinger med ukjent eierskap kommer også på listen, merket «Ukjent om du har den». Beslutningen sier «malinger du ikke eier». Ferdigmalte miniatyrer, slettede miniatyrer og slettede prosjekter teller ikke. Åpne avvik i Painting Mode (bytte av maling) teller ikke.
+    - **En maling fra planene kan ikke fjernes fra listen**, bare få lavere prioritet, kjøpes eller settes som «Har». En maling du har lagt til selv, står til du kjøper eller fjerner den, også om du allerede har den (for eksempel for å kjøpe en ny flaske).
+    - **«Kjøpt»** setter `inventory_entry` til `owns` med `ownership_source = purchase` og sletter `shopping_need` og koblingene til prosjekter, med `change_record`.
+    - **Tilbakestill eksempeldata** beholder handlelisten, men ikke koblingene til de gamle prosjektene. **Slett for godt** fjerner malingen fra handlelisten.
+
 ## Antakelser
 
 - **Klient:** React og TypeScript som webapp med hash-ruting. Det er godkjent av brukeren 9. november 2026 ([beslutningen](beslutninger/2026-11-09-klient-react-og-typescript.md)).
