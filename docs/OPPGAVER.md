@@ -84,7 +84,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-2 Bruk en teknikk eller oppskrift i et plansteg (7.7)
 
-- **Status:** ledig
+- **Status:** pågår (spor A: maleplanen, 24. november 2026)
 - **Avhenger av:** O-1
 - **Berører:** Maleplan-fanen, `src/features/painting/`, `src/features/library/`
 - **I dag:** `plan_step.technique_version_id` og `recipe_version_id` er alltid `null`.
