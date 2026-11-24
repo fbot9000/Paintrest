@@ -227,7 +227,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-19 Dra og slipp i maleplanen og paletten
 
-- **Status:** pågår (spor A: agenten og maleplanen, 24. november 2026)
+- **Status:** ferdig (24. november 2026, 4ada0be). Valgene står i avvik 47
 - **Avhenger av:** O-17 (samme mappe, samme spor)
 - **Berører:** `src/features/workspace/` (Maleplan-fanen og Palett-fanen)
 - **I dag:** deler og steg flyttes med menyen «⋯» eller knapper, og malinger velges fra en liste.

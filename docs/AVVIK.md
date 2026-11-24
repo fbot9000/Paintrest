@@ -226,6 +226,15 @@ Flere av punktene er skrevet av agenter som ikke hadde dokumentene (se avvik 33 
     - **Miniatyrlisten** har ikke lenger fremdriftsboksen, «Mangler i listen», «Fordel bilder (N)» eller «Gå gjennom én og én» øverst. Alt det står i kolonnen. Skissenes stiplede kort for manglende miniatyrer i rutenettet er ikke bygget.
     - **Testing:** Enhetstester i `src/domain/waiting.test.ts`. Prøvd i nettleseren mot lokale data og en simulert modell: dra et bilde til et kort og angre, ta ut én manglende miniatyr og legge til resten, kolonnen i verkstedet, og «Jobber nå» under en bildejakt.
 
+47. **Dra og slipp i maleplanen** (O-19, [enkle prosesser med nok kontroll](beslutninger/2026-11-24-enkle-prosesser-nok-kontroll.md)). Antatt av agenten:
+    - **Hvor:** i utkastet når du redigerer planen eller et forslag (`PlanDnd.tsx`, `planMoves.ts`). Den godkjente planen leses bare, så der er det ingenting å dra. Palett-fanen har ikke fått dra og slipp, fordi rekkefølgen der ikke betyr noe.
+    - **Malingene å dra** er miniatyrens palett, én per maling. Er paletten tom, brukes malingene planen allerede har. En maling som står i steget fra før, legges ikke inn to ganger.
+    - **Rollen** tas fra palettens rolletekst når den sier det (høylys, skygge, wash, glasur, lag, base, blanding). Ellers blir den «Annet», og du endrer den i steget.
+    - **Berøring:** På iPad er alternativet å trykke på malingen og så «+ Navn» på steget, som «Fordel bilder». Deler flyttes med «⋯» → «Flytt opp/ned», og steg med pilene eller «Flytt opp/ned». Steg som flyttes forbi kanten av en del, havner i delen før eller etter.
+    - **En del som blir tom** når stegene dras ut, tas ikke med når du lagrer, som før.
+    - **Kjennes igjen:** Et steg som flyttes til en annen del, beholder `from_step_id`, men kobles bare til steg i delen den ble redigert fra (avvik 42). Avvik på steget følger da med på delen, ikke på steget.
+    - **Testing:** Enhetstester i `planMoves.test.ts`. Prøvd i nettleseren med mus (Playwright): flytte en del, flytte et steg til en annen del, dra en maling inn i et steg, og trykk og «+». Ikke prøvd med berøring på en ekte iPad.
+
 ## Antakelser
 
 - **Klient:** React og TypeScript som webapp med hash-ruting. Det er godkjent av brukeren 9. november 2026 ([beslutningen](beslutninger/2026-11-09-klient-react-og-typescript.md)).
