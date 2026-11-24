@@ -187,7 +187,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-18 Handlelisten fra «Finn fram malingene» i Painting Mode
 
-- **Status:** pågår (spor B, 24. november 2026)
+- **Status:** ferdig (24. november 2026, d23fe4b)
 - **Avhenger av:** O-1, O-13 og O-14
 - **Berører:** `src/features/painting/`
 - **I dag:** handlelisten finnes under «Malinger → Handleliste», men ikke i Painting Mode.
