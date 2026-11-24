@@ -17,7 +17,7 @@ Agenten skal ha mye frihet. Dokumentene er for strenge på dette punktet. To tin
 
 Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokumentene ikke tar, eller avviker fra dem. Hvert punkt bør avgjøres før koden mot den ekte databasen skrives.
 
-**Numrene er rettet 24. november 2026.** To punkter het 29, og to het 30. Punktene om biblioteket og om malingsvalget heter nå 33 og 34, og punktene som het 33–36, heter nå 35–38. Henvisningene i listen er rettet.
+**Numrene er rettet 24. november 2026.** To punkter het 29, og to het 30. Punktene om biblioteket og om malingsvalget heter nå 33 og 34, og punktene som het 33–36, heter nå 35–38. Punktet om bilde og fakta for spillet, som het 37, heter nå 39. Henvisningene i listen er rettet.
 
 ## Avvik fra skjemaet
 
@@ -173,7 +173,7 @@ Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokume
     - **Regel for brukt:** Et bilde som er lagret på én miniatyr, regnes som brukt i alle forslag. Det havner under «Brukt» på tavlen og kan legges på flere miniatyrer derfra.
     - **Prosjektmenyen:** «Fordel bilder» erstatter plassholderen «Kilder og bilder» (bit 6). Ruten `kilder` viser den samme siden. Resten av bit 6 (kildene for seg) finnes ikke ennå.
 
-37. **BRUKERØNSKE 11. november 2026: bilde og fakta for spillet med AI.** «Finn bilde og fakta med AI» på siden «Spill og illustrasjon».
+39. **BRUKERØNSKE 11. november 2026: bilde og fakta for spillet med AI.** «Finn bilde og fakta med AI» på siden «Spill og illustrasjon».
     - **Nye felt på `game`, ikke i skjemaet:** `website_url` (offisiell nettside) og `cover_source` (`image_url`, `page_url`, `page_title`: hvor illustrasjonen kom fra). Begge er valgfrie, så eldre data trenger ingen migrering. `cover_source` settes bare når illustrasjonen tas fra nettet, og fjernes når du laster opp et eget bilde eller fjerner illustrasjonen. Skjemaet har ingen kilde for `game.cover_file_id`; dette følger regelen om at kilden lagres sammen med bildet.
     - **Eget oppdrag uten oppgave:** Oppslaget bruker samme agentløkke som researchen (`POST /api/agent/run` med `focus.kind = 'game_info'`), med egen instruks og høyst 10 verktøysteg. Det lager ingen `research_task`, ingen meldinger og ingen forslag i dataene. Svaret ligger i kjøringen i nettleseren til du bruker det eller lukker panelet. Derfor lagres heller ikke sidene agenten leser som kilder for spillet, slik andre kjøringer gjør (avvik 24).
     - **Brukeren bestemmer:** Ingenting skrives før «Bruk valgte». Fakta skrives med `updateGame` og illustrasjonen med `setGameCover`, med `change_record` og `initiated_by = user`. Felt med en verdi fra før er ikke krysset av.
