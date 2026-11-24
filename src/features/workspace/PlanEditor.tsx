@@ -12,6 +12,7 @@ import { ownershipOf } from '../../domain/views';
 import { Badge, Button, OwnershipFlag, Swatch } from '../../ui/components';
 import { ChangeBadge, ROLE_LABEL, StepRead, closeMenu, elementId } from './PlanDoc';
 import type { DocElement } from './PlanDoc';
+import type { Drag, PlanDnd } from './PlanDnd';
 import './plan.css';
 
 export { ROLE_LABEL };
@@ -66,6 +67,42 @@ interface ElementProps {
   onChange: (fn: (e: PlanElementPayload) => void) => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
+  /** O-19: dragging parts, steps and paints, and what a drop on this part or one of its steps does. */
+  dnd?: PlanDnd;
+  onDropElement?: (d: Drag) => void;
+  onDropStep?: (si: number, d: Drag) => void;
+  onMoveStep?: (si: number, dir: -1 | 1) => void;
+}
+
+const isStepOrElement = (d: Drag) => d.kind === 'element' || d.kind === 'step';
+const isStepOrPaint = (d: Drag) => d.kind === 'step' || d.kind === 'paint';
+
+/** The handle (⠿) a part or step is dragged by. */
+function Handle({ dnd, d, label }: { dnd?: PlanDnd; d: Drag; label: string }) {
+  if (!dnd) return null;
+  return <span className="pd-handle" aria-label={label} title="Dra for å flytte" {...dnd.handle(d)}>⠿</span>;
+}
+
+/** Drop target props for a part (key e…) or a step (key e…s…), with the highlight class. */
+function dropProps(p: ElementProps, si: number | null) {
+  if (!p.dnd) return { className: '' };
+  const key = si === null ? `e${p.index}` : `e${p.index}s${si}`;
+  const props = si === null
+    ? p.dnd.target(key, isStepOrElement, (d) => p.onDropElement?.(d))
+    : p.dnd.target(key, isStepOrPaint, (d) => p.onDropStep?.(si, d));
+  const what = p.dnd.drag?.kind;
+  return { ...props, className: p.dnd.over === key ? `drop-over drop-${what}` : '' };
+}
+
+/** «+ Abaddon Black» on a step, when a paint is tapped in the tray (touch). */
+function AddPicked({ p, si }: { p: ElementProps; si: number }) {
+  const picked = p.dnd?.picked;
+  if (!picked) return null;
+  return (
+    <button type="button" className="link small pd-add-picked" onClick={() => p.onDropStep?.(si, { kind: 'paint', ...picked })}>
+      + {picked.product.name}
+    </button>
+  );
 }
 
 /** One part of a proposal: read as text, with editing per step and a «⋯» menu for the part. */
@@ -74,10 +111,12 @@ export function ElementBlock(p: ElementProps) {
   const [editing, setEditing] = useState<number | null>(null);
   const [renaming, setRenaming] = useState(false);
   if (p.editAll) return <ElementEditor {...p} />;
+  const drop = dropProps(p, null);
 
   return (
-    <section id={elementId(index)} className={`pd-el ${el.kind}`}>
+    <section id={elementId(index)} {...drop} className={`pd-el ${el.kind} ${drop.className}`} data-drag-row>
       <div className="pd-el-head">
+        <Handle dnd={p.dnd} d={{ kind: 'element', e: index }} label={`Dra for å flytte ${el.name}`} />
         {renaming ? (
           <span className="pd-rename">
             <input aria-label="Navn på delen" value={el.name} autoFocus onChange={(e) => onChange((x) => { x.name = e.target.value; })}
@@ -103,32 +142,43 @@ export function ElementBlock(p: ElementProps) {
         </details>
       </div>
       <ol>
-        {el.steps.map((st, si) => (
-          <li key={si}>
+        {el.steps.map((st, si) => {
+          const sd = dropProps(p, si);
+          return (
+          <li key={si} {...sd} className={sd.className} data-drag-row>
+            <Handle dnd={p.dnd} d={{ kind: 'step', e: index, s: si }} label={`Dra for å flytte steg ${si + 1} i ${el.name}`} />
             {editing === si ? (
               <div className="pd-editing">
                 <StepEditor st={st} products={p.products} t={p.t} onChange={(fn) => onChange((x) => fn(x.steps[si]!))} />
                 <span className="pd-editing-actions">
+                  {p.onMoveStep && <>
+                    <button type="button" className="link small" disabled={si === 0 && index === 0} onClick={() => { p.onMoveStep!(si, -1); setEditing(null); }}>Flytt opp</button>
+                    <button type="button" className="link small" onClick={() => { p.onMoveStep!(si, 1); setEditing(null); }}>Flytt ned</button>
+                  </>}
                   <button type="button" className="link small danger" onClick={() => { onChange((x) => { x.steps.splice(si, 1); }); setEditing(null); }}>Fjern steget</button>
                   <Button onClick={() => setEditing(null)}>Ferdig</Button>
                 </span>
               </div>
             ) : (
               <StepRead s={doc.steps[si] ?? { instruction: st.instruction, materials: [], mix: null, change: null }}
-                actions={<button type="button" className="link small" onClick={() => setEditing(si)} aria-label={`Rediger steg ${si + 1} i ${el.name}`}>Rediger</button>} />
+                actions={<><AddPicked p={p} si={si} /><button type="button" className="link small" onClick={() => setEditing(si)} aria-label={`Rediger steg ${si + 1} i ${el.name}`}>Rediger</button></>} />
             )}
           </li>
-        ))}
+          );
+        })}
       </ol>
     </section>
   );
 }
 
 /** The full form for a part («Rediger alt»). */
-function ElementEditor({ el, index, products, t, onChange, onRemove, onMove }: ElementProps) {
+function ElementEditor(p: ElementProps) {
+  const { el, index, products, t, onChange, onRemove, onMove } = p;
+  const drop = dropProps(p, null);
   return (
-    <section id={elementId(index)} className={`plan-el ${el.kind}`}>
+    <section id={elementId(index)} {...drop} className={`plan-el ${el.kind} ${drop.className}`} data-drag-row>
       <div className="plan-el-head">
+        <Handle dnd={p.dnd} d={{ kind: 'element', e: index }} label={`Dra for å flytte ${el.name}`} />
         <select aria-label="Type" value={el.kind} onChange={(e) => onChange((x) => { x.kind = e.target.value as 'operation' | 'part'; })}>
           <option value="operation">Felles operasjon</option>
           <option value="part">Del</option>
@@ -141,12 +191,23 @@ function ElementEditor({ el, index, products, t, onChange, onRemove, onMove }: E
         </span>
       </div>
       <ol>
-        {el.steps.map((st, si) => (
-          <li key={si}>
-            <StepEditor st={st} products={products} t={t} onChange={(fn) => onChange((x) => fn(x.steps[si]!))}
-              onRemove={() => onChange((x) => { x.steps.splice(si, 1); })} />
-          </li>
-        ))}
+        {el.steps.map((st, si) => {
+          const sd = dropProps(p, si);
+          return (
+            <li key={si} {...sd} className={`plan-step-row ${sd.className}`} data-drag-row>
+              <Handle dnd={p.dnd} d={{ kind: 'step', e: index, s: si }} label={`Dra for å flytte steg ${si + 1} i ${el.name}`} />
+              <StepEditor st={st} products={products} t={t} onChange={(fn) => onChange((x) => fn(x.steps[si]!))}
+                onRemove={() => onChange((x) => { x.steps.splice(si, 1); })} />
+              <span className="plan-step-move">
+                <AddPicked p={p} si={si} />
+                {p.onMoveStep && <>
+                  <button type="button" className="link small" onClick={() => p.onMoveStep!(si, -1)} aria-label={`Flytt steg ${si + 1} opp`}>↑</button>
+                  <button type="button" className="link small" onClick={() => p.onMoveStep!(si, 1)} aria-label={`Flytt steg ${si + 1} ned`}>↓</button>
+                </>}
+              </span>
+            </li>
+          );
+        })}
       </ol>
       <button type="button" className="link small" onClick={() => onChange((x) => { x.steps.push({ instruction: '', materials: [], mix: null }); })}>+ Legg til steg</button>
     </section>

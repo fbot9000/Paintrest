@@ -19,6 +19,9 @@ import { startPlan } from './agentRuns';
 import { DeviationChoice, toggleBake } from './DeviationChoice';
 import type { Bake } from './DeviationChoice';
 import { ElementBlock, MissingPaints } from './PlanEditor';
+import { PaintTray, usePlanDnd } from './PlanDnd';
+import type { Drag } from './PlanDnd';
+import { addPaint, moveElement, moveStep } from './planMoves';
 import { Outline, PaletteStrip, PlanRead, docFromPayload, docFromView, markChanges } from './PlanDoc';
 
 function view(t: Tables, s: MiniatureSubject) {
@@ -28,6 +31,8 @@ function view(t: Tables, s: MiniatureSubject) {
     current: paintingView(t, s.id),
     deviations: s.current_plan_version_id ? openDeviations(t, s.current_plan_version_id) : [],
     palette: subjectPalette(t, s).map((p) => ({ name: p.product.name, hex: p.product.swatch_hex })),
+    // O-19: the paints to drag into steps: the miniature's own palette, one per paint.
+    tray: [...new Map(subjectPalette(t, s).map((p) => [p.product.id, { product: p.product, role_label: p.entry.role_label }])).values()],
     products: Object.values(t.paint_product).filter((p) => !p.deleted_at).sort((a, b) => a.name.localeCompare(b.name, 'nb')),
     t,
   };
@@ -86,6 +91,21 @@ export function PlanTab({ subject: s, game, run, planFileIds }: { subject: Minia
   const baseVersion = edit ? edit.base : s.current_plan_version_id;
   const deviations = baseVersion === s.current_plan_version_id ? data.deviations : [];
   const stale = !!edit && edit.base !== (s.current_plan_version_id ?? null);
+
+  const dnd = usePlanDnd();
+  const apply = (fn: (d: PaintPlanPayload) => PaintPlanPayload) => setDraft((cur) => (cur ? fn(cur) : cur));
+  const dropElement = (ei: number) => (d: Drag) => apply((cur) => d.kind === 'element' ? moveElement(cur, d.e, ei)
+    : d.kind === 'step' ? moveStep(cur, d, { e: ei, s: cur.elements[ei]!.steps.length }) : cur);
+  const dropStep = (ei: number) => (si: number, d: Drag) => apply((cur) => d.kind === 'step' ? moveStep(cur, d, { e: ei, s: si })
+    : d.kind === 'paint' ? addPaint(cur, ei, si, d.product, d.role_label) : cur);
+  /** ↑/↓ on a step: within the part, and over the edge into the part before or after. */
+  const moveStepBy = (ei: number) => (si: number, dir: -1 | 1) => apply((cur) => {
+    const len = cur.elements[ei]!.steps.length;
+    if (dir < 0) return si > 0 ? moveStep(cur, { e: ei, s: si }, { e: ei, s: si - 1 })
+      : ei > 0 ? moveStep(cur, { e: ei, s: si }, { e: ei - 1, s: cur.elements[ei - 1]!.steps.length }) : cur;
+    return si < len - 1 ? moveStep(cur, { e: ei, s: si }, { e: ei, s: si + 2 })
+      : ei < cur.elements.length - 1 ? moveStep(cur, { e: ei, s: si }, { e: ei + 1, s: 0 }) : cur;
+  });
 
   const update = (fn: (d: PaintPlanPayload) => void) => setDraft((cur) => {
     if (!cur) return cur;
@@ -235,12 +255,18 @@ export function PlanTab({ subject: s, game, run, planFileIds }: { subject: Minia
                 <p className="small muted">Fjernet fra versjon {current?.plan?.version_number}: {diff.removed.join(', ')}</p>
               )}
               <Outline elements={shown} />
+              <PaintTray paints={data.tray.length ? data.tray : [...new Map(refs.flatMap((r) => {
+                // No palette yet: the paints the plan already uses.
+                const m = matchProduct(data.t, r);
+                return m ? [[m.id, { product: m, role_label: null }] as const] : [];
+              })).values()]} dnd={dnd} />
               <div className="pd-elements">
                 {draft.elements.map((el, ei) => (
                   <ElementBlock key={ei} el={el} doc={shown[ei]!} index={ei} products={data.products} t={data.t} editAll={editAll}
                     onChange={(fn) => update((d) => fn(d.elements[ei]!))}
                     onRemove={() => update((d) => { d.elements.splice(ei, 1); })}
-                    onMove={(dir) => update((d) => { const [x] = d.elements.splice(ei, 1); d.elements.splice(Math.max(0, ei + dir), 0, x!); })} />
+                    onMove={(dir) => update((d) => { const [x] = d.elements.splice(ei, 1); d.elements.splice(Math.max(0, ei + dir), 0, x!); })}
+                    dnd={dnd} onDropElement={dropElement(ei)} onDropStep={dropStep(ei)} onMoveStep={moveStepBy(ei)} />
                 ))}
                 <span><Button onClick={() => update((d) => { d.elements.push({ kind: 'part', name: `Ny del ${d.elements.length + 1}`, steps: [{ instruction: '', materials: [], mix: null }] }); })}>+ Legg til del</Button></span>
               </div>

@@ -153,3 +153,21 @@ button.pd-palette { border: 0; background: none; padding: 2px 0; cursor: pointer
 .pd-links { display: flex; gap: 12px; flex-wrap: wrap; }
 .plan-step-links { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .plan-step-links select { min-height: 34px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--card); padding: 0 6px; max-width: 100%; }
+
+/* Dra og slipp i maleplanen (O-19) */
+.pd-handle { cursor: grab; color: var(--muted); font-size: 16px; line-height: 1; padding: 4px 6px; border-radius: var(--r-sm); user-select: none; touch-action: none; }
+.pd-handle:hover { color: var(--ink); background: var(--panel); }
+.pd-el-head { justify-content: flex-start; }
+.pd-el-head .pd-more { margin-left: auto; }
+.pd-el ol > li, .plan-el ol > li { position: relative; }
+.pd-el ol > li > .pd-handle, .plan-el ol > li > .pd-handle { position: absolute; left: -46px; top: 6px; }
+.drop-over.drop-step, .drop-over.drop-element { box-shadow: 0 -3px 0 0 var(--moss); }
+li.drop-over.drop-paint { outline: 2px dashed var(--moss); outline-offset: 2px; border-radius: var(--r-sm); }
+.pd-el.drop-over.drop-step, .plan-el.drop-over.drop-step { box-shadow: 0 3px 0 0 var(--moss); }
+.plan-tray { display: grid; gap: 6px; padding: 8px 10px; border-radius: var(--r-md); background: var(--card); border: 1px solid var(--line); }
+.plan-tray-paints { display: flex; gap: 6px; flex-wrap: wrap; }
+.plan-tray-paint { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); font: inherit; font-size: 13px; cursor: grab; }
+.plan-tray-paint.on { background: var(--moss); border-color: var(--moss); color: var(--pine); font-weight: 600; }
+.pd-add-picked { margin-right: 8px; font-weight: 600; }
+.plan-step-row { display: grid; gap: 4px; }
+.plan-step-move { display: flex; gap: 10px; justify-content: flex-end; }
