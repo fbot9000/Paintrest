@@ -69,7 +69,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-1 Rediger en godkjent maleplan, og ta med avvik og fremdrift til nye versjoner (bit 4)
 
-- **Status:** pågår (spor A: maleplanen, 24. november 2026)
+- **Status:** ferdig (24. november 2026, a7aced5 og 9844e41)
 - **Avhenger av:** –
 - **Berører:** `src/features/workspace/` (Maleplan-fanen), `src/features/painting/`, `src/data/local-commands.ts`, `src/data/research-commands.ts` (godkjenning av planversjoner), `src/domain/commands.ts`, `src/domain/views.ts`
 - **I dag:**

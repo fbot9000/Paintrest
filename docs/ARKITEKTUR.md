@@ -10,6 +10,8 @@ src/domain/commands.ts   brukerkommandoene: grensesnittet skjermene skriver gjen
 src/domain/views.ts      lesefunksjoner (skjema §9)
 src/domain/shopping.ts   handlelisten: hva som står på den, regnet ut fra planene og shopping_need
 src/domain/research.ts   kommandoene for agentens oppgaver og forslag
+src/domain/plan-versions.ts   hvilke deler og steg som er de samme i to planversjoner, og å bake inn et avvik
+src/data/plan-version.ts  skriver en ny planversjon (brukerens og agentens), med avvik og fremdrift
 src/data/local-*.ts      v0-implementasjon av kommandolaget (også knowledge- og shopping-commands.ts)
 src/data/research-commands.ts   sjekker omfanget og godkjenner forslag (kjører i nettleseren)
 src/data/server-persistence.ts  lagring gjennom Paintrest-serveren, med revisjon
@@ -25,6 +27,15 @@ Skjermene skriver aldri rett til data. De kaller `Commands`. Senere erstattes `c
 Hver kommando kjører som én transaksjon og skriver `change_record` med `initiated_by = user`. Hvis kommandoen feiler, endres ingenting.
 
 Avvik fra dokumentene og antakelser står i [AVVIK.md](AVVIK.md).
+
+## Maleplan: nye versjoner
+
+En godkjent planversjon endres aldri. En endring blir en ny versjon, og den forrige får `state = superseded`. Alle nye versjoner skrives av `writePlanVersion` i `src/data/plan-version.ts`, både når du lagrer «Rediger planen» (`savePlanVersion`) og når et forslag fra agenten godkjennes.
+
+- **Samme del i to versjoner:** delen den ble redigert fra (`from_element_id`), ellers samme type og samme navn. **Samme steg:** steget det ble redigert fra (`from_step_id`), ellers samme instruks i samme del. Regelen står i `matchVersion` i `src/domain/plan-versions.ts`.
+- **Det som følger med:** åpne avvik du ikke baker inn (kopieres, med `carried_from_id`), avkrysninger (`part_progress`) og gruppetall (`group_progress`).
+- **Det som ikke endres:** den gamle versjonens deler og steg, forseglede avvik og `paint_completion`.
+- Detaljene og hva som er antatt, står i avvik 42 i [AVVIK.md](AVVIK.md).
 
 ## Lagring: datamappen ~/Paintrest
 

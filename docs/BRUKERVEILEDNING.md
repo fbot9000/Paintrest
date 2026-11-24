@@ -44,7 +44,13 @@ Trykk på bildet eller navnet på et miniatyrkort. Da åpnes verkstedet for mini
     - Et forslag har en statuslinje øverst med «Godkjenn», «Rediger alt» og «Forkast». For en ny versjon står det hva som er endret, nye og endrede steg er markert, og du kan bytte til den gjeldende versjonen.
     - Du redigerer ett steg om gangen med «Rediger» (vises når du holder over steget), eller alt med «Rediger alt». Navn, flytting og sletting av deler ligger i «⋯»-menyen.
     - Paletten fra forslaget legges i Palett-fanen når du godkjenner, og redigeres der.
-    - Uten forslag vises den gjeldende planen.
+    - Uten forslag vises den gjeldende planen, med versjonsnummer og antall åpne avvik.
+    - **«Rediger planen»** gjør den godkjente planen om til et utkast du redigerer på samme måte som et forslag. «Lagre som versjon N» lagrer en ny versjon. Den forrige versjonen blir liggende uendret. «Avbryt» lagrer ingenting. Har planen fått en ny versjon mens du redigerte, kan du ikke lagre.
+    - **«Skriv planen selv»** står ved siden av «Lag maleplan med AI» når miniatyren ikke har noen plan. Malingene velger du fra katalogen.
+    - **Åpne avvik:** Har du endret noe i Painting Mode (byttet maling, endret instruks, ekstra steg, merknad), ser du avvikene øverst før en ny versjon lagres, både når du redigerer selv og når du godkjenner et forslag fra agenten. Kryss av for dem som skal bli en del av planen. Et byttet produkt byttes i steget, en endret instruks erstatter teksten, et ekstra steg legges til etter steget, og en merknad skrives på slutten av steget. Du ser det i utkastet og kan rette det. Fjerner du haken før du har endret noe annet, blir utkastet som før. Finner Paintrest ikke steget, står det, og du skriver det inn selv.
+    - Avvikene du ikke krysser av for, følger med til den nye versjonen. Avkrysninger («Delen er ferdig») og gruppetall følger med for delene som finnes i begge versjonene. En del du har gitt nytt navn i «Rediger planen», er fortsatt samme del.
+    - Hører et avvik til en del som ikke finnes i den nye versjonen, står det i Painting Mode under «Avvik for hele planen».
+    - Ferdigstillinger («Marker ferdig») og avvikene som ble lagret med dem, endres aldri.
   - **Palett:** malingene miniatyren males med, gruppert per del. Du kan legge til malinger, endre rolle og del, og fjerne rader.
 - **Bildekolonnen kan skjules** med ‹ øverst. Da står bare små bilder igjen, og valget huskes. «I planen» vises bare i Maleplan-fanen.
 - **Høyre: agenten og kildene.** I Maleplan-fanen vises kildene kort, og de planen bygger på står først. Her ser du hva agenten gjør akkurat nå, med «Stopp», og resultatet når den er ferdig. Under ligger alle kildene for spillet, både lagrede og funnet av agenten, med språk og norsk sammendrag. Trykk på en kilde for å hente bilder fra den. I Bilder-fanen merker du med «Viser figuren?» kilder som viser miniatyren. De står da først, og agenten åpner dem først.
@@ -64,7 +70,7 @@ Panelet til høyre i hvert prosjekt. Det bruker nøkkelen og standardmodellen fr
 - Agenten leser prosjektet, miniatyrene, maleplanene og malingene dine. Den kan lage nye miniatyrer (`catalog_subject`), endre miniatyrer (`catalog_change`), lage maleplaner (`paint_plan`) og foreslå bilder (`reference_selection`).
 - Agenten kan også foreslå en ny versjon av en godkjent plan (`plan_revision`), uten at du åpner planen for revisjon først (brukerbeslutning 10. november 2026, avvik 27 i [AVVIK.md](AVVIK.md)).
 - Hvert forslag godkjennes for seg i én transaksjon. Maling som ikke finnes i katalogen, må du koble til et produkt eller opprette som ubekreftet før planen kan godkjennes. Er planen endret siden forslaget ble laget, stopper godkjenningen.
-- Inne i prosjektet **endrer agenten direkte** når du skriver i panelet. Den kan lage, endre, dele, slå sammen og slette miniatyrer, og lage maleplaner med malinger som finnes i katalogen. Panelet viser «Agenten endret: …» med **Angre**, som fører hele runden tilbake. Har du endret det samme etterpå, sier angre fra i stedet for å overskrive.
+- Inne i prosjektet **endrer agenten direkte** når du skriver i panelet. Den kan lage, endre, dele, slå sammen og slette miniatyrer, og lage maleplaner med malinger som finnes i katalogen. En ny versjon av en plan med åpne avvik venter likevel på deg, slik at du velger hvilke avvik som skal bakes inn. Panelet viser «Agenten endret: …» med **Angre**, som fører hele runden tilbake. Har du endret det samme etterpå, sier angre fra i stedet for å overskrive.
 - Bildeutvalg og planer med malinger som ikke finnes i katalogen, venter på deg som forslag. «Godkjenn alle» godkjenner dem som ikke trenger valg.
 - Agenten kan ikke endre noe utenfor prosjektet. Forslag som prøver, avvises før de lagres, og panelet sier hvorfor.
 
