@@ -22,7 +22,7 @@ Målet er at du kan redigere en godkjent plan selv, og at en ny versjon aldri sk
 2. **O-14** Handleliste
 3. **O-15** Produktbilder: agenten finner, du velger
 4. **O-16** Malekjeder som oppskrifter
-5. **O-18** Handlelisten fra «Finn fram malingene» i Painting Mode, når O-1 er ferdig
+5. **O-18** Handlelisten fra «Finn fram malingene» i Painting Mode, når O-13 er ferdig
 
 ### Fredag: test mot de ekte tjenestene
 
@@ -188,8 +188,8 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-18 Handlelisten fra «Finn fram malingene» i Painting Mode
 
-- **Status:** ledig. Venter på O-1
-- **Avhenger av:** O-1 og O-14
+- **Status:** ledig. O-1 er ferdig, men venter til O-13 er ferdig, fordi begge endrer `src/features/painting/`
+- **Avhenger av:** O-1, O-13 og O-14
 - **Berører:** `src/features/painting/`
 - **I dag:** handlelisten finnes under «Malinger → Handleliste», men ikke i Painting Mode.
 - **Ferdig når:** «Finn fram malingene» har en knapp som setter malinger du ikke har, på handlelisten, eller viser dem der.
