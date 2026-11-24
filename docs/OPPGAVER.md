@@ -138,7 +138,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-9 Ubrukt kode i agentpanelet
 
-- **Status:** ledig. Løses av O-13
+- **Status:** pågår, sammen med O-13 (spor A: maleplanen, 24. november 2026)
 - **Avhenger av:** –
 - **Berører:** `src/features/agent/AgentPanel.tsx`
 - **I dag:** `revisePlan` og `suggestPlan` blir aldri kalt. `revisePlan` åpner planen som revisjonsmål og ber agenten om en ny versjon, nesten det O-13 trenger. Fjern det som ikke blir brukt.
@@ -167,7 +167,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-13 «Planen virker ikke» i Painting Mode
 
-- **Status:** ledig
+- **Status:** pågår (spor A: maleplanen, 24. november 2026)
 - **Avhenger av:** O-1 (begge endrer Painting Mode og planversjonene)
 - **Berører:** `src/features/painting/`, `src/features/agent/AgentPanel.tsx`, `src/features/workspace/`
 - **I dag:** finnes ikke. Kildedokumentene ønsket det (C2 i [kilder/VURDERING.md](kilder/VURDERING.md), spec §5, datamodell §14).
