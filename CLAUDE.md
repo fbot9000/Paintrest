@@ -33,7 +33,7 @@ Brukerens beslutninger går foran kildedokumentene. Kildedokumentene er historis
 
 ## Spør brukeren
 
-- før du tar en oppgave, så lenge rekkefølgen i OPPGAVER.md ikke er satt
+- før du tar en oppgave som ikke står i ukeplanen øverst i OPPGAVER.md
 - når noe er et produktvalg. Skriv svaret som en beslutning i `docs/beslutninger/`
 - før du sletter data, kode du ikke har skrevet, eller noe som ikke kan angres
 

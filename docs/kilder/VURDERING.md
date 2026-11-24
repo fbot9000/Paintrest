@@ -54,13 +54,13 @@ Kandidater, ikke oppgaver. «Ikke i koden» betyr at begrepet ikke finnes i `src
 
 | # | Ønske | Kilde | I dag |
 |---|---|---|---|
-| C1 | **Rediger en godkjent maleplan selv, og få en ny versjon.** Grunnkravet om full manuell kontroll (A1). | skjema §1, §6 «Maleplan» | Ikke bygget. Oppgave O-1 |
-| C2 | **«Planen virker ikke» i Painting Mode** åpner målrettet research for én plan. | spec §5, datamodell §14 | Ikke i koden |
-| C3 | **Handleliste** med prioritet (nødvendig, anbefalt, ønskeliste). Et kjøp registreres som eid. | spec §6C, datamodell §5, skjema `shopping_need` | Ikke i koden |
+| C1 | **Rediger en godkjent maleplan selv, og få en ny versjon.** Grunnkravet om full manuell kontroll (A1). | skjema §1, §6 «Maleplan» | Ikke bygget. Oppgave O-1, denne uka |
+| C2 | **«Planen virker ikke» i Painting Mode** åpner målrettet research for én plan. | spec §5, datamodell §14 | Ikke i koden. Oppgave O-13, denne uka |
+| C3 | **Handleliste** med prioritet (nødvendig, anbefalt, ønskeliste). Et kjøp registreres som eid. | spec §6C, datamodell §5, skjema `shopping_need` | Ikke i koden. Oppgave O-14, denne uka |
 | C4 | **«Maleklar»:** referanser, malinger og instrukser er avklart. Maling som ikke er kjøpt, vises som et eget tilgjengelighetsproblem. | spec §3 | Ikke i koden. Sonen «Ferdig» venter på en beslutning (avvik 28) |
 | C5 | **Import av malinger fra bilder** (hyllefoto), der bildene kan slettes etterpå. | spec §6C, datamodell §5 | Bare tekst og filer (CSV, xlsx, JSON, HTML) |
 | C6 | **Remiks av en oppskrift** til en ny farge uten å endre originalen. | spec §6B, datamodell §10 | Ikke i koden |
-| C7 | **Start fra én maling du eier** og finn shade, layer og highlight. | spec §6B, §8 | Ikke bygget. Oppgave O-5 |
+| C7 | **Start fra én maling du eier** og finn shade, layer og highlight. | spec §6B, §8 | Ikke bygget. Oppgave O-16, denne uka |
 | C8 | **Løft en teknikk eller oppskrift fra et prosjekt inn i biblioteket**, og hent metoder ut av figurbundne guider. | spec §6 | Prosjektoppgaver kan ikke foreslå bibliotekinnhold |
 | C9 | **Lagre en video nå, og «trekk ut metode» eller «lag oppskrift» senere.** | spec §4 | Videoer lagres som lenker, men det finnes ingen uttrekking |
 | C10 | **Prosjektpalett med omfang** (prosjekt, utvidelse, kategori) og **metoder for prosjektet.** | spec §3, datamodell §8 | Bare palett per miniatyr. `project_method` finnes bare som type. Oppgave O-3 |

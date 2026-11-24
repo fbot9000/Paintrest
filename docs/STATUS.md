@@ -39,4 +39,5 @@ Bitene kommer fra byggeplanen den første økta laget 9. november (README i «Pr
 - **Nettvernet er laget for en lokal maskin.** Det beskytter ikke mot DNS-rebinding, og passer ikke for en delt server.
 - **Hele tilstanden lagres i én fil.** Samtidige lagringer fra flere faner avvises i stedet for å slås sammen (avvik 29).
 - **Avvikene i [AVVIK.md](AVVIK.md) er ikke sjekket ett for ett mot kildedokumentene.** Dokumentene som helhet er vurdert i [kilder/VURDERING.md](kilder/VURDERING.md).
+- **En ny planversjon skjuler åpne avvik, avkrysninger og gruppetall i Painting Mode.** Det gjelder versjonene agenten lager. Dataene blir liggende, men vises ikke. Funnet ved å lese koden, ikke prøvd i appen. Rettes i O-1.
 - **Agenten oppdager ikke om en godkjent versjon er blitt nyere** mens den jobber. Hva den brukte, lagres (`context_ref`), men leses aldri.

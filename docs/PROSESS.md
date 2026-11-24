@@ -24,7 +24,7 @@ Har økta fått en egen branch (`claude/…`), kan du jobbe i den lokalt, men du
 
 ## 2. Ta en oppgave
 
-- Ta bare oppgaver med status `ledig`. Har brukeren satt en rekkefølge, ta den øverste ledige. Har brukeren ikke satt en rekkefølge, spør først.
+- Ta bare oppgaver med status `ledig`. Ta den øverste ledige i ukeplanen øverst i OPPGAVER.md, i et spor ingen andre jobber i. Står oppgaven ikke i ukeplanen, spør brukeren først.
 - Ikke ta en oppgave som berører de samme filene som en oppgave som pågår. Se «Berører».
 - Sett status til `pågår (hvem, dato)`. «Hvem» er tittelen på økta, eller lenken til den.
 - Commit og push det med en gang, før du begynner på selve arbeidet. Da ser de andre agentene at oppgaven er tatt.
