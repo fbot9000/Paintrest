@@ -177,6 +177,7 @@ Flere av punktene er skrevet av agenter som ikke hadde dokumentene (se avvik 33 
     - **Antatt av agenten:** Malinger med ukjent eierskap kommer også på listen, merket «Ukjent om du har den». Beslutningen sier «malinger du ikke eier». Ferdigmalte miniatyrer, slettede miniatyrer og slettede prosjekter teller ikke. Åpne avvik i Painting Mode (bytte av maling) teller ikke.
     - **En maling fra planene kan ikke fjernes fra listen**, bare få lavere prioritet, kjøpes eller settes som «Har». En maling du har lagt til selv, står til du kjøper eller fjerner den, også om du allerede har den (for eksempel for å kjøpe en ny flaske).
     - **«Kjøpt»** setter `inventory_entry` til `owns` med `ownership_source = purchase` og sletter `shopping_need` og koblingene til prosjekter, med `change_record`.
+    - **Fra «Finn fram malingene» (O-18, antatt av agenten):** én knapp legger alle malingene i listen som du mangler og som ikke står på handlelisten, som «nødvendig» for miniatyrens prosjekt (`origin = manual`). Det gjelder for eksempel byttet maling fra åpne avvik. Malinger planen allerede setter på listen, merkes «På handlelisten».
     - **Tilbakestill eksempeldata** beholder handlelisten, men ikke koblingene til de gamle prosjektene. **Slett for godt** fjerner malingen fra handlelisten.
 
 41. **BRUKERBESLUTNING 24. november 2026: produktbilder, agenten finner og du velger** ([beslutningen](beslutninger/2026-11-24-produktbilder-agenten-finner-du-velger.md), O-15).

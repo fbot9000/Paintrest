@@ -91,4 +91,20 @@ describe('handlelisten', () => {
     t = store.getTables();
     expect(names(t).map((r) => r[0])).not.toContain('Moot Green');
   });
+
+  it('fra «Finn fram malingene»: en maling planen ikke setter på listen, kan legges til for prosjektet (O-18)', async () => {
+    const { store, cmd } = await sampleStore();
+    const t0 = store.getTables();
+    const moot = shoppingList(t0).find((r) => r.product.name === 'Moot Green')!;
+    for (const p of moot.plans) {
+      const s = store.getTables().miniature_subject[p.subject_id]!;
+      await cmd.markFinished(p.subject_id, s.physical_count - s.finished_count);
+    }
+    expect(names(store.getTables()).map((r) => r[0])).not.toContain('Moot Green');
+    const project = moot.plans[0]!.project_id;
+    await cmd.addToShoppingList(moot.product.id, { priority: 'necessary', project_ids: [project] });
+    const row = shoppingList(store.getTables(), { project_id: project }).find((r) => r.product.id === moot.product.id)!;
+    expect(row).toMatchObject({ manual: true, priority: 'necessary', plans: [] });
+    expect(row.projects.map((p) => p.id)).toEqual([project]);
+  });
 });

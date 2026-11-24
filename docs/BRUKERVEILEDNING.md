@@ -208,6 +208,7 @@ Panelet viser hvert søk og hver side mens agenten jobber, og du kan stoppe den.
 - **Legg til selv:** «Legg til maling». Velg en maling fra samlingen, prioritet og eventuelt et prosjekt. Finnes den ikke i samlingen, legg den inn der først, gjerne som «Har ikke».
 - **Prioritet:** endres på raden, også for malinger fra planene.
 - **Filter per prosjekt:** vises når listen har malinger fra et prosjekt.
+- **Fra Painting Mode:** «Finn fram malingene» viser hvilke malinger du mangler som står på handlelisten. «Legg … på handlelisten» setter resten på listen som «nødvendig» for prosjektet, for eksempel en maling fra et åpent avvik eller til en ferdigmalt miniatyr. «Åpne handlelisten» tar deg dit.
 - **«Kjøpt»** setter malingen som din, og tar den av listen. **«Fjern»** finnes bare for malinger du har lagt til selv og som ingen plan trenger.
 
 ## Research til biblioteket

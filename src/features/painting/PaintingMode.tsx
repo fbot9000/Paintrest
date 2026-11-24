@@ -9,6 +9,7 @@ import { Link, useLocation, useParams } from 'react-router';
 import { useCommand, useView } from '../../app/context';
 import type { DeviationKind, Id, LocalDeviation, PaintProduct, Tables } from '../../domain/types';
 import { ownershipOf, paintingView, productList } from '../../domain/views';
+import { shoppingList } from '../../domain/shopping';
 import type { ElementView, MaterialView, PaintingView, StepView } from '../../domain/views';
 import { Logo } from '../../ui/Logo';
 import {
@@ -461,6 +462,13 @@ function ProductListDialog({ open, onClose, view, currentElement }:
   useEffect(() => { if (open) setScope(currentElement ? 'part' : 'all'); }, [open, currentElement]);
   const rows = productList(view, scope === 'part' && currentElement ? [currentElement.element.id] : undefined);
   const missing = rows.filter((r) => r.ownership !== 'owns').length;
+  // O-18: which of the paints you lack are on the shopping list, and one button for the rest.
+  const onList = useView((t) => new Set(shoppingList(t).map((r) => r.product.id)));
+  const toAdd = rows.filter((r) => r.ownership !== 'owns' && !onList.has(r.product.id));
+  const { run, error, clearError } = useCommand();
+  const addAll = () => run(async (c) => {
+    for (const r of toAdd) await c.addToShoppingList(r.product.id, { priority: 'necessary', project_ids: [view.subject.project_id] });
+  });
   return (
     <Dialog open={open} onClose={onClose} title="Finn fram malingene" wide footer={<Button variant="primary" onClick={onClose}>Lukk</Button>}>
       {currentElement && (
@@ -474,6 +482,15 @@ function ProductListDialog({ open, onClose, view, currentElement }:
       <p className="small muted">
         {rows.length} produkter{missing > 0 ? ` · ${missing} er ikke registrert som eid` : ''}. Byttet maling fra åpne avvik er tatt med.
       </p>
+      {missing > 0 && (
+        <div className="pm-shopping">
+          {toAdd.length > 0
+            ? <Button onClick={addAll}>Legg {toAdd.length === 1 ? 'den' : `de ${toAdd.length}`} som mangler på handlelisten</Button>
+            : <span className="small">Alle du mangler, står på handlelisten.</span>}
+          <Link className="small" to="/malinger/handleliste">Åpne handlelisten</Link>
+        </div>
+      )}
+      <ErrorNote error={error} onClose={clearError} />
       <ul className="pm-list">
         {rows.map((r) => (
           <li key={r.product.id}>
@@ -482,6 +499,7 @@ function ProductListDialog({ open, onClose, view, currentElement }:
               <ProductName product={r.product} />
               <span className="small muted">{r.element_names.join(', ')}</span>
             </div>
+            {r.ownership !== 'owns' && onList.has(r.product.id) && <Badge tone="neutral">På handlelisten</Badge>}
             <OwnershipFlag ownership={r.ownership} />
           </li>
         ))}

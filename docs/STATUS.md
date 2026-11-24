@@ -30,7 +30,7 @@ Bitene kommer fra byggeplanen den første økta laget 9. november (README i «Pr
 | 8 Simulert agent | Trolig overtatt. Den var planlagt 9. november, før det fantes AI i appen. Nå finnes en ekte agent (raden «Agent og verksted») | – |
 | Agent og verksted | Agentpanelet, miniatyrverkstedet, bildejakt i tre faser, kartlegging av spillet og maleplan med AI | – |
 | Malingssamlingen | Søk og filtre (eierskap, produsent og type, med typene ink, dry og air), legg til en og en (med «Fyll ut med AI»), rediger, skjul og slett for godt, fjern eksempelmalingene, import av en liste eller fil med AI, produktbilder (agenten finner, du velger), og malekjeder som oppskrifter, med oppskriftene malingen er med i | – |
-| Handleliste | Malinger du ikke har fra godkjente planer, og dem du legger til selv. Prioritet, filter per prosjekt og «Kjøpt». Under «Malinger → Handleliste» | Knappen i «Finn fram malingene» i Painting Mode (O-18) |
+| Handleliste | Malinger du ikke har fra godkjente planer, og dem du legger til selv. Prioritet, filter per prosjekt og «Kjøpt». Under «Malinger → Handleliste», og fra «Finn fram malingene» i Painting Mode | – |
 | Lagring | Paintrest-serveren og datamappen `~/Paintrest`, med revisjon og sikkerhetskopier. Uten server: IndexedDB i nettleseren. Se [ARKITEKTUR.md](ARKITEKTUR.md) | Ekte database |
 
 ## Kjente risikoer
