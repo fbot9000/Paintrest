@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { createLocalCommands } from './local-commands';
+import { createResearchCommands } from './research-commands';
 import { memoryPersistence } from './persistence';
 import { buildSampleData } from './seed';
 import { Store, emptyTables } from './store';
 import type { ImportPaintInput } from '../domain/commands';
 import type { PaintDiscussResult, PaintReadResult, PaintWire } from '../domain/ai';
 import {
-  addReadResult, applyDiscussResult, chunkRequest, editRow, findProduct, importInputs, kindsIn, newDraft, paintRows, usageDetail,
+  addReadResult, applyDiscussResult, chunkRequest, editRow, chainPrompt, findProduct, importInputs, kindsIn, newDraft, recipesWithPaint, paintRows, usageDetail,
   breakLongLine, planChunks, plannedImport, productUsage, rowsWithoutAi, sampleProducts, splitCells, splitLines, tableForAi, uncoveredLines,
 } from '../domain/paints';
 import type { ImportDraft } from '../domain/paints';
@@ -348,6 +349,36 @@ describe('produktbilde (O-15)', () => {
     await expect(cmd.setProductImage(id, new Blob(['z'], { type: 'image/png' }), { ...src, page_url: 'javascript:x' })).rejects.toThrow(/nettadresse/);
     await cmd.setProductImage(id, null);
     expect(store.getTables().paint_product[id]).toMatchObject({ image_file_id: null, image_source: null });
+  });
+});
+
+describe('malekjeder (O-16)', () => {
+  it('malingen viser oppskriftene den er med i, med rollen; slettede oppskrifter teller ikke', async () => {
+    const { store, cmd } = await sampleStore(true);
+    const t = store.getTables();
+    const used = Object.values(t.recipe_paint)[0]!;
+    const list = recipesWithPaint(t, used.product_id);
+    expect(list.map((r) => r.recipe.id)).toContain(used.recipe_id);
+    expect(list.find((r) => r.recipe.id === used.recipe_id)!.role).toBe(used.role);
+    await cmd.deleteRecipe(used.recipe_id);
+    expect(recipesWithPaint(store.getTables(), used.product_id).map((r) => r.recipe.id)).not.toContain(used.recipe_id);
+  });
+
+  it('ber om en kjede rundt malingen, med malingsvalget', () => {
+    const p = { manufacturer: 'Vallejo', range_name: 'Model Air', name: 'Black', product_code: '71.057' } as PaintProduct;
+    expect(chainPrompt(p, 'owned')).toContain('«Vallejo · Model Air · Black» (71.057)');
+    expect(chainPrompt(p, 'owned')).toContain('Bruk bare malinger jeg har');
+    expect(chainPrompt(p, 'best')).toContain('også dem jeg ikke har');
+  });
+
+  it('en malekjede er en researchoppgave for en oppskrift, med malingsvalget', async () => {
+    const p = memoryPersistence();
+    const store = new Store(await buildSampleData(p), p);
+    const research = createResearchCommands(store);
+    const task = await research.startKnowledgeTask('recipe', { paint_choice: 'best' });
+    const t = store.getTables();
+    expect(t.task_scope[task]).toMatchObject({ area_kind: 'new_knowledge', paint_choice: 'best' });
+    expect(t.task_result_type.filter((r) => r.task_id === task).map((r) => r.result_type)).toEqual(['recipe']);
   });
 });
 

@@ -196,6 +196,11 @@ Flere av punktene er skrevet av agenter som ikke hadde dokumentene (se avvik 33 
     - **Agentens versjoner:** En ny versjon av en plan med åpne avvik tas ikke i bruk direkte i agentpanelet (avvik 27), men venter som forslag, så brukeren kan velge. Agenten får de åpne avvikene i konteksten (`plan.open_deviations`), og instruksen ber den beholde navnene på delene og teksten i stegene den ikke endrer.
     - **Eksakte produkter:** En plan brukeren skriver i Paintrest, peker på produktet med id (`ProductRef.product_id`, ikke i skjemaet), også når produktet er skjult fra katalogen. Agentens referanser har ikke id og matches på navn som før.
     - **Testing:** Enhetstester i `src/data/plan-version.test.ts` og `src/features/workspace/DeviationChoice.test.ts`. Flyten er prøvd i nettleseren (Playwright mot den lokale serveren): legg til maling i en plan, avvik i Painting Mode, bak inn ett avvik, gi en del nytt navn, fjern en del, og skriv en ny plan selv. Agentens forslag med åpne avvik er bare prøvd i enhetstester, ikke mot UiB.
+43. **BRUKERBESLUTNING 24. november 2026: en malekjede er en oppskrift** ([beslutningen](beslutninger/2026-11-24-malekjeder-er-oppskrifter.md), O-16).
+    - **Ingen ny datatype.** «Lag malekjede med AI» på en maling starter en vanlig research til biblioteket for én oppskrift (`startKnowledgeTask('recipe')`), med malingsvalget `owned` («Bare det jeg har») eller `best` («Beste valg»). Første melding ber om en fargerekke med shade, base, layer og highlight der malingen er med (`chainPrompt` i `src/domain/paints.ts`). Utkastet blir en oppskrift når du lagrer det, som annen research.
+    - **Antatt av agenten:** at det holder å be om kjeden i meldingen. Agenten får ingen egen instruks for malekjeder, og ingenting sjekker at malingen faktisk er med i utkastet. Du ser det i utkastet før du lagrer.
+    - **Oppskriftene malingen er med i** regnes ut fra `recipe_paint` (`recipesWithPaint`). Slettede oppskrifter er ikke med.
+    - **Testing:** Ikke testet mot UiB. Flyten er kjørt i nettleseren mot en simulert modell: knappen, researchen, utkastet, «Lagre i biblioteket» og listen over oppskrifter på malingen.
 
 ## Antakelser
 

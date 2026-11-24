@@ -198,3 +198,9 @@
 .product-image-info { display: grid; gap: 6px; flex: 1 1 240px; }
 .product-image-info a { color: var(--fore); }
 .product-image-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+/* Oppskrifter og malekjeder (O-16) */
+.paint-chains { display: grid; gap: 8px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.paint-chains ul { margin: 0; padding-left: 18px; display: grid; gap: 2px; }
+.paint-chains a { color: var(--fore); }
+.paint-chains-start { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }

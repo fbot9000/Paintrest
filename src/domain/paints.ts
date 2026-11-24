@@ -6,7 +6,7 @@
  */
 import type { PaintChangeWire, PaintQuestionWire, PaintReadResult, PaintDiscussResult, PaintWire } from './ai';
 import type { ImportPaintInput } from './commands';
-import type { Id, Ownership, PaintProduct, ProductKind, Tables } from './types';
+import type { Id, MaterialRole, Ownership, PaintProduct, ProductKind, Recipe, Tables } from './types';
 import { ownershipOf } from './views';
 
 export const PRODUCT_KINDS: ProductKind[] = ['primer', 'base', 'layer', 'shade', 'contrast', 'technical', 'metallic', 'ink', 'dry', 'air', 'medium', 'other'];
@@ -799,4 +799,26 @@ export function rowsWithoutAi(lines: string[]): Omit<ImportRow, 'key'>[] {
     });
   }
   return filled.map(({ n, l }) => ({ ...empty([n]), name: l.replace(/^\s*(?:[-*•·]|\d+[.)])\s*/, '').trim() })).filter((r) => r.name);
+}
+
+// ---------- Malekjeder (O-16) ----------
+
+/** The library recipes the paint is in, with its role there, sorted by name. Deleted recipes are left out. */
+export function recipesWithPaint(t: Tables, product_id: Id): { recipe: Recipe; role: MaterialRole | null }[] {
+  const out = new Map<Id, { recipe: Recipe; role: MaterialRole | null }>();
+  for (const rp of Object.values(t.recipe_paint)) {
+    if (rp.product_id !== product_id) continue;
+    const recipe = t.recipe[rp.recipe_id];
+    if (!recipe || recipe.deleted_at || out.has(recipe.id)) continue;
+    out.set(recipe.id, { recipe, role: rp.role });
+  }
+  return [...out.values()].sort((a, b) => a.recipe.name.localeCompare(b.recipe.name, 'nb'));
+}
+
+/** What the agent is asked for when you want a paint chain around one paint. */
+export function chainPrompt(p: PaintProduct, choice: 'owned' | 'best'): string {
+  const name = `«${paintLabel(p)}»${p.product_code ? ` (${p.product_code})` : ''}`;
+  return `Lag en malekjede rundt ${name}: en fargerekke med shade, base, layer og highlight, der denne malingen er med i rollen den passer best til. `
+    + 'Gi hver maling rollen sin, og si kort hvordan kjeden brukes. '
+    + (choice === 'owned' ? 'Bruk bare malinger jeg har.' : 'Velg malingene som gir best resultat, også dem jeg ikke har, og si hvilke jeg ikke har.');
 }

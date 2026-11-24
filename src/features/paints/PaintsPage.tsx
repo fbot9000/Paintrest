@@ -10,6 +10,7 @@ import { EMPTY_PAINT, PaintForm, valueOf } from './PaintForm';
 import type { PaintValue } from './PaintForm';
 import { useImport } from './importStore';
 import { ProductImageField } from './ProductImageField';
+import { PaintChains } from './PaintChains';
 import { shoppingList } from '../../domain/shopping';
 import './paints.css';
 
@@ -163,6 +164,7 @@ export function PaintsPage() {
                       <li key={r.product.id} className={editing === r.product.id ? 'open' : ''}>
                         {editing === r.product.id ? (<>
                           <ProductImageField productId={r.product.id} />
+                          <PaintChains productId={r.product.id} />
                           <PaintForm mode="edit" productId={r.product.id} initial={valueOf(r.product, r.ownership)}
                             onCancel={() => setEditing(null)}
                             onDelete={async () => { if (await run(async (c) => { await c.deleteProduct(r.product.id); return true; })) setEditing(null); }}
