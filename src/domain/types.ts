@@ -78,6 +78,34 @@ export interface InventoryEntry {
   updated_at: Timestamp;
 }
 
+// ---------- Handleliste (skjema §6 shopping_need, O-14) ----------
+
+export type ShoppingPriority = 'necessary' | 'recommended' | 'wishlist';
+
+/**
+ * One row per paint on the shopping list. Paints you do not own that approved
+ * plans use are on the list without a row; a row exists when you added the paint
+ * yourself (`manual`) or changed the priority of a paint from a plan (`plan`).
+ */
+export interface ShoppingNeed {
+  id: Id;
+  workspace_id: Id;
+  /** Unique per workspace. */
+  product_id: Id;
+  priority: ShoppingPriority;
+  note: string | null;
+  /** PROTOTYPE: `manual` = you added it; `plan` = only a priority for a paint the plans need. Not in skjema. */
+  origin: 'manual' | 'plan';
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+/** The projects you added a paint for (skjema §6 shopping_need_project). Plan needs get their projects from the plans. */
+export interface ShoppingNeedProject {
+  need_id: Id;
+  project_id: Id;
+}
+
 // ---------- Spill og prosjekt ----------
 
 export type Origin = 'manual' | 'bgg';
@@ -524,6 +552,8 @@ export interface Tables {
   stored_file: Record<Id, StoredFile>;
   paint_product: Record<Id, PaintProduct>;
   inventory_entry: InventoryEntry[];
+  shopping_need: Record<Id, ShoppingNeed>;
+  shopping_need_project: ShoppingNeedProject[];
   game: Record<Id, Game>;
   expansion: Record<Id, Expansion>;
   project: Record<Id, Project>;
@@ -707,4 +737,4 @@ export interface ContextRef {
   captured_at: Timestamp;
 }
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;

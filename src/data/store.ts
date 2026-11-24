@@ -33,6 +33,8 @@ export function emptyTables(): Tables {
     stored_file: {},
     paint_product: {},
     inventory_entry: [],
+    shopping_need: {},
+    shopping_need_project: [],
     game: {},
     expansion: {},
     project: {},
@@ -96,6 +98,10 @@ export function migrate(s: DbState | undefined): DbState | undefined {
   if (state.schema_version === 4) {
     // v5: the library (technique, recipe and their rows). New tables start empty.
     state = { ...state, schema_version: 5, tables: { ...emptyTables(), ...state.tables } };
+  }
+  if (state.schema_version === 5) {
+    // v6: the shopping list (shopping_need, shopping_need_project). New tables start empty.
+    state = { ...state, schema_version: 6, tables: { ...emptyTables(), ...state.tables } };
   }
   return state.schema_version === SCHEMA_VERSION ? state : undefined;
 }

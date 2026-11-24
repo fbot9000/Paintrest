@@ -770,6 +770,11 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
           delete t.recipe_paint[r.id];
         }
         t.inventory_entry = t.inventory_entry.filter((e) => !ids.has(e.product_id));
+        for (const n of Object.values(t.shopping_need)) {
+          if (!ids.has(n.product_id)) continue;
+          t.shopping_need_project = t.shopping_need_project.filter((l) => l.need_id !== n.id);
+          delete t.shopping_need[n.id];
+        }
         for (const pid of touchedProjects) { const p = t.project[pid]; if (p) p.content_revision++; }
         for (const id of ids) {
           delete t.paint_product[id];
@@ -965,6 +970,12 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
       state.tables.inventory_entry = old.inventory_entry
         .filter((e) => state.tables.paint_product[e.product_id])
         .map((e) => ({ ...e, workspace_id: ws }));
+      // The shopping list belongs to the collection; links to the old projects go.
+      for (const n of Object.values(old.shopping_need)) {
+        if (state.tables.paint_product[n.product_id]) state.tables.shopping_need[n.id] = { ...n, workspace_id: ws };
+      }
+      state.tables.shopping_need_project = old.shopping_need_project
+        .filter((l) => state.tables.shopping_need[l.need_id] && state.tables.project[l.project_id]);
       // Their history comes along too (it also tells them apart from sample paints).
       for (const r of Object.values(old.change_record)) {
         if (state.tables.paint_product[r.target_id]) state.tables.change_record[r.id] = { ...r, workspace_id: ws };

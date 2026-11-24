@@ -217,7 +217,7 @@ describe('migrering til v5', () => {
     const tables = { ...s.tables } as Partial<typeof s.tables>;
     for (const k of ['technique', 'technique_step', 'technique_experience', 'recipe', 'recipe_paint', 'recipe_step'] as const) delete tables[k];
     const m = migrate({ ...s, schema_version: 4, tables: tables as typeof s.tables })!;
-    expect(m.schema_version).toBe(5);
+    expect(m.schema_version).toBe(SCHEMA_VERSION);
     expect(m.tables.technique).toEqual({});
     expect(m.tables.recipe_paint).toEqual({});
     expect(m.tables.project).toEqual(s.tables.project);
@@ -229,5 +229,19 @@ describe('migrering til v5', () => {
     const id = await cmd.createTechnique();
     const patches = diffTables(before, store.getTables());
     expect(patches.some((p) => p.table === 'technique' && p.key === id)).toBe(true);
+  });
+});
+
+describe('migrering til v6', () => {
+  it('legger til tomme tabeller for handlelisten og beholder alt annet', async () => {
+    const s = await buildSampleData(memoryPersistence(), { examplePaints: true });
+    const tables = { ...s.tables } as Partial<typeof s.tables>;
+    delete tables.shopping_need;
+    delete tables.shopping_need_project;
+    const m = migrate({ ...s, schema_version: 5, tables: tables as typeof s.tables })!;
+    expect(m.schema_version).toBe(6);
+    expect(m.tables.shopping_need).toEqual({});
+    expect(m.tables.shopping_need_project).toEqual([]);
+    expect(m.tables.paint_product).toEqual(s.tables.paint_product);
   });
 });
