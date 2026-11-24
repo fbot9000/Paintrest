@@ -36,6 +36,7 @@ Har økta fått en egen branch (`claude/…`), kan du jobbe i den lokalt, men du
 - Små commits, som hver for seg går gjennom testene. Commit-meldingen er på norsk, og første linje sier hva som er endret.
 - Hold deg til oppgaven. Ser du noe annet som bør gjøres, legg det til i OPPGAVER.md som en ny oppgave.
 - Er noe et produktvalg, spør brukeren. Skriv svaret som en beslutning (se steg 5).
+- Bryter arbeidet med et prinsipp i del A av [kilder/VURDERING.md](kilder/VURDERING.md), spør brukeren før du gjør det. Kildedokumentene er historisk grunnlag. Bruk dem til å forstå intensjonen, men følg beslutningene når de sier noe annet.
 - Ny oppførsel får tester.
 
 ## 4. Sjekk

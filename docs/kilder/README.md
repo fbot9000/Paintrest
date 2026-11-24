@@ -1,16 +1,18 @@
 # Kildedokumentene
 
-Disse dokumentene beskriver hva Paintrest skal være. Brukeren ga dem til den første økta 9. november 2026 som vedlegg, men de ble aldri lagt i repoet. **De mangler her ennå** (oppgave B-4 i [OPPGAVER.md](../OPPGAVER.md)).
+Det opprinnelige grunnlaget for Paintrest, fra 8. og 9. november 2026. **Historisk grunnlag, ikke fasit:** løsningen har utviklet seg siden, og dokumentene oppdateres ikke ([beslutningen](../beslutninger/2026-11-24-kildedokumentene-er-historisk-grunnlag.md)).
 
-| Fil | Navnet i koden og dokumentene | Her |
+**Les [VURDERING.md](VURDERING.md) først.** Den viser hva som fortsatt ser ut til å gjelde, hva som er overtatt av beslutninger, og hva som er ønsket, men ikke bygget.
+
+| Fil | Opprinnelig filnavn | Navnet i koden og dokumentene |
 |---|---|---|
-| `Paintrest – hovedkonsept.md` | «produktspesifikasjon v2.0», «spec §N» | mangler |
-| `Paintrest – datamodell.md` | «datamodell v3», «datamodell v3 §N» | mangler |
-| `Paintrest – databaseskjema og arkitektur.md` | «skjema §N» | mangler |
+| [produktspesifikasjon-v2.0.md](produktspesifikasjon-v2.0.md) | `Paintrest – hovedkonsept.md` | «produktspesifikasjon v2.0», «spec §N» |
+| [datamodell-v3.md](datamodell-v3.md) | `Paintrest – datamodell.md` | «datamodell v3 §N» |
+| [databaseskjema-og-arkitektur.md](databaseskjema-og-arkitektur.md) | `Paintrest – databaseskjema og arkitektur.md` | «skjema §N» |
 
-Koblingen mellom filnavnene og navnene i koden kommer fra den første økta. Den omtalte filene som «produktspesifikasjon v2.0, datamodell v3 og databaseskjema». At «hovedkonsept» er produktspesifikasjonen, er en slutning fra det. Ingen fil heter «produktspesifikasjon».
+Teksten er uendret. Bare en merknad om status er lagt til øverst.
 
-Når filene er lagt her, skal de gjennomgås mot koden (oppgave O-11). Brukerens beslutninger i [beslutninger/](../beslutninger/) går foran dem.
+Spesifikasjonen nevner også en designbrief for de første konseptskissene (§10). Den er ikke i repoet.
 
 ## Figma
 

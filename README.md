@@ -41,7 +41,7 @@ Hvert tema har ett dokument. Står noe to steder, er det en feil.
 | [docs/OPPGAVER.md](docs/OPPGAVER.md) | Hva som skal gjøres, og hvem som gjør det |
 | [docs/STATUS.md](docs/STATUS.md) | Hva som er bygget, hva som er sjekket, og kjente risikoer |
 | [docs/beslutninger/](docs/beslutninger/) | Brukerens beslutninger, én fil per beslutning |
-| [docs/kilder/](docs/kilder/) | Kildedokumentene: produktspesifikasjon, datamodell og databaseskjema |
+| [docs/kilder/](docs/kilder/README.md) | Det opprinnelige grunnlaget (produktspesifikasjon, datamodell og databaseskjema), og en vurdering av hva som fortsatt gjelder. Historisk grunnlag, ikke fasit |
 | [docs/AVVIK.md](docs/AVVIK.md) | Hvor prototypen avviker fra kildedokumentene, og antakelser som ikke er bekreftet |
 | [docs/BRUKERVEILEDNING.md](docs/BRUKERVEILEDNING.md) | Slik virker appen |
 | [docs/ARKITEKTUR.md](docs/ARKITEKTUR.md) | Kodestruktur, lagring og AI-nøkkel |

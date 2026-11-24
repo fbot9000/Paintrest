@@ -15,12 +15,14 @@ Gjelder alle økter, også når flere agenter jobber samtidig. Les [docs/PROSESS
 | Hva skal gjøres, og hvem gjør det? | [docs/OPPGAVER.md](docs/OPPGAVER.md) |
 | Hva er bygget? | [docs/STATUS.md](docs/STATUS.md) |
 | Hva har brukeren bestemt? | [docs/beslutninger/](docs/beslutninger/) |
-| Hva skal produktet være? | [docs/kilder/](docs/kilder/) |
+| Hva var den opprinnelige tanken, og hvilke prinsipper bør vi holde fast ved? | [docs/kilder/VURDERING.md](docs/kilder/VURDERING.md), og dokumentene i [docs/kilder/](docs/kilder/README.md) |
 | Hvor avviker koden fra kildedokumentene? | [docs/AVVIK.md](docs/AVVIK.md) |
 | Hvordan virker appen? | [docs/BRUKERVEILEDNING.md](docs/BRUKERVEILEDNING.md) |
 | Hvordan er koden bygd opp? | [docs/ARKITEKTUR.md](docs/ARKITEKTUR.md) |
 
-Koden og testene er fasiten for hva som finnes. Motsier et dokument koden, er dokumentet feil: rett det i samme push. En beslutning fra brukeren går foran kildedokumentene.
+Koden og testene er fasiten for hva som finnes. Motsier et dokument koden, er dokumentet feil: rett det i samme push.
+
+Brukerens beslutninger går foran kildedokumentene. Kildedokumentene er historisk grunnlag fra 8. og 9. november 2026, ikke krav. Bruk dem til å forstå intensjonen, og endre dem aldri. Vil du gjøre noe som bryter med et prinsipp i del A av VURDERING.md, spør brukeren først.
 
 ## Arbeidsflyt
 

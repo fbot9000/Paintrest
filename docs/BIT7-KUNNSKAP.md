@@ -15,6 +15,8 @@ Dokumentet bygger på fire kilder. Det står hvilken kilde hvert punkt kommer fr
 
 Produktspesifikasjon v2.0, datamodell v3 og «databaseskjema og arkitektur» har jeg **ikke** sett. Står det noe annet der, må dokumentet rettes.
 
+*Tillegg 24. november 2026:* dokumentene ligger nå i [kilder/](kilder/README.md). De har versjoner av teknikker og oppskrifter, men beslutningen 11. november går foran (se del B i [kilder/VURDERING.md](kilder/VURDERING.md)).
+
 ## Beslutninger 11. november 2026 [Beslutning]
 
 1. **Ikke for rigid.** I første versjon kan oppskrifter endres direkte. Om de skal låses, vurderes senere.

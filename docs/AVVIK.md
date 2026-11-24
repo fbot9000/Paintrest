@@ -2,9 +2,9 @@
 
 Brukerens beslutninger står i [beslutninger/](beslutninger/), én fil per beslutning. Grunnreglene for agentens frihet står i [beslutninger/2026-11-10-grunnregler-for-agentens-frihet.md](beslutninger/2026-11-10-grunnregler-for-agentens-frihet.md). Punktene merket BRUKERBESLUTNING under viser hva beslutningen betyr i koden.
 
-Kildedokumentene ([kilder/](kilder/README.md)) er førende, men brukerens beslutninger går foran dem. Denne listen viser hvor prototypen gjør et valg dokumentene ikke tar, eller avviker fra dem. Hvert punkt bør avgjøres før koden mot den ekte databasen skrives.
+Denne listen viser hvor prototypen gjør et valg [kildedokumentene](kilder/README.md) ikke tar, eller avviker fra dem. Dokumentene er historisk grunnlag, ikke fasit, så et avvik er ikke en feil i seg selv ([beslutningen](beslutninger/2026-11-24-kildedokumentene-er-historisk-grunnlag.md)). Hvert punkt bør likevel avgjøres før koden mot den ekte databasen skrives.
 
-**Kildedokumentene ligger ikke i repoet ennå.** Flere av punktene er skrevet av agenter som ikke hadde dem (se avvik 33 og [BIT7-KUNNSKAP.md](BIT7-KUNNSKAP.md)). Punktene er derfor ikke sjekket mot dokumentene (oppgave O-11 i [OPPGAVER.md](OPPGAVER.md)).
+Flere av punktene er skrevet av agenter som ikke hadde dokumentene (se avvik 33 og [BIT7-KUNNSKAP.md](BIT7-KUNNSKAP.md)), og punktene er ikke sjekket ett for ett mot dem. Vurderingen av dokumentene som helhet står i [kilder/VURDERING.md](kilder/VURDERING.md).
 
 **Numrene er rettet 24. november 2026.** To punkter het 29, og to het 30. Punktene om biblioteket og om malingsvalget heter nå 33 og 34, og punktene som het 33–36, heter nå 35–38. Punktet om bilde og fakta for spillet, som het 37, heter nå 39. Henvisningene i listen er rettet.
 
@@ -48,7 +48,7 @@ Kildedokumentene ([kilder/](kilder/README.md)) er førende, men brukerens beslut
       - En ny planversjon stopper hvis planen er endret siden forslaget ble laget.
       - Sletting skjuler bare, og miniatyren kan gjenopprettes. Deling og sammenslåing lager nye miniatyrer og skjuler originalene.
       - Agenten kan ikke røre noe utenfor arbeidsprosjektet: andre prosjekter, malingskatalogen (nye malinger krever fortsatt brukerens valg) eller biblioteket.
-    - **Dokumentene bør oppdateres:** «Paintrest – databaseskjema og arkitektur» §3 og §7, og datamodell v3 §12.
+    - **Avviker fra:** «Paintrest – databaseskjema og arkitektur» §3 og §7, og datamodell v3 §12.
 28. **BRUKERBESLUTNING 10. november 2026: agenten endrer direkte, med angre.** ([beslutningen](beslutninger/2026-11-10-agenten-endrer-direkte-med-angre.md)) Det er tre soner:
     - **Åpen:** alt i arbeidsprosjektet. I runder fra agentpanelet tar Paintrest agentens endringer i bruk med en gang: nye, endrede, delte, sammenslåtte og slettede miniatyrer, og maleplaner der alle malingene finnes i katalogen. Hver runde blir ett endringssett (`agent_change_set`, ny tabell i v4). Endringssettet lagrer før- og etterbildet av hver rad som ble endret, og «Angre» fører alt tilbake samlet. Angre nektes uten å endre noe hvis en rad er endret etterpå. Forslagene ligger igjen som logg (`change_set_id`), og `change_record` skrives som før, med `undo` ved angre.
     - **Ferdig:** ikke i bruk ennå. Brukeren har sagt at ingenting er ferdig foreløpig. Hva som skal gjøre noe ferdig og låst (for eksempel «maleklar», at malingen er i gang, eller at katalogen er ferdig), avgjøres senere.
@@ -56,7 +56,7 @@ Kildedokumentene ([kilder/](kilder/README.md)) er førende, men brukerens beslut
     
     Bildeutvalg og planer med malinger som ikke finnes i katalogen, er fortsatt forslag. Det samme gjelder runder brukeren starter fra en egen visning (bildejakt og maleplan), der brukeren går gjennom forslaget der.
     
-    Dette avviker fra datamodell v3 §3, §12 og §13, og fra skjema §2 og §8, der agenten aldri skriver kanoniske data uten godkjenning. Dokumentene bør oppdateres.
+    Dette avviker fra datamodell v3 §3, §12 og §13, og fra skjema §2 og §8, der agenten aldri skriver kanoniske data uten godkjenning.
 29. **BRUKERBESLUTNING 10. november 2026: dataene ligger i en fast datamappe, `~/Paintrest`.** ([beslutningen](beslutninger/2026-11-10-fast-datamappe.md)) Paintrest-serveren eier dataene: `data.json` (hele tilstanden, med revisjonsnummer), `files/` (bildene) og `backups/` (de 30 siste kopiene). Nøklene kopieres hit fra `.paintrest-data/`. Dette er et filbasert mellomsteg før en ekte database, og det har tre følger:
     - **Hele tilstanden lagres hver gang.** Skjemaets tabeller og radformat er de samme, så overgangen til SQLite eller PostgreSQL blir en flytting av rader, ikke en ny modell. Valget av database og tilgang fra iPad utenfor maskinen er ikke tatt.
     - **Samtidighet med revisjon, ikke sammenslåing.** En lagring som bygger på en gammel revisjon, avvises (409), og appen ber brukeren laste inn på nytt. Endringer fra den fanen etter konflikten lagres ikke. Skjemaets `content_revision` per rad er uendret.
@@ -89,7 +89,7 @@ Kildedokumentene ([kilder/](kilder/README.md)) er førende, men brukerens beslut
       - Det er ikke testet mot UiB. Testene bruker en simulert modell og simulerte serversvar.
     - **Erfaring (7.3):** Erfaring kan registreres uten å velge miniatyr. Feltet `subject_id` finnes, men skjermen bruker det ikke ennå. Avkryssing av steg i verkstedguiden lagres ikke.
     - **Hovednavigasjon (7.1):** Toppfeltet har «Prosjekter», «Malinger» (fra 11.11.2026) og «Bibliotek». Skissene har også «Research» i toppfeltet, men den finnes ikke der ennå. Research til biblioteket ligger under «Bibliotek» (`/bibliotek/research`). På smale skjermer vises bare logoen, uten navnet.
-    - **Dokumentene bør oppdateres:** datamodell v3 og skjema §6 om teknikk og oppskrift. Dokumentene er ikke lest, så det er ikke kjent hvor mye dette avviker fra dem.
+    - **Avviker fra:** datamodell v3 §10 og skjema §6 «Kunnskap», der teknikker og oppskrifter har versjoner som ikke endres etter godkjenning. Se del B i [kilder/VURDERING.md](kilder/VURDERING.md).
 
 34. **BRUKERBESLUTNING 11. november 2026: du velger malingene selv.** ([beslutningen](beslutninger/2026-11-11-du-velger-malingene-selv.md)) Om agenten skal holde seg til malinger du har, er et valg du tar aktivt. Det skal ikke skje i det skjulte.
     - **Instruksene** har ikke lenger «foretrekk malinger brukeren eier». Har du ikke valgt, skal agenten velge det som passer best og si hvilke malinger du ikke har. Den skal ikke la eierstatus styre valget.

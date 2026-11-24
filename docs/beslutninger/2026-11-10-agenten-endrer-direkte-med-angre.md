@@ -15,4 +15,4 @@ Bildeutvalg, planer med malinger som ikke finnes i katalogen, og runder fra bild
 
 ## Detaljer
 
-Avvik 28 i [AVVIK.md](../AVVIK.md). Kildedokumentene bør oppdateres: datamodell v3 §3, §12 og §13, og skjema §2 og §8.
+Avvik 28 i [AVVIK.md](../AVVIK.md). Avviker fra datamodell v3 §3, §12 og §13, og fra skjema §2 og §8. Kildedokumentene endres ikke ([beslutningen](2026-11-24-kildedokumentene-er-historisk-grunnlag.md)).

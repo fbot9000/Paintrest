@@ -16,4 +16,4 @@ Mens et prosjekt settes opp, kan agenten foreslå å lage, endre, dele, slå sam
 
 ## Detaljer
 
-Avvik 27 i [AVVIK.md](../AVVIK.md). Kildedokumentene bør oppdateres: skjema §3 og §7, og datamodell v3 §12.
+Avvik 27 i [AVVIK.md](../AVVIK.md). Avviker fra skjema §3 og §7, og fra datamodell v3 §12. Kildedokumentene endres ikke ([beslutningen](2026-11-24-kildedokumentene-er-historisk-grunnlag.md)).

@@ -19,19 +19,19 @@ I tillegg: skal siden «Komponenter» i Figma-fila slettes, eller skal skissene 
 
 ### B-2 Slett de gamle branchene på GitHub
 
-Skymiljøet får ikke slette brancher (proxyen svarer 403). Alt som var i dem, er i `main`. Slett dem på https://github.com/fbot9000/Paintrest/branches, eller fra en lokal klone:
-
-```bash
-git push origin --delete claude/adoring-wright-d5383x claude/bold-darwin-8732cf claude/sharp-planck-hr0cfy claude/sleepy-edison-qoxnst claude/nifty-planck-eab6ne claude/modest-thompson-2z6s58
-```
+**Ferdig** 24. november 2026. Bare `main` står igjen.
 
 ### B-3 Prioriter oppgavene under
 
-Sett rekkefølgen, eller si hvilke som skal gjøres denne uka.
+Sett rekkefølgen, eller si hvilke som skal gjøres denne uka. Si også hvilke ønsker fra del C i [kilder/VURDERING.md](kilder/VURDERING.md) som skal bli oppgaver.
 
 ### B-4 Legg kildedokumentene i repoet
 
-De tre dokumentene ble gitt som vedlegg til første melding i økta «Paintrest design gjennomgang» 9. november, og finnes ikke noe annet sted som agentene når. Last dem ned derfra, eller hent dem der de ble skrevet, og legg dem ved i en økt eller i `docs/kilder/`. Hvilke filer det gjelder, står i [kilder/README.md](kilder/README.md).
+**Ferdig** 24. november 2026. Dokumentene ligger i [kilder/](kilder/README.md), med en vurdering i [kilder/VURDERING.md](kilder/VURDERING.md).
+
+### B-5 Bekreft prinsippene fra kildedokumentene
+
+Del A i [kilder/VURDERING.md](kilder/VURDERING.md) har 13 prinsipper fra de opprinnelige dokumentene som ser ut til å gjelde fortsatt. Si hvilke som skal gjelde, endres eller strykes. De du bekrefter, skrives som en beslutning. Til da er de et forslag.
 
 ## Oppgaver
 
@@ -56,14 +56,14 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 ### O-3 Palett og prosess for prosjektet (bit 3)
 
 - **Status:** ledig
-- **Avhenger av:** O-11 (hva siden skal inneholde)
+- **Avhenger av:** hva siden skal inneholde. Kildedokumentene ønsket palett med omfang og metoder for prosjektet (C10 i [kilder/VURDERING.md](kilder/VURDERING.md))
 - **Berører:** `src/features/projects/`, ruten `palett` i `src/app/App.tsx`
 - **I dag:** siden er en plassholder («snart»). Paletten per miniatyr finnes i verkstedet.
 
 ### O-4 Egen side for kildene (resten av bit 6)
 
 - **Status:** ledig
-- **Avhenger av:** O-11, og svaret på B-1 (skissene flytter kildelisten i verkstedet)
+- **Avhenger av:** svaret på B-1 (skissene flytter kildelisten i verkstedet)
 - **Berører:** `src/features/images/`, `src/features/workspace/`
 - **I dag:** «Fordel bilder» og kildelisten i verkstedet finnes.
 
@@ -109,15 +109,13 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 - **Berører:** `vite.config.ts`, `src/app/App.tsx`
 - **I dag:** fila er 741 kB, og Vite varsler over 500 kB.
 
-### O-11 Gå gjennom kildedokumentene mot koden
+### O-11 Sjekk punktene i AVVIK mot kildedokumentene
 
 - **Status:** ledig
-- **Avhenger av:** B-4 (kildedokumentene i `docs/kilder/`)
-- **Berører:** `docs/AVVIK.md`, `docs/kilder/`, `docs/STATUS.md`
-- **Ferdig når:**
-  - Hvert punkt i AVVIK er sjekket mot kildedokumentene.
-  - Det er tydelig hva som gjenstår i bit 2 og hva bit 8 «simulert agent» er.
-  - Der beslutningene sier at kildedokumentene bør oppdateres, står det i AVVIK hva som må endres.
+- **Avhenger av:** –
+- **Berører:** `docs/AVVIK.md`
+- **I dag:** dokumentene som helhet er vurdert i [kilder/VURDERING.md](kilder/VURDERING.md). Punktene i AVVIK er ikke sjekket ett for ett, og flere er skrevet av agenter som ikke hadde dokumentene.
+- **Ferdig når:** hvert punkt viser til riktig avsnitt i dokumentene, eller er rettet eller fjernet. Mest nyttig før arbeidet mot en ekte database begynner.
 
 ### O-12 Tester og bygg på GitHub ved hver push til main
 
