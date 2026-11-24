@@ -170,7 +170,7 @@ Flere av punktene er skrevet av agenter som ikke hadde dokumentene (se avvik 33 
     - **Agentene får nettsiden:** `website` er lagt til i prosjektets kontekst (`project.website`) når den finnes.
     - **Testing:** Det er ikke testet mot UiB eller ekte søketjenester. Hele kjeden er kjørt i nettleseren mot en simulert modell, et simulert Brave-søk og en lokal utgiverside: knappen, fremdriften, forslagene, «Bruk valgte», nedlastingen av bildet og lagringen i datamappen.
 
-40. **BRUKERBESLUTNING 24. november 2026: handlelisten fylles fra planene og manuelt** ([beslutningen](beslutninger/2026-11-24-handleliste-fra-planene-og-manuelt.md), O-14). Skjemaversjon 6.
+40. **BRUKERBESLUTNING 24. november 2026: handlelisten fylles fra planene og manuelt** ([beslutningen](beslutninger/2026-11-24-handleliste-fra-planene-og-manuelt.md), O-14). Skjemaversjon 6. Valgene agenten tok selv, er godtatt av brukeren ([valgene](beslutninger/2026-11-24-valg-i-handlelisten-godtatt.md)).
     - **Tabellene** `shopping_need` og `shopping_need_project` fra skjema §6, med `product_id` unik per arbeidsrom og `priority` (`necessary`, `recommended`, `wishlist`).
     - **Nye felt, ikke i skjemaet:** `origin` (`manual` når du la til malingen selv, `plan` når raden bare holder prioriteten for en maling planene trenger), `created_at` og `updated_at`.
     - **Behovene fra planene lagres ikke.** De regnes ut fra gjeldende, godkjente planversjon for hver miniatyr (`step_material` og `mix_component`). Slik kan de ikke bli stående når planen eller eierskapet endres. Kildedokumentene sier ikke om behovet skal lagres.
@@ -186,7 +186,7 @@ Flere av punktene er skrevet av agenter som ikke hadde dokumentene (se avvik 33 
     - **Der malingen brukes:** bildet vises i den felles komponenten for malingsnavn (`ProductName`), og dermed i Painting Mode, oppskriftene og agentens forslag, i tillegg til samlingen og handlelisten.
     - **Testing:** Ikke testet mot UiB eller ekte søketjenester. Flyten er kjørt i nettleseren mot en simulert modell og en lokal produktside: knappen, fremdriften, kontrollen som fjerner et oppdiktet bilde, valget, nedlastingen og lagringen i datamappen.
 
-42. **BRUKERBESLUTNING 24. november 2026: en ny planversjon tar med avvik og fremdrift** ([beslutningen](beslutninger/2026-11-24-ny-planversjon-avvik-og-fremdrift.md), O-1).
+42. **BRUKERBESLUTNING 24. november 2026: en ny planversjon tar med avvik og fremdrift** ([beslutningen](beslutninger/2026-11-24-ny-planversjon-avvik-og-fremdrift.md), O-1). Valgene agenten tok selv, er godtatt av brukeren ([valgene](beslutninger/2026-11-24-valg-i-maleplanen-godtatt.md)).
     - **Én skrivevei:** `writePlanVersion` (`src/data/plan-version.ts`) lager alle nye versjoner, både fra brukerens redigering (`savePlanVersion`, `origin = user`) og fra et godkjent forslag (`origin = proposal`). Den forrige versjonen får `state = superseded`. Delene, stegene og malingene i den endres ikke (skjema §6 «Maleplan»).
     - **Hvordan en del kjennes igjen:** Først delen den ble redigert fra (`from_element_id` i utkastet, bare når brukeren redigerer), ellers den eneste ubrukte delen av samme type med samme navn (store og små bokstaver og mellomrom teller ikke). Et steg kjennes igjen inne i en del som er kjent igjen: først steget det ble redigert fra (`from_step_id`), ellers første ubrukte steg med samme instruks. Steg kobles ikke på plassering, fordi et flyttet eller omskrevet steg da ville tatt med seg feil avvik. Kildedokumentene sier ikke hvordan dette skal gjøres. Antatt av agenten.
     - **Åpne avvik:** Brukeren velger hvilke som bakes inn (`baked_deviation_ids`). Et bakt avvik får `closed_as = 'baked'` og `closed_in_version_id` på den gamle versjonen. De andre kopieres til den nye versjonen med `carried_from_id`, og originalen får `closed_as = 'carried'`. Den gamle versjonen beholder slik hva som var åpent da den ble erstattet. Mister et avvik steget sitt, følger det med på delen. Mister det delen, følger det med for hele planen (`element_id = null`). Feltene er ikke i skjemaet. De er valgfrie, så eldre data trenger ingen migrering, og skjemaversjonen er ikke økt.
@@ -202,7 +202,7 @@ Flere av punktene er skrevet av agenter som ikke hadde dokumentene (se avvik 33 
     - **Oppskriftene malingen er med i** regnes ut fra `recipe_paint` (`recipesWithPaint`). Slettede oppskrifter er ikke med.
     - **Testing:** Ikke testet mot UiB. Flyten er kjørt i nettleseren mot en simulert modell: knappen, researchen, utkastet, «Lagre i biblioteket» og listen over oppskrifter på malingen.
 
-44. **«Planen virker ikke» i Painting Mode** (O-13, spec §5, datamodell §14).
+44. **«Planen virker ikke» i Painting Mode** (O-13, spec §5, datamodell §14). Valgene agenten tok selv, er godtatt av brukeren ([valgene](beslutninger/2026-11-24-valg-i-maleplanen-godtatt.md)).
     - **Ikke målrettet research i Painting Mode:** Kildedokumentene ville at knappen skulle åpne målrettet research for én plan. Her starter den en kjøring i miniatyrens egen planoppgave (`subject_focus.kind = 'plan'`, avvik 32), med planen åpnet som revisjonsmål (`openRevisionTarget`). Da blir forslaget en `plan_revision` med `base_version_id`, og godkjenningen stopper hvis en nyere versjon er godkjent i mellomtiden. Kjøringen tar ikke forslaget i bruk selv (avvik 27 gjelder bare agentpanelet).
     - **Forslaget godkjennes i verkstedet, ikke i Painting Mode.** Painting Mode viser bare at agenten jobber, at et forslag venter, eller at kjøringen feilet, med lenke til Maleplan. Det følger prinsipp A10 (Painting Mode viser beslutningene, ikke nye AI-valg). Antatt av agenten.
     - **Til modellen:** `PlanFocus.problem` (`text`, og `part` eller null for hele planen) står i instruksen for en ny versjon. Agenten bes løse akkurat det og beholde resten. Serveren kutter teksten til 1500 tegn og delnavnet til 120.
@@ -210,6 +210,10 @@ Flere av punktene er skrevet av agenter som ikke hadde dokumentene (se avvik 33 
     - **Planoppgaven gjelder én miniatyr:** Et planforslag for en annen miniatyr i miniatyrens egen planoppgave avvises. Før kunne agenten i verkstedets planoppgave lage en plan for hvilken som helst miniatyr i prosjektet.
     - **O-9:** `useAgentActions` (`suggestPlan`, `revisePlan`) og `compose` i agentpanelet er fjernet. De ble aldri kalt.
     - **Testing:** Enhetstester for instruksen, `parseFocus`, omfanget og at gjeldende versjon og ferdigstillingene står til forslaget er godkjent. Hele kjeden er kjørt i nettleseren mot en simulert modell (en lokal tjener som svarer som Responses API). Kjeden gikk fra knappen og dialogen, via forslaget som venter og avvikspanelet i verkstedet, til godkjenning og versjon 2 i Painting Mode. Ikke testet mot UiB.
+
+45. **Teknikk og oppskrift i et plansteg** (O-2, 7.7). Valgene er godtatt av brukeren ([valgene](beslutninger/2026-11-24-valg-i-maleplanen-godtatt.md)).
+    - **Steget peker på oppskriften, men får ikke malingene fra den.** Datamodell §9 sier at bruk av en oppskrift kopierer rollelinjene inn i planversjonen og husker `recipeVersionId`. Her settes bare `plan_step.recipe_version_id` (som peker på `recipe.id`, avvik 33).
+    - **Du velger teknikk og oppskrift når du redigerer steget.** «Bruk i prosjekt» fra biblioteket, der du starter fra teknikken og velger plan og steg, er ikke bygget.
 
 ## Antakelser
 

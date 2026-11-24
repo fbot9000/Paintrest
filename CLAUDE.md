@@ -34,8 +34,12 @@ Brukerens beslutninger går foran kildedokumentene. Kildedokumentene er historis
 ## Spør brukeren
 
 - før du tar en oppgave som ikke står i ukeplanen øverst i OPPGAVER.md
-- når noe er et produktvalg. Skriv svaret som en beslutning i `docs/beslutninger/`
+- når et produktvalg er stort: det endrer hvordan brukeren jobber, sletter eller endrer data brukeren allerede har, eller går mot en beslutning eller et prinsipp i del A av VURDERING.md. Skriv svaret som en beslutning i `docs/beslutninger/`
 - før du sletter data, kode du ikke har skrevet, eller noe som ikke kan angres
+
+**Små valg tar du selv**, ut fra beslutningene og særlig [enkle prosesser med nok kontroll](docs/beslutninger/2026-11-24-enkle-prosesser-nok-kontroll.md). Før dem som «Antatt av agenten» i AVVIK.md. Brukeren går gjennom dem samlet i neste testversjon.
+
+**Be aldri brukeren teste en enkelt oppgave.** Brukeren tester samlede testversjoner ([beslutningen](docs/beslutninger/2026-11-24-testversjoner.md), «Testversjoner» i PROSESS.md).
 
 ## Det du må vite om miljøet
 

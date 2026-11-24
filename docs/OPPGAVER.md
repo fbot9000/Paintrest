@@ -4,33 +4,37 @@ Hva som skal gjøres, og hvem som gjør det. Hvordan du tar en oppgave og levere
 
 ## Uka 24.–29. november 2026
 
-Satt av brukeren 24. november. Ta den øverste ledige oppgaven i et spor som ingen andre jobber i. Oppgaver som ikke står her, tar du bare etter å ha spurt brukeren.
+Satt av brukeren 24. november, og utvidet samme dag. Ta den øverste ledige oppgaven i ditt spor. Oppgaver som ikke står her, tar du bare etter å ha spurt brukeren.
 
 **Høyst én agent per spor**, altså to samtidig.
 
-### Spor A: maleplanen
+**Tirsdag** ble O-1, O-13 (med O-9), O-2, O-5, O-14, O-15 og O-16 ferdige.
 
-Målet er at du kan redigere en godkjent plan selv, og at en ny versjon aldri skjuler avvik eller fremdrift (prinsipp A1 og A6 i [kilder/VURDERING.md](kilder/VURDERING.md)).
+**Målet for resten av uka er testversjon 1 (O-20)**, som brukeren tester fredag. Ingen agent ber brukeren teste noe før den er klar. Små valg tar agentene selv, og de samles i testversjonen.
 
-1. **O-1** Rediger en godkjent maleplan, og ta med avvik og fremdrift til nye versjoner
-2. **O-13** «Planen virker ikke» i Painting Mode (løser også O-9)
-3. **O-2** Bruk en teknikk eller oppskrift i et plansteg (7.7)
+Prinsippet for alt som bygges: [enkle prosesser med nok kontroll](beslutninger/2026-11-24-enkle-prosesser-nok-kontroll.md), gjerne med dra og slipp.
 
-### Spor B: malinger
+### Spor A: agenten og maleplanen
 
-1. **O-5** Nye malingstyper: ink, dry og air
-2. **O-14** Handleliste
-3. **O-15** Produktbilder: agenten finner, du velger
-4. **O-16** Malekjeder som oppskrifter
-5. **O-18** Handlelisten fra «Finn fram malingene» i Painting Mode, når O-13 er ferdig
+1. **O-17** Agentkolonnen på miniatyrsiden og i verkstedet
+2. **O-19** Dra og slipp i maleplanen og paletten
 
-### Fredag: test mot de ekte tjenestene
+### Spor B: malinger, bibliotek og drift
 
-**O-8**, sammen med brukeren, som kjører appen lokalt med UiB-nøkkel. Agenten i spor B lager sjekklisten torsdag, med de nye AI-funksjonene fra begge sporene først.
+1. **O-12** Tester og bygg på GitHub ved hver push til main
+2. **O-18** Handlelisten fra «Finn fram malingene» i Painting Mode
+3. **O-6** Forbedre oppskrifter med agenten
+4. **O-7** Knytt en erfaring til en miniatyr
+5. **O-10** Del opp JavaScript-fila
+6. **O-20** Testversjon 1, når spor A er ferdig med O-17 og O-19. Er de ikke ferdige torsdag kveld, lages den med det som er ferdig da
+
+### Fredag: brukeren tester testversjon 1
+
+Brukeren kjører testversjon 1 lokalt med UiB-nøkkel. Testen mot de ekte tjenestene (O-8) er en del av den.
 
 ### Felles filer
 
-Begge sporene endrer trolig `src/domain/types.ts`, `src/data/local-commands.ts` og `src/domain/views.ts`. Ta små commits, og hent `main` ofte.
+Begge sporene kan endre `src/domain/types.ts`, `src/data/local-commands.ts` og `src/domain/views.ts`. Ta små commits, og hent `main` ofte. Spor A endrer `src/features/workspace/` og rører ikke Painting Mode denne uka. Spor B endrer Painting Mode (O-18) og rører ikke verkstedet.
 
 **Skjemaversjonen** (`SCHEMA_VERSION` i `src/domain/types.ts`, migrering i `src/data/store.ts`) kan bare økes av ett spor om gangen. Skriv i statuslinja til oppgaven at du øker den, og push endringen alene og tidlig.
 
@@ -38,14 +42,9 @@ Begge sporene endrer trolig `src/domain/types.ts`, `src/data/local-commands.ts` 
 
 Spørsmål og handlinger bare brukeren kan ta. Ingen agent begynner på det som avhenger av dem, før de er besvart.
 
-### B-1 Agentkolonnen: ett åpent spørsmål
+### B-1 Agentkolonnen: spørsmålene fra skissene
 
-Skissene fra 18. november: [Paintrest – agenten på miniatyrsiden (skisse)](https://www.figma.com/design/Pyf2kdZuiqWqHIq3bzRDGV?node-id=24-2), siden «Skisser», fem tavler.
-
-1. ~~Skal verkstedet få samme agentkolonne, slik tavle D viser?~~ **Ja** ([beslutningen](beslutninger/2026-11-24-agentkolonne-i-verkstedet.md)).
-2. **Åpent:** Skal nye miniatyrer fra chatten vente på «Legg til», slik de gjør fra kartleggingen?
-
-I tillegg: skal siden «Komponenter» i Figma-fila slettes, eller skal skissene kobles til den?
+**Besvart** 24. november 2026. Verkstedet får samme agentkolonne ([beslutningen](beslutninger/2026-11-24-agentkolonne-i-verkstedet.md)). Skissene er forslag, ikke krav, og resten avgjøres ut fra [enkle prosesser med nok kontroll](beslutninger/2026-11-24-enkle-prosesser-nok-kontroll.md). Figma-fila endres ikke.
 
 ### B-2 Slett de gamle branchene på GitHub
 
@@ -128,11 +127,11 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-8 Test mot de ekte tjenestene
 
-- **Status:** ledig. Planlagt fredag 27. november, med brukeren
+- **Status:** ledig. Del av testversjon 1 fredag (O-20)
 - **Avhenger av:** at brukeren kjører appen lokalt med UiB-nøkkel. Skymiljøet når ikke tjenestene
 - **Berører:** `docs/AVVIK.md` («Antakelser»), `docs/STATUS.md`, og koden der svarene ikke stemmer
 - **Ferdig når:**
-  - En sjekkliste brukeren kan følge, ligger i `docs/`. De nye AI-funksjonene fra uka står først.
+  - Testversjon 1 har en egen del for de ekte tjenestene. De nye AI-funksjonene står først.
   - UiB (tekst, nettsøk, bilder), Brave, Tavily, YouTube oEmbed, Kickstarter, Gamefound og Naver er prøvd.
   - Resultatet står i AVVIK og STATUS.
 
@@ -215,10 +214,35 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-17 Agentkolonnen på miniatyrsiden og i verkstedet
 
-- **Status:** ledig. Ikke med denne uka
-- **Avhenger av:** svar på spørsmål 2 i B-1
-- **Berører:** `src/features/miniatures/`, `src/features/agent/`, `src/features/workspace/`
-- **Ferdig når:** miniatyrsiden og verkstedet har agentkolonnen fra skissene (tavle A–D), og kildelisten i verkstedet ligger i Bilder-fanen ([beslutningen](beslutninger/2026-11-24-agentkolonne-i-verkstedet.md)).
+- **Status:** ledig
+- **Avhenger av:** –
+- **Berører:** `src/features/miniatures/`, `src/features/agent/`, `src/features/workspace/`. Ikke Painting Mode
+- **I dag:** agentpanelet ligger til høyre i prosjektet. Kartleggingen viser fremdriften øverst på miniatyrlisten. Verkstedet har sin egen kolonne med agent og kilder. Skissene fra 18. november: [Figma](https://www.figma.com/design/Pyf2kdZuiqWqHIq3bzRDGV?node-id=24-2), fem tavler.
+- **Ferdig når:**
+  - Miniatyrsiden og verkstedet har én felles agentkolonne. Den viser hva agenten jobber med nå, og hva som venter på deg ([beslutningen](beslutninger/2026-11-24-agentkolonne-i-verkstedet.md)).
+  - Det som venter, kan tas samlet («Legg til alle», «Godta alle»), og du kan ta ut enkeltting. Dra og slipp der det er naturlig, for eksempel et bildeforslag til en miniatyr.
+  - Kildelisten i verkstedet ligger i Bilder-fanen.
+  - Om nye miniatyrer fra chatten venter på «Legg til», eller legges inn med angre, velger agenten ut fra [enkle prosesser med nok kontroll](beslutninger/2026-11-24-enkle-prosesser-nok-kontroll.md). Valget føres i AVVIK.
+  - Skissene er inspirasjon, ikke krav.
+
+### O-19 Dra og slipp i maleplanen og paletten
+
+- **Status:** ledig
+- **Avhenger av:** O-17 (samme mappe, samme spor)
+- **Berører:** `src/features/workspace/` (Maleplan-fanen og Palett-fanen)
+- **I dag:** deler og steg flyttes med menyen «⋯» eller knapper, og malinger velges fra en liste.
+- **Ferdig når:** når du redigerer en plan, kan du dra deler og steg for å endre rekkefølgen, og dra en maling fra paletten inn i et steg. På iPad finnes det et like enkelt alternativ hvis dra og slipp ikke virker med berøring, slik «Fordel bilder» gjør det.
+
+### O-20 Testversjon 1
+
+- **Status:** ledig
+- **Avhenger av:** O-17 og O-19, eller torsdag kveld
+- **Berører:** `docs/testversjoner/`
+- **Ferdig når:**
+  - Testversjon 1 er laget etter «Testversjoner» i [PROSESS.md](PROSESS.md), med alt som er nytt denne uka, også det fra tirsdag.
+  - Den har en egen del for testen mot de ekte tjenestene (O-8).
+  - De sju valgene brukeren godtok 24. november, er ikke med blant valgene som skal gås gjennom.
+  - Taggen `testversjon-1` er pushet, eller commit-hashen står i dokumentet.
 
 ## Senere
 

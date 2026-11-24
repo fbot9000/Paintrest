@@ -35,7 +35,7 @@ Har økta fått en egen branch (`claude/…`), kan du jobbe i den lokalt, men du
 
 - Små commits, som hver for seg går gjennom testene. Commit-meldingen er på norsk, og første linje sier hva som er endret.
 - Hold deg til oppgaven. Ser du noe annet som bør gjøres, legg det til i OPPGAVER.md som en ny oppgave.
-- Er noe et produktvalg, spør brukeren. Skriv svaret som en beslutning (se steg 5).
+- Store produktvalg spør du brukeren om, og svaret skrives som en beslutning (se steg 5). Små valg tar du selv, ut fra beslutningene og [enkle prosesser med nok kontroll](beslutninger/2026-11-24-enkle-prosesser-nok-kontroll.md). Før dem som «Antatt av agenten» i AVVIK.md. Hva som er stort, står i CLAUDE.md.
 - Bryter arbeidet med et prinsipp i del A av [kilder/VURDERING.md](kilder/VURDERING.md), spør brukeren før du gjør det. Kildedokumentene er historisk grunnlag. Bruk dem til å forstå intensjonen, men følg beslutningene når de sier noe annet.
 - Ny oppførsel får tester.
 
@@ -85,8 +85,28 @@ git push origin HEAD:main
 ## Når du er ferdig
 
 - Sett oppgaven til `ferdig (dato, commit)`.
-- Si til brukeren hva som er gjort, hva som er testet, og hva som ikke er testet.
+- Si kort til brukeren hva som er gjort, hva som er testet, og hva som ikke er testet. Ikke be brukeren teste. Det skjer i testversjonen.
 - Skymiljøet får ikke slette brancher på GitHub. Har du pushet en egen branch, si hvilken som kan slettes.
+
+## Testversjoner
+
+Brukeren tester samlede testversjoner, ikke hver oppgave ([beslutningen](beslutninger/2026-11-24-testversjoner.md)).
+
+- En testversjon lages når det er nok nytt til at det er verdt å teste, normalt én gang i uka. Ukeplanen i OPPGAVER.md sier når og hvem.
+- Små endringer, og ting som er nesten som i forrige testversjon, er ikke grunn nok.
+- Mellom testversjonene ber ingen agent brukeren om å teste noe.
+
+Agenten som lager testversjonen:
+
+1. Henter `main`, kjører testene og bygget, og prøver de viktigste nye flytene i nettleseren.
+2. Skriver `docs/testversjoner/<nr>-<ÅÅÅÅ-MM-DD>.md`:
+   - **Slik starter du:** kommandoene for å hente og starte nettopp denne versjonen.
+   - **Nytt siden forrige testversjon:** de store endringene, gruppert etter område. Ikke hver commit.
+   - **Test dette:** høyst ti punkter, det viktigste først, til sammen omtrent en halvtime. Bare det brukeren merker.
+   - **Valg agentene tok selv:** de nye «Antatt av agenten»-punktene i AVVIK.md siden forrige testversjon, med én linje hver. Brukeren godtar eller endrer dem samlet.
+   - **Ikke testet:** det som bare er testet mot etterligninger, og kjente feil.
+3. Lager taggen `testversjon-<nr>` på commiten og pusher den (`git tag testversjon-<nr> && git push origin testversjon-<nr>`). Avvises taggen, står commit-hashen i dokumentet i stedet.
+4. Sier fra til brukeren at testversjonen er klar, med lenke til dokumentet.
 
 ## Maler
 
