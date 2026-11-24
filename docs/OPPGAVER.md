@@ -235,7 +235,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-20 Testversjon 1
 
-- **Status:** pågår (spor B, 24. november 2026)
+- **Status:** ferdig (24. november 2026, 7239106). [Testversjon 1](testversjoner/1-2026-11-24.md). Taggen kunne ikke pushes, så hashen står i dokumentet
 - **Avhenger av:** O-17 og O-19, eller torsdag kveld
 - **Berører:** `docs/testversjoner/`
 - **Ferdig når:**
