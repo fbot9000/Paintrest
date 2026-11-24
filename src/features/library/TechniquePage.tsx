@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useApp, useView } from '../../app/context';
 import { knowledgeImages, techniqueDetail } from '../../domain/library';
+import { projectName } from '../../domain/shopping';
 import { Badge, Button, Card, ErrorNote } from '../../ui/components';
 import { ExperienceDialog } from './ExperienceDialog';
 import { EvidenceBadge, ExperienceBadge, KnowledgeGallery, StatusBadge, useAutosave } from './parts';
@@ -16,6 +17,13 @@ export function TechniquePage() {
   const { techniqueId = '' } = useParams();
   const d = useView((t) => techniqueDetail(t, techniqueId), [techniqueId]);
   const images = useView((t) => knowledgeImages(t, 'technique', techniqueId), [techniqueId]);
+  // O-7: «Merlin (Avalon)» for experiences on a miniature.
+  const miniatures = useView((t) => Object.fromEntries(Object.values(t.technique_experience)
+    .filter((e) => e.technique_id === techniqueId && e.subject_id && t.miniature_subject[e.subject_id])
+    .map((e) => {
+      const s = t.miniature_subject[e.subject_id!]!;
+      return [e.id, { id: s.id, href: `/p/${s.project_id}/m/${s.id}`, label: `${s.name} (${projectName(t, s.project_id)})`, live: !s.deleted_at }];
+    })), [techniqueId]);
   const { save, error, clearError } = useAutosave();
   const [experienceOpen, setExperienceOpen] = useState(false);
   const app = useApp();
@@ -145,6 +153,9 @@ export function TechniquePage() {
                     <li key={e.id}>
                       {e.outcome === 'worked' ? <Badge tone="moss">Fungerte</Badge> : <Badge tone="warn">Trenger justering</Badge>}
                       <span className="small muted">{new Date(e.created_at).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                      {miniatures[e.id] && (miniatures[e.id]!.live
+                        ? <Link className="small" to={miniatures[e.id]!.href}>{miniatures[e.id]!.label}</Link>
+                        : <span className="small muted">{miniatures[e.id]!.label}, slettet</span>)}
                       {e.note && <p>{e.note}</p>}
                       <button type="button" className="link small" onClick={() => save((c) => c.deleteExperience(e.id))}>Fjern</button>
                     </li>

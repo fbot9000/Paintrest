@@ -697,7 +697,8 @@ function knowledgeContext(t: Tables, task_id: Id, allowedTypes: ResultType[]): A
       .map((st) => ({ title: st.title, instruction: st.instruction, basis: st.basis })),
     experiences: Object.values(t.technique_experience).filter((e) => e.technique_id === tech.id && !e.deleted_at)
       .sort((a, b) => a.created_at.localeCompare(b.created_at))
-      .map((e) => ({ outcome: e.outcome === 'worked' ? 'fungerte' : 'trenger justering', note: e.note, date: e.created_at.slice(0, 10) })),
+      .map((e) => ({ outcome: e.outcome === 'worked' ? 'fungerte' : 'trenger justering', note: e.note, date: e.created_at.slice(0, 10),
+        ...(e.subject_id && t.miniature_subject[e.subject_id] ? { miniature: t.miniature_subject[e.subject_id]!.name } : {}) })),
     sources: Object.values(t.source_link).filter((l) => !l.deleted_at && l.target_type === 'technique' && l.target_id === tech.id)
       .map((l) => t.source[l.source_id]).filter((x): x is NonNullable<typeof x> => !!x && !!x.url).map((x) => ({ url: x.url, title: x.title })),
   } : null;

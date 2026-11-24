@@ -322,6 +322,18 @@ describe('research til biblioteket (bit 7.4)', () => {
     await expect(research.startRecipeRevision(recipe.id)).rejects.toThrow('slettet');
   });
 
+  it('en erfaring kan knyttes til en miniatyr, og agenten ser hvilken (O-7)', async () => {
+    const { store, research, cmd } = await setup();
+    const tech = Object.values(store.getTables().technique)[0]!;
+    const merlin = Object.values(store.getTables().miniature_subject).find((s) => s.name === 'Merlin')!;
+    const id = await cmd.recordExperience(tech.id, { outcome: 'worked', note: 'Fin på kappen', subject_id: merlin.id });
+    expect(store.getTables().technique_experience[id]!.subject_id).toBe(merlin.id);
+    await expect(cmd.recordExperience(tech.id, { outcome: 'worked', subject_id: 'finnes-ikke' })).rejects.toThrow('Miniatyren');
+    const task = await research.startTechniqueRevision(tech.id);
+    const ctx = buildAgentContext(store.getTables(), task).data as { technique_to_improve: { experiences: { miniature?: string }[] } };
+    expect(ctx.technique_to_improve.experiences.map((e) => e.miniature)).toContain('Merlin');
+  });
+
   it('kan ikke forbedre en slettet teknikk', async () => {
     const { store, research, cmd } = await setup();
     const tech = Object.values(store.getTables().technique)[0]!;

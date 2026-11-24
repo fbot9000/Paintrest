@@ -23,6 +23,8 @@ export function WorkshopGuide() {
   // O-2: opened from a step in Painting Mode, ← goes back there.
   const from = (useLocation().state as { from?: string } | null)?.from;
   const back = from?.startsWith('/male/') ? from : null;
+  // O-7: an experience from there is about that miniature.
+  const fromSubject = back ? decodeURIComponent(back.split('/')[2] ?? '') || null : null;
 
   if (!d || d.technique.deleted_at) {
     return <main className="page"><h1>Fant ikke teknikken</h1><p><Link to="/bibliotek/teknikker">Til teknikkene</Link></p></main>;
@@ -105,6 +107,7 @@ export function WorkshopGuide() {
         open={dialog !== null}
         onClose={() => setDialog(null)}
         onSaved={() => setThanks(true)}
+        subjectId={fromSubject}
       />
     </div>
   );
