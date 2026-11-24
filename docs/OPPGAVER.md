@@ -196,7 +196,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-15 Produktbilder: agenten finner, du velger
 
-- **Status:** pågår (spor B: malinger, 24. november 2026). Nye valgfrie felt på `paint_product`, ingen ny skjemaversjon
+- **Status:** ferdig (24. november 2026, 4043274). Nye valgfrie felt på `paint_product`, ingen ny skjemaversjon
 - **Avhenger av:** O-5 (samme filer)
 - **Berører:** `src/features/paints/`, `server/research-agent.ts`, `src/domain/types.ts` (felt for bildet)
 - **Ferdig når:** fra en maling kan du be agenten finne et produktbilde hos produsenten eller en butikk. Du velger før noe lagres. Bildet vises i samlingen og der malingen brukes, og kilden lagres med lenke ([beslutningen](beslutninger/2026-11-24-produktbilder-agenten-finner-du-velger.md)).
