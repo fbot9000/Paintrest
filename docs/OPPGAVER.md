@@ -105,7 +105,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-5 Nye malingstyper: ink, dry og air
 
-- **Status:** ledig
+- **Status:** pågår (spor B: malinger, 24. november 2026)
 - **Avhenger av:** –
 - **Berører:** `src/domain/types.ts` (`ProductKind`), `src/domain/paints.ts`, `src/features/paints/`, `server/paint-import.ts`
 - **I dag:** typene er primer, base, layer, shade, contrast, technical, metallic, medium og other. AI-importen legger ink og dry under other (avvik 37).
