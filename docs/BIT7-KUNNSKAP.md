@@ -1,6 +1,6 @@
 # Bit 7 Kunnskap: datamodell og byggeplan (utkast)
 
-Status: revidert 11. november 2026 etter tilbakemelding, og sjekket mot koden 24. november 2026. **7.0–7.6 er bygget**: typer, migrering til v5, kommandoer (`src/data/knowledge-commands.ts`), lesefunksjoner (`src/domain/library.ts`), tester, bibliotekets sider for teknikker og oppskrifter, teknikkartikkel, verkstedguide, erfaring og research med agenten (`src/features/library/`, `server/research-agent.ts`). **7.7 gjenstår**: oppgave O-2 i [OPPGAVER.md](OPPGAVER.md). Det venter på bit 4.
+Status: revidert 11. november 2026 etter tilbakemelding, og sjekket mot koden 24. november 2026. **7.0–7.6 er bygget**: typer, migrering til v5, kommandoer (`src/data/knowledge-commands.ts`), lesefunksjoner (`src/domain/library.ts`), tester, bibliotekets sider for teknikker og oppskrifter, teknikkartikkel, verkstedguide, erfaring og research med agenten (`src/features/library/`, `server/research-agent.ts`). **7.7 er bygget** 24. november 2026 (O-2): et plansteg kan bruke en teknikk og en oppskrift, valgt når du redigerer maleplanen, og Painting Mode lenker til verkstedguiden. «Bruk i prosjekt» fra biblioteket er ikke bygget.
 
 Dokumentet er beholdt som referanse for datamodellen for biblioteket. Status står i [STATUS.md](STATUS.md), ikke her.
 
@@ -35,7 +35,7 @@ Kolonnen «Nå» viser hvordan det brukes etter 7.0–7.6.
 
 | Sted | Hva | Nå |
 |---|---|---|
-| `types.ts` `PlanStep.technique_version_id`, `recipe_version_id` | Plansteg kan peke på en teknikk eller oppskrift | Settes fortsatt alltid til `null`. Tas i bruk i 7.7 |
+| `types.ts` `PlanStep.technique_version_id`, `recipe_version_id` | Plansteg kan peke på en teknikk eller oppskrift | I bruk (7.7) |
 | `types.ts` `LinkTargetType` `'technique' \| 'recipe'`, `LinkUse 'method'` | Kilder kan kobles til teknikker og oppskrifter | I bruk (7.4) |
 | `types.ts` `AreaKind 'new_knowledge'`, `TaskScope.allow_new_knowledge` | En egen type researchoppgave for kunnskap | I bruk: research til biblioteket (7.4) |
 | `types.ts` `ResultType 'technique' \| 'recipe'` | Agenten kan foreslå teknikker og oppskrifter | I bruk, bare i research til biblioteket |
@@ -188,7 +188,7 @@ Agenten skriver ikke direkte i biblioteket (AVVIK punkt 28, sonen *Globalt*). De
 | **7.4 Global research** ✓ | `/bibliotek/research`: velg teknikk eller oppskrift, beskriv idéen og legg eventuelt ved en kilde. `/bibliotek/research/:id`: fremdrift, samtale og utkast. Oppgaven har `area_kind = new_knowledge`, ingen arbeidsprosjekt og én resultattype. Agenten får biblioteket, malingskatalogen og tidligere bibliotekkilder, men ikke prosjektene. Egen instruks på serveren (`knowledgeInstructions`). «Lagre i biblioteket» lager teknikken eller oppskriften som utkast, med kilder (`use = method`). Ukjente malinger må kobles eller opprettes som ubekreftet | 02 | 7.1, 7.2 |
 | **7.5 Kildearbeid og syntese** ✓ | Utkastet har kildeinspektør («Hva er dokumentert?»): hver kilde med status (lest, bare sett i søk) og hva den bidro med. En lenke du la ved, men som ikke ble brukt, vises med grunnen (for eksempel «Kunne ikke leses: 403»). Fremgangsmåter side om side (`comparison`: felles trekk og varianter med kildene sine). Du velger utgangspunktet, og variantene lagres i den rekkefølgen i teknikken, eller i notatet på en oppskrift | 03 | 7.4 |
 | **7.6 Forbedring fra erfaring** ✓ | «Lagre og foreslå forbedring» i erfaringsvinduet, og «Forbedre med agenten» i artikkelen, åpner en forbedringsoppgave (`startTechniqueRevision`, `task_revision_target.target_type = 'technique'`). Agenten får hele teknikken, erfaringene og kildene (`technique_to_improve`) og lager en endret teknikk. Forslaget vises felt for felt med «Nå» og «Forslag». «Ta i bruk endringene» skriver det inn i teknikken. Godkjenningen stoppes hvis teknikken er endret etter at forslaget ble laget. Status, erfaringer og eksisterende kilder blir værende | 07 | 7.3, 7.4 |
-| **7.7 Bruk i prosjekt** | Legg en teknikk eller oppskrift inn i et plansteg. Painting Mode lenker til verkstedguiden | 05 | **bit 4** (redigering av maleplanen) |
+| **7.7 Bruk i prosjekt** ✓ | Legg en teknikk eller oppskrift inn i et plansteg, når du redigerer maleplanen. Painting Mode lenker til verkstedguiden | 05 | bit 4 (redigering av maleplanen) |
 
 **Navigasjon:** Skissene har *Prosjekter · Research · Bibliotek · Malinger* øverst. 7.1 legger til «Bibliotek» øverst uten å bygge om resten.
 
