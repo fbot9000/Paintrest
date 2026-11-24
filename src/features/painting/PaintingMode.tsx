@@ -91,13 +91,15 @@ export function PaintingMode() {
           {!view.plan || view.elements.length === 0 ? (
             <div className="pm-empty">
               <h2>Planen er tom</h2>
-              <p className="muted">Redigering av maleplanen kommer i bit 4. Eksempelprosjektet har ferdige planer for Merlin og Druid Champions.</p>
+              <p className="muted">Skriv planen i verkstedet, under Maleplan.</p>
+              <Link to={`/p/${view.project.id}/m/${s.id}/maleplan`}>Åpne Maleplan</Link>
             </div>
           ) : open ? (
             <PartDetail
               ev={open}
               isGroup={isGroup}
               physical={s.physical_count}
+              texts={view.deviation_text}
               onBack={() => select(null)}
               onPrev={openIndex > 0 ? () => select(view.elements[openIndex - 1]!.element.id) : undefined}
               onNext={openIndex < view.elements.length - 1 ? () => select(view.elements[openIndex + 1]!.element.id) : undefined}
@@ -107,7 +109,7 @@ export function PaintingMode() {
               onRemoveDeviation={(id) => run((c) => c.deleteDeviation(id))}
             />
           ) : (
-            <Overview view={view} onOpen={select} />
+            <Overview view={view} onOpen={select} onRemoveDeviation={(id) => run((c) => c.deleteDeviation(id))} />
           )}
         </section>
       </div>
@@ -197,7 +199,7 @@ function References({ view, index, onIndex, onZoom }:
 
 // ---------- Oversikt ----------
 
-function Overview({ view, onOpen }: { view: PaintingView; onOpen: (id: Id) => void }) {
+function Overview({ view, onOpen, onRemoveDeviation }: { view: PaintingView; onOpen: (id: Id) => void; onRemoveDeviation: (id: Id) => void }) {
   const ops = view.elements.filter((e) => e.element.kind === 'operation');
   const parts = view.elements.filter((e) => e.element.kind === 'part');
   const isGroup = view.subject.grouping === 'group';
@@ -257,6 +259,13 @@ function Overview({ view, onOpen }: { view: PaintingView; onOpen: (id: Id) => vo
           <div className="pm-tiles">{parts.map((ev) => <Tile key={ev.element.id} ev={ev} />)}</div>
         </section>
       )}
+      {view.plan_deviations.length > 0 && (
+        <section>
+          <h2 className="eyebrow">Avvik for hele planen</h2>
+          <p className="small muted">Fra en tidligere versjon, der delen ikke finnes lenger.</p>
+          {view.plan_deviations.map((d) => <DeviationNote key={d.id} d={d} onRemove={onRemoveDeviation} text={view.deviation_text[d.id]} />)}
+        </section>
+      )}
       {view.completions.length > 0 && (
         <section className="pm-history">
           <h2 className="eyebrow">Ferdigstilt</h2>
@@ -280,8 +289,8 @@ function Overview({ view, onOpen }: { view: PaintingView; onOpen: (id: Id) => vo
 
 // ---------- Del ----------
 
-function PartDetail({ ev, isGroup, physical, onBack, onPrev, onNext, onDone, onGroupCount, onDeviation, onRemoveDeviation }: {
-  ev: ElementView; isGroup: boolean; physical: number;
+function PartDetail({ ev, isGroup, physical, texts, onBack, onPrev, onNext, onDone, onGroupCount, onDeviation, onRemoveDeviation }: {
+  ev: ElementView; isGroup: boolean; physical: number; texts: Record<Id, string>;
   onBack: () => void; onPrev?: () => void; onNext?: () => void;
   onDone: (done: boolean) => void; onGroupCount: (n: number) => void;
   onDeviation: (step: StepView | null) => void; onRemoveDeviation: (id: Id) => void;
@@ -305,7 +314,7 @@ function PartDetail({ ev, isGroup, physical, onBack, onPrev, onNext, onDone, onG
           <li key={sv.step.id} className="pm-step">
             <span className="pm-step-n mono">{i + 1}</span>
             <div className="pm-step-body">
-              <InstructionWithDeviations sv={sv} onRemove={onRemoveDeviation} />
+              <InstructionWithDeviations sv={sv} onRemove={onRemoveDeviation} texts={texts} />
               {sv.materials.length > 0 && (
                 <ul className="pm-materials">
                   {sv.materials.map((m) => <MaterialRow key={m.material.id} m={m} />)}
@@ -334,7 +343,7 @@ function PartDetail({ ev, isGroup, physical, onBack, onPrev, onNext, onDone, onG
           <li key={d.id} className="pm-step pm-step-extra">
             <span className="pm-step-n mono">+</span>
             <div className="pm-step-body">
-              <DeviationNote d={d} onRemove={onRemoveDeviation} />
+              <DeviationNote d={d} onRemove={onRemoveDeviation} text={texts[d.id]} />
             </div>
           </li>
         ))}
@@ -358,7 +367,7 @@ function PartDetail({ ev, isGroup, physical, onBack, onPrev, onNext, onDone, onG
   );
 }
 
-function InstructionWithDeviations({ sv, onRemove }: { sv: StepView; onRemove: (id: Id) => void }) {
+function InstructionWithDeviations({ sv, onRemove, texts }: { sv: StepView; onRemove: (id: Id) => void; texts: Record<Id, string> }) {
   const change = [...sv.deviations].reverse().find((d) => d.kind === 'change_instruction');
   return (
     <>
@@ -370,7 +379,11 @@ function InstructionWithDeviations({ sv, onRemove }: { sv: StepView; onRemove: (
       ) : (
         <p className="pm-instr">{sv.step.instruction || <span className="muted">Ingen instruks</span>}</p>
       )}
-      {sv.deviations.map((d) => <DeviationNote key={d.id} d={d} onRemove={onRemove} compact />)}
+      {sv.deviations.map((d) => {
+        // A swap is shown on the paint it replaces; one whose paint is not in the step needs its text.
+        const inPlace = d.kind === 'change_instruction' ? d.id === change?.id : d.kind === 'swap_product' && sv.materials.some((m) => m.swapped_to?.deviation_id === d.id);
+        return <DeviationNote key={d.id} d={d} onRemove={onRemove} compact hideText={inPlace} text={texts[d.id]} />;
+      })}
     </>
   );
 }
@@ -379,11 +392,12 @@ const DEV_LABEL: Record<DeviationKind, string> = {
   swap_product: 'Byttet maling', change_instruction: 'Endret instruks', extra_step: 'Ekstra steg', note: 'Merknad',
 };
 
-function DeviationNote({ d, onRemove, compact }: { d: LocalDeviation; onRemove: (id: Id) => void; compact?: boolean }) {
+function DeviationNote({ d, onRemove, compact, hideText, text }: { d: LocalDeviation; onRemove: (id: Id) => void; compact?: boolean; hideText?: boolean; text?: string }) {
   return (
     <div className={`pm-dev ${compact ? 'compact' : ''}`}>
       <Badge tone="warn">Avvik · {DEV_LABEL[d.kind]}</Badge>
-      {d.kind !== 'swap_product' && d.kind !== 'change_instruction' && <span>{d.payload.text}</span>}
+      {/* hideText: the deviation is already shown in place (the swapped paint, the struck-out instruction). */}
+      {!hideText && <span>{text ?? d.payload.text}</span>}
       <button type="button" className="link small" onClick={() => onRemove(d.id)}>Fjern</button>
     </div>
   );

@@ -37,6 +37,8 @@ export interface DocStep {
 
 export interface DocElement {
   name: string;
+  /** The part in the approved version (its id), so a renamed part is still the same part (O-1). */
+  key?: string | null;
   kind: ElementKind;
   steps: DocStep[];
   change: Change;
@@ -44,7 +46,7 @@ export interface DocElement {
 
 export function docFromPayload(t: Tables, p: PaintPlanPayload): DocElement[] {
   return p.elements.map((el) => ({
-    name: el.name, kind: el.kind, change: null,
+    name: el.name, key: el.from_element_id ?? null, kind: el.kind, change: null,
     steps: el.steps.map((st) => ({
       instruction: st.instruction, change: null,
       mix: st.mix ? st.mix.components.map((c) => `${c.parts} ${c.product.name}`).join(' + ') : null,
@@ -62,7 +64,7 @@ export function docFromPayload(t: Tables, p: PaintPlanPayload): DocElement[] {
 
 export function docFromView(v: PaintingView): DocElement[] {
   return v.elements.map((ev) => ({
-    name: ev.element.name, kind: ev.element.kind, change: null,
+    name: ev.element.name, key: ev.element.id, kind: ev.element.kind, change: null,
     steps: ev.steps.map((sv) => ({
       instruction: sv.step.instruction, change: null, mix: null,
       materials: sv.materials.map((m) => ({
@@ -75,13 +77,16 @@ export function docFromView(v: PaintingView): DocElement[] {
 
 const sig = (s: DocStep) => `${s.instruction.trim()}|${s.materials.map((m) => `${m.name}:${m.role}`).sort().join(',')}`;
 
-/** Marks new and changed steps compared with the current version (matched by part name and position). */
+/** Marks new and changed steps compared with the current version (matched by part, then name, and position). */
 export function markChanges(next: DocElement[], current: DocElement[]): { elements: DocElement[]; changed: number; added: number; removed: string[] } {
   const byName = new Map(current.map((e) => [e.name.trim().toLowerCase(), e]));
+  const used = new Set<DocElement>();
   let changed = 0;
   let added = 0;
   const elements = next.map((el) => {
-    const old = byName.get(el.name.trim().toLowerCase());
+    const found = (el.key ? current.find((e) => e.key === el.key) : undefined) ?? byName.get(el.name.trim().toLowerCase());
+    const old = found && !used.has(found) ? found : undefined;
+    if (old) used.add(old);
     if (!old) {
       added += el.steps.length;
       return { ...el, change: 'new' as const, steps: el.steps.map((s) => ({ ...s, change: 'new' as const })) };
@@ -96,8 +101,7 @@ export function markChanges(next: DocElement[], current: DocElement[]): { elemen
       }),
     };
   });
-  const names = new Set(next.map((e) => e.name.trim().toLowerCase()));
-  const removed = current.filter((e) => !names.has(e.name.trim().toLowerCase())).map((e) => e.name);
+  const removed = current.filter((e) => !used.has(e)).map((e) => e.name);
   return { elements, changed, added, removed };
 }
 

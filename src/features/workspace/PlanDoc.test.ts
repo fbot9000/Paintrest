@@ -17,4 +17,10 @@ describe('endringer mot gjeldende plan', () => {
     expect(r.elements[1]!.change).toBe('new');
     expect(r).toMatchObject({ changed: 1, added: 2, removed: ['Base'] });
   });
+
+  it('en omdøpt del er samme del når den er redigert fra den gamle', () => {
+    const current = [{ ...el('Hud', [step('Base')]), key: 'e1' }];
+    const next = [{ ...el('Ansikt og hender', [step('Base')]), key: 'e1' }];
+    expect(markChanges(next, current)).toMatchObject({ changed: 0, added: 0, removed: [] });
+  });
 });

@@ -8,6 +8,7 @@ import type {
   Ownership, PaintCompletion, PaintPlanVersion, PaintProduct, PlanElement, PlanStep,
   LinkUse, Project, SourceAsset, Source, StepMaterial, Tables,
 } from './types';
+import { deviationBody } from './plan-versions';
 
 export function liveExpansionsOfGame(t: Tables, game_id: Id): Expansion[] {
   return Object.values(t.expansion)
@@ -172,6 +173,10 @@ export interface PaintingView {
   elements: ElementView[];
   references: ReferenceView[];
   open_deviations: LocalDeviation[];
+  /** Open deviations not tied to a part in this version, e.g. carried from a part that was removed (O-1). */
+  plan_deviations: LocalDeviation[];
+  /** What each open deviation says («Abaddon Black → Corax White», or its text). */
+  deviation_text: Record<Id, string>;
   completions: PaintCompletion[];
   last_opened_element_id: Id | null;
   palette: PaletteView[];
@@ -255,6 +260,8 @@ export function paintingView(t: Tables, subject_id: Id): PaintingView | undefine
     subject, project, game, plan, elements,
     references: subjectReferences(t, subject),
     open_deviations: open,
+    plan_deviations: open.filter((d) => !d.element_id || !elements.some((e) => e.element.id === d.element_id)),
+    deviation_text: Object.fromEntries(open.map((d) => [d.id, deviationBody(t, d)])),
     completions: Object.values(t.paint_completion)
       .filter((c) => c.subject_id === subject_id)
       .sort((a, b) => b.created_at.localeCompare(a.created_at)),

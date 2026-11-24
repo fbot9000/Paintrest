@@ -140,3 +140,11 @@ button.pd-palette { border: 0; background: none; padding: 2px 0; cursor: pointer
 
 /* Malingsvalg ved start (brukerbeslutning 11.11.2026): to tydelige valg, ingen skjult preferanse. */
 .plan-start { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* ---------- Åpne avvik før en ny versjon (O-1) ---------- */
+.plan-devs { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--warn); border-radius: var(--r-md); background: var(--paper); }
+.plan-devs p { margin: 0; }
+.plan-devs ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.plan-devs li label { display: flex; gap: 10px; align-items: flex-start; padding: 6px 8px; background: var(--card); border-radius: var(--r-sm); cursor: pointer; }
+.plan-devs li input { margin-top: 3px; width: 18px; height: 18px; flex: none; }
+.plan-devs-note { color: var(--warn); }

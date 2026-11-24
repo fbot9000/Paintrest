@@ -597,7 +597,7 @@ function needsUser(t: Tables, p: ResearchProposal): string | null {
     // The user chooses which open deviations become part of the new version (beslutning 24.11.2026).
     const s = t.miniature_subject[(p.payload as PaintPlanPayload).subject_id];
     const open = s?.current_plan_version_id ? openDeviations(t, s.current_plan_version_id).length : 0;
-    if (open) return `Planen har ${open} åpne avvik fra Painting Mode. Du velger hvilke som skal bli en del av planen`;
+    if (open) return `Planen har ${open} ${open === 1 ? 'åpent avvik' : 'åpne avvik'} fra Painting Mode. Du velger hvilke som skal bli en del av planen`;
   }
   return null;
 }

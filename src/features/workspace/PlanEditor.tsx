@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { matchProduct, productKey } from '../../domain/agent';
 import type { PlanElementPayload, PlanStepPayload, ProductRef } from '../../domain/agent';
+import { refOf } from '../../domain/plan-versions';
 import type { Id, MaterialRole, PaintProduct, Tables } from '../../domain/types';
 import { ownershipOf } from '../../domain/views';
 import { Badge, Button, OwnershipFlag, Swatch } from '../../ui/components';
@@ -159,7 +160,6 @@ function StepEditor({ st, products, t, onChange, onRemove }: {
   onChange: (fn: (s: PlanStepPayload) => void) => void;
   onRemove?: () => void;
 }) {
-  const fromProduct = (p: PaintProduct): ProductRef => ({ manufacturer: p.manufacturer, range: p.range_name, name: p.name, hex: p.swatch_hex });
   return (
     <div className="plan-step">
       <textarea aria-label="Instruks" rows={2} value={st.instruction} placeholder="Hva gjør du i dette steget?" onChange={(e) => onChange((x) => { x.instruction = e.target.value; })} />
@@ -174,7 +174,7 @@ function StepEditor({ st, products, t, onChange, onRemove }: {
               </select>
               <select aria-label="Maling" value={match?.id ?? '__agent'} onChange={(e) => {
                 const p = products.find((x) => x.id === e.target.value);
-                if (p) onChange((x) => { x.materials[mi]!.product = fromProduct(p); });
+                if (p) onChange((x) => { x.materials[mi]!.product = refOf(p); });
               }}>
                 {!match && <option value="__agent">{m.product.name}{m.product.manufacturer ? ` (${m.product.manufacturer})` : ''} – agentens forslag</option>}
                 {products.map((x) => <option key={x.id} value={x.id}>{x.name}{x.manufacturer ? ` (${x.manufacturer})` : ''}</option>)}
@@ -189,7 +189,7 @@ function StepEditor({ st, products, t, onChange, onRemove }: {
       <div className="plan-step-actions">
         <select aria-label="Legg til maling" value="" onChange={(e) => {
           const p = products.find((x) => x.id === e.target.value);
-          if (p) onChange((x) => { x.materials.push({ product: fromProduct(p), role: 'base', role_label: null }); });
+          if (p) onChange((x) => { x.materials.push({ product: refOf(p), role: 'base', role_label: null }); });
         }}>
           <option value="">+ Legg til maling …</option>
           {products.map((x) => <option key={x.id} value={x.id}>{x.name}{x.manufacturer ? ` (${x.manufacturer})` : ''}</option>)}

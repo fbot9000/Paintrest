@@ -177,14 +177,19 @@ const KIND_LABEL: Record<LocalDeviation['kind'], string> = {
   swap_product: 'Byttet maling', change_instruction: 'Endret instruks', extra_step: 'Ekstra steg', note: 'Merknad',
 };
 
-/** One line for a deviation, e.g. «Byttet maling: Abaddon Black → Corax White». */
-export function describeDeviation(t: Tables, d: LocalDeviation): string {
+/** What the deviation says, without its kind: «Abaddon Black → Corax White», or the text. */
+export function deviationBody(t: Tables, d: LocalDeviation): string {
   if (d.kind === 'swap_product') {
     const from = d.payload.from_product_id ? t.paint_product[d.payload.from_product_id]?.name : null;
     const to = d.payload.to_product_id ? t.paint_product[d.payload.to_product_id]?.name : null;
-    return `${KIND_LABEL[d.kind]}: ${from ?? '?'} → ${to ?? '?'}`;
+    return `${from ?? '?'} → ${to ?? '?'}`;
   }
-  return `${KIND_LABEL[d.kind]}: ${d.payload.text ?? ''}`;
+  return d.payload.text ?? '';
+}
+
+/** One line for a deviation, e.g. «Byttet maling: Abaddon Black → Corax White». */
+export function describeDeviation(t: Tables, d: LocalDeviation): string {
+  return `${KIND_LABEL[d.kind]}: ${deviationBody(t, d)}`;
 }
 
 /** Where the deviation was made in the earlier version: «Kappe, steg 2». */

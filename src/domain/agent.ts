@@ -7,6 +7,7 @@ import type {
   ElementKind, Evidence, Grouping, Id, MaterialRole, PaintChoice, PaintProduct, ResultType, StepBasis, SubjectIdentity, Tables, Uncertainty,
 } from './types';
 import { attachedExpansions, liveSubjects, ownershipOf } from './views';
+import { describeDeviation, deviationPlace, openDeviations } from './plan-versions';
 
 // ---------- Payloads ----------
 
@@ -600,6 +601,8 @@ export function buildAgentContext(t: Tables, task_id: Id): AgentContext {
                 }),
               })),
             })),
+            // What the user changed while painting (Painting Mode). A new version lets the user choose which become part of the plan.
+            open_deviations: openDeviations(t, pv.id).map((d) => ({ where: deviationPlace(t, d), what: describeDeviation(t, d) })),
           }
         : null,
     };
