@@ -144,7 +144,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-10 Del opp JavaScript-fila
 
-- **Status:** pågår (spor B, 24. november 2026)
+- **Status:** ferdig (24. november 2026, c4ff086). Hovedfila er 410 kB
 - **Avhenger av:** –
 - **Berører:** `vite.config.ts`, `src/app/App.tsx`
 - **I dag:** fila er 741 kB, og Vite varsler over 500 kB.
