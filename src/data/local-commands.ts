@@ -4,7 +4,7 @@ import { newId, now } from '../domain/ids';
 import { AUTO, isAutoName, nextAutoName } from '../domain/naming';
 import { bySpecificity, findProduct, sampleProducts } from '../domain/paints';
 import type {
-  Id, LocalDeviation, MiniatureSubject, Ownership, OwnershipSource, Tables,
+  GameCoverSource, Id, LocalDeviation, MiniatureSubject, Ownership, OwnershipSource, Tables,
 } from '../domain/types';
 import { currentPlanVersion, liveExpansionsOfGame, ownershipOf } from '../domain/views';
 import type { Store } from './store';
@@ -15,6 +15,28 @@ import { createKnowledgeCommands } from './knowledge-commands';
 
 function clean(v: string | null | undefined): string | null {
   return v?.trim() || null;
+}
+
+/** An http(s) address for the game's website; «cmon.com/x» gets https://. Empty means none. */
+export function websiteOf(v: string | null | undefined): string | null {
+  const raw = v?.trim();
+  if (!raw || raw === '—' || raw === '-') return null;
+  let u: URL;
+  try {
+    u = new URL(/^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`);
+  } catch {
+    throw new CommandError('Skriv en gyldig nettadresse, for eksempel https://utgiver.no/spillet');
+  }
+  if ((u.protocol !== 'https:' && u.protocol !== 'http:') || !u.hostname.includes('.')) {
+    throw new CommandError('Skriv en gyldig nettadresse, for eksempel https://utgiver.no/spillet');
+  }
+  return u.toString();
+}
+
+function coverSourceOf(s: GameCoverSource): GameCoverSource {
+  const web = (x: unknown) => typeof x === 'string' && /^https?:\/\//i.test(x.trim());
+  if (!web(s.image_url) || !web(s.page_url)) throw new CommandError('Kilden til illustrasjonen må være en nettadresse');
+  return { image_url: s.image_url.trim(), page_url: s.page_url.trim(), page_title: s.page_title?.trim().slice(0, 200) || null };
 }
 
 function hex(v: string | null | undefined): string | null {
@@ -116,12 +138,15 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
         }
         if (patch.year_published !== undefined) g.year_published = patch.year_published;
         if (patch.publishers !== undefined) g.publishers = patch.publishers.map((p) => p.trim()).filter(Boolean);
+        if (patch.website_url !== undefined) g.website_url = websiteOf(patch.website_url);
         record(t, ws, { target_type: 'game', target_id: game_id, action: 'update' });
       });
     },
 
-    async setGameCover(game_id, file) {
+    async setGameCover(game_id, file, _filename, source) {
       const ws = store.snapshot.workspace_id;
+      // Checked before the file is stored, so a bad source leaves nothing behind.
+      const from = file && source ? coverSourceOf(source) : null;
       const sf = file ? await storeFile(ws, 'cover', file) : null;
       tx((t) => {
         const g = must(t.game[game_id], 'Spillet');
@@ -129,6 +154,8 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
         if (old) old.deleted_at = now();
         if (sf) t.stored_file[sf.id] = sf;
         g.cover_file_id = sf?.id ?? null;
+        // An uploaded file or a removed cover has no web source; the old one must not stay behind.
+        g.cover_source = from;
         record(t, ws, { target_type: 'game', target_id: game_id, action: 'update' });
       });
     },

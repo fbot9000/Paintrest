@@ -38,6 +38,51 @@
 .bgg-ex { display: grid; gap: 2px; padding-left: 30px; }
 .replace { font-size: 14px; color: var(--muted); }
 
+/* Nettside og kilden til illustrasjonen i heltefeltet */
+.site-cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.site-cell .inline-text { overflow-wrap: anywhere; }
+.site-link { color: var(--moss); text-decoration: none; font-weight: 500; }
+.site-link:hover { text-decoration: underline; }
+.cover-source, .hero-note { color: var(--soft-dark); }
+.btn.btn-on-dark { background: transparent; color: var(--on-dark); border-color: var(--soft-dark); }
+.btn.btn-on-dark:hover:not(:disabled) { border-color: var(--moss); color: var(--moss); }
+.cover-source a, .hero-note a { color: var(--moss); }
+
+/* «Finn bilde og fakta med AI»: fremdrift og forslag */
+.lookup-live { background: var(--pine); color: var(--on-dark); border-radius: var(--r-lg); padding: 14px 16px; }
+.lookup-live .msg { padding: 0; background: none; }
+.lookup { display: grid; gap: 12px; }
+.lookup-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.lookup-head > div { display: grid; gap: 6px; }
+.lookup-msg { max-width: 72ch; }
+.lookup-done { background: var(--moss-soft); color: var(--pine); border-radius: var(--r-md); padding: 8px 12px; font-size: 14px; }
+.lookup-sub { font-size: 17px; margin-top: 4px; }
+.lookup-images { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.lookup-img { position: relative; display: grid; gap: 4px; align-content: start; padding: 8px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper); cursor: pointer; }
+.lookup-img.on { border-color: var(--pine); box-shadow: 0 0 0 2px var(--pine) inset; background: #f1f5ea; }
+.lookup-img input { position: absolute; top: 12px; left: 12px; width: 20px; height: 20px; accent-color: var(--pine); }
+.lookup-img img { width: 100%; aspect-ratio: 1; object-fit: contain; background: var(--panel); border-radius: var(--r-sm); }
+.lookup-img img.broken { visibility: hidden; }
+.lookup-img-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.lookup-cap { overflow-wrap: anywhere; }
+.lookup-img a { color: var(--fore); overflow-wrap: anywhere; }
+.lookup-none { place-content: center; text-align: center; min-height: 120px; }
+.lookup-none input { position: static; justify-self: center; }
+.lookup-facts { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.lookup-facts li { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper); flex-wrap: wrap; }
+.lookup-facts li.on { border-color: var(--soft-dark); background: #f1f5ea; }
+.lookup-fact { flex: 1; display: grid; gap: 2px; min-width: 180px; }
+.lookup-value { overflow-wrap: anywhere; }
+.lookup-value a { color: var(--fore); }
+.lookup-basis { display: grid; gap: 4px; justify-items: end; }
+.lookup-basis a, .lookup-sources a { color: var(--fore); }
+.lookup-sources { display: flex; gap: 10px; flex-wrap: wrap; color: var(--muted); }
+.lookup-warn { color: var(--warn); margin: 0; }
+.lookup-checks summary { cursor: pointer; color: var(--muted); }
+.lookup-checks ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); display: grid; gap: 4px; }
+.lookup-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
 @media (max-width: 860px) {
   .hero { grid-template-columns: 1fr; }
+  .lookup-basis { justify-items: start; }
 }

@@ -91,8 +91,22 @@ export interface Game {
   year_published: number | null;
   publishers: string[];
   cover_file_id: Id | null;
+  /**
+   * PROTOTYPE (avvik 37): the game's official website, usually the publisher's page for it.
+   * Not in the schema. Optional, so older data needs no migration.
+   */
+  website_url?: string | null;
+  /** PROTOTYPE (avvik 37): where the illustration came from, when it was taken from the web. */
+  cover_source?: GameCoverSource | null;
   created_at: Timestamp;
   deleted_at: Timestamp | null;
+}
+
+/** The web page and picture a game's illustration was taken from (kept with the picture, like other saved images). */
+export interface GameCoverSource {
+  image_url: string;
+  page_url: string;
+  page_title: string | null;
 }
 
 export interface Expansion {

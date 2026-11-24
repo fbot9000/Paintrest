@@ -344,6 +344,20 @@ export function parseFocus(v: unknown): AnyFocus | null {
       tagged_sources: pageRefs(f.tagged_sources),
     };
   }
+  if (f.kind === 'game_info') {
+    // Game lookup from the game page: what the page holds now, and official pages a survey found.
+    const year = typeof f.year === 'number' && Number.isInteger(f.year) && f.year > 0 && f.year < 3000 ? f.year : null;
+    const website = text(f.website, 2000);
+    return {
+      kind: 'game_info',
+      game: str(f.game).trim().slice(0, 160) || 'ukjent spill',
+      year,
+      publishers: (Array.isArray(f.publishers) ? f.publishers : []).flatMap((p) => (text(p, 120) ? [text(p, 120)!] : [])).slice(0, 6),
+      website: website && HTTP.test(website) ? website : null,
+      expansions: (Array.isArray(f.expansions) ? f.expansions : []).flatMap((e) => (text(e, 120) ? [text(e, 120)!] : [])).slice(0, 20),
+      known_pages: pageRefs(f.known_pages, 8),
+    };
+  }
   if (f.kind === 'game') {
     // Game survey: every miniature in the project, with what is known about it.
     return {

@@ -14,10 +14,11 @@ import type { Id } from '../domain/types';
  * 'project' runs a turn from the project's agent panel (id = project id,
  * since the panel may open its task inside the run);
  * 'game' runs a game survey from the miniature list (id = project id);
+ * 'gameinfo' looks up the game's facts and illustration from the game page (id = game id);
  * 'paints' reads a paint list or answers in the import dialog (id = import draft id).
  * Runs of different kinds never block each other, even on the same task.
  */
-export type RunKind = 'images' | 'plan' | 'knowledge' | 'project' | 'game' | 'paints';
+export type RunKind = 'images' | 'plan' | 'knowledge' | 'project' | 'game' | 'gameinfo' | 'paints';
 
 /** What the global indicator shows for a run, and where it leads. */
 export interface RunMeta {

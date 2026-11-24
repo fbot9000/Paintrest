@@ -7,7 +7,7 @@
  * the call sites.
  */
 import type {
-  DeviationKind, DeviationPayload, Evidence, ExperienceOutcome, Grouping, Id, IdentityStatus, KnowledgeStatus,
+  DeviationKind, DeviationPayload, Evidence, ExperienceOutcome, GameCoverSource, Grouping, Id, IdentityStatus, KnowledgeStatus,
   MaterialRole, Ownership, ProductKind, StepBasis, Uncertainty,
 } from './types';
 import type { ReferenceImage } from './agent';
@@ -28,6 +28,8 @@ export interface GamePatch {
   primary_name?: string;
   year_published?: number | null;
   publishers?: string[];
+  /** The official website; an address without https:// gets it. Empty or null removes it. */
+  website_url?: string | null;
 }
 
 export interface SubjectPatch {
@@ -175,7 +177,8 @@ export interface Commands extends KnowledgeCommands {
   deleteProject(project_id: Id): Promise<void>;
   restoreProject(project_id: Id): Promise<void>;
   updateGame(game_id: Id, patch: GamePatch): Promise<void>;
-  setGameCover(game_id: Id, file: Blob | null, filename?: string): Promise<void>;
+  /** `source`: the page and picture the file came from, when it was taken from the web (kept with the cover). */
+  setGameCover(game_id: Id, file: Blob | null, filename?: string, source?: GameCoverSource | null): Promise<void>;
   linkBgg(game_id: Id, candidate: BggCandidate, opts?: { replace?: boolean; expansion_thing_ids?: number[]; project_id?: Id }): Promise<LinkBggResult>;
   unlinkBgg(game_id: Id): Promise<void>;
 
