@@ -1,32 +1,24 @@
 import { createHashRouter, createMemoryRouter, Link, Navigate, NavLink, Outlet, RouterProvider, useMatch, useNavigate } from 'react-router';
 import { useEffect, useRef, useState } from 'react';
+import type { ComponentType } from 'react';
 import { ProjectsPage } from '../features/projects/ProjectsPage';
 import { ProjectLayout } from '../features/projects/ProjectLayout';
-import { GamePage } from '../features/game/GamePage';
-import { MiniaturesPage } from '../features/miniatures/MiniaturesPage';
-import { PaintingMode } from '../features/painting/PaintingMode';
 import { NotYetPage } from '../features/projects/NotYetPage';
-import { DistributePage } from '../features/images/DistributePage';
-import { AiSettingsPage } from '../features/settings/AiSettingsPage';
 import { LibraryLayout } from '../features/library/LibraryLayout';
-import { TechniquesPage } from '../features/library/TechniquesPage';
-import { TechniquePage } from '../features/library/TechniquePage';
-import { TechniqueEditPage } from '../features/library/TechniqueEditPage';
-import { WorkshopGuide } from '../features/library/WorkshopGuide';
-import { ResearchPage } from '../features/library/ResearchPage';
-import { ResearchTaskPage } from '../features/library/ResearchTaskPage';
-import { RecipesPage } from '../features/library/RecipesPage';
-import { RecipePage } from '../features/library/RecipePage';
-import { Workspace } from '../features/workspace/Workspace';
-import { PaintsPage } from '../features/paints/PaintsPage';
-import { ImportPage } from '../features/paints/ImportPage';
-import { ShoppingPage } from '../features/paints/ShoppingPage';
 import { Button, Dialog } from '../ui/components';
 import { useCommand } from './context';
 import { useSaveStatus } from './saveStatus';
 import { useRuns } from './runs';
 import { Logo } from '../ui/Logo';
 import './shell.css';
+
+/**
+ * O-10: most pages are loaded when they are first opened (route.lazy), so the first
+ * download is smaller. The projects page and the layouts load with the app.
+ */
+function page(load: () => Promise<unknown>, name: string) {
+  return { lazy: async () => ({ Component: (await load() as Record<string, ComponentType>)[name] }) };
+}
 
 // Hash routing works on any static host. Embedded previews that only allow a plain
 // #name in the hash are built with VITE_ROUTER=memory instead.
@@ -35,24 +27,24 @@ const routes = [
     element: <Shell />,
     children: [
       { index: true, element: <ProjectsPage /> },
-      { path: 'innstillinger', element: <AiSettingsPage /> },
-      { path: 'malinger', element: <PaintsPage /> },
-      { path: 'malinger/import', element: <ImportPage /> },
-      { path: 'malinger/handleliste', element: <ShoppingPage /> },
-      { path: 'p/:projectId/m/:subjectId', element: <Workspace /> },
-      { path: 'p/:projectId/m/:subjectId/:tab', element: <Workspace /> },
+      { path: 'innstillinger', ...page(() => import('../features/settings/AiSettingsPage'), 'AiSettingsPage') },
+      { path: 'malinger', ...page(() => import('../features/paints/PaintsPage'), 'PaintsPage') },
+      { path: 'malinger/import', ...page(() => import('../features/paints/ImportPage'), 'ImportPage') },
+      { path: 'malinger/handleliste', ...page(() => import('../features/paints/ShoppingPage'), 'ShoppingPage') },
+      { path: 'p/:projectId/m/:subjectId', ...page(() => import('../features/workspace/Workspace'), 'Workspace') },
+      { path: 'p/:projectId/m/:subjectId/:tab', ...page(() => import('../features/workspace/Workspace'), 'Workspace') },
       {
         path: 'bibliotek',
         element: <LibraryLayout />,
         children: [
           { index: true, element: <Navigate to="teknikker" replace /> },
-          { path: 'teknikker', element: <TechniquesPage /> },
-          { path: 'teknikker/:techniqueId', element: <TechniquePage /> },
-          { path: 'teknikker/:techniqueId/rediger', element: <TechniqueEditPage /> },
-          { path: 'oppskrifter', element: <RecipesPage /> },
-          { path: 'research', element: <ResearchPage /> },
-          { path: 'research/:taskId', element: <ResearchTaskPage /> },
-          { path: 'oppskrifter/:recipeId', element: <RecipePage /> },
+          { path: 'teknikker', ...page(() => import('../features/library/TechniquesPage'), 'TechniquesPage') },
+          { path: 'teknikker/:techniqueId', ...page(() => import('../features/library/TechniquePage'), 'TechniquePage') },
+          { path: 'teknikker/:techniqueId/rediger', ...page(() => import('../features/library/TechniqueEditPage'), 'TechniqueEditPage') },
+          { path: 'oppskrifter', ...page(() => import('../features/library/RecipesPage'), 'RecipesPage') },
+          { path: 'research', ...page(() => import('../features/library/ResearchPage'), 'ResearchPage') },
+          { path: 'research/:taskId', ...page(() => import('../features/library/ResearchTaskPage'), 'ResearchTaskPage') },
+          { path: 'oppskrifter/:recipeId', ...page(() => import('../features/library/RecipePage'), 'RecipePage') },
         ],
       },
       {
@@ -60,17 +52,17 @@ const routes = [
         element: <ProjectLayout />,
         children: [
           { index: true, element: <Navigate to="spill" replace /> },
-          { path: 'spill', element: <GamePage /> },
-          { path: 'miniatyrer', element: <MiniaturesPage /> },
-          { path: 'bilder', element: <DistributePage /> },
-          { path: 'kilder', element: <DistributePage /> },
+          { path: 'spill', ...page(() => import('../features/game/GamePage'), 'GamePage') },
+          { path: 'miniatyrer', ...page(() => import('../features/miniatures/MiniaturesPage'), 'MiniaturesPage') },
+          { path: 'bilder', ...page(() => import('../features/images/DistributePage'), 'DistributePage') },
+          { path: 'kilder', ...page(() => import('../features/images/DistributePage'), 'DistributePage') },
           { path: 'palett', element: <NotYetPage title="Palett og prosess" slice="bit 3" /> },
         ],
       },
     ],
   },
-  { path: 'male/:subjectId', element: <PaintingMode /> },
-  { path: 'bibliotek/teknikker/:techniqueId/verksted', element: <WorkshopGuide /> },
+  { path: 'male/:subjectId', ...page(() => import('../features/painting/PaintingMode'), 'PaintingMode') },
+  { path: 'bibliotek/teknikker/:techniqueId/verksted', ...page(() => import('../features/library/WorkshopGuide'), 'WorkshopGuide') },
   { path: '*', element: <Navigate to="/" replace /> },
 ];
 const router = import.meta.env.VITE_ROUTER === 'memory' ? createMemoryRouter(routes) : createHashRouter(routes);

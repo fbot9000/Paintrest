@@ -22,6 +22,8 @@ src/ui/*                 komponenter og stil
 server/                  Paintrest-serveren: datamappen, nøklene, modellkall, nettsøk, sidehenting og agenten
 ```
 
+De fleste sidene lastes først når de åpnes (`route.lazy` i `src/app/App.tsx`, O-10). Prosjektsiden og oppsettet lastes med appen. Hovedfila er da omtrent 410 kB i stedet for 790 kB.
+
 Skjermene skriver aldri rett til data. De kaller `Commands`. Senere erstattes `createLocalCommands` med en klient mot applikasjonslaget og PostgreSQL. Typer, kommandogrensesnitt, lesefunksjoner og skjermer kan stå som de er.
 
 Hver kommando kjører som én transaksjon og skriver `change_record` med `initiated_by = user`. Hvis kommandoen feiler, endres ingenting.
