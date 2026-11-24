@@ -80,7 +80,7 @@ export interface AgentTurnInput {
     | { kind: 'game'; game: string; miniatures: { ref: string; name: string; images: number; identity?: SubjectIdentityRecord | null;
         rejected?: { official_name: string | null; image_urls: string[] }[] }[] }
     /** Library research (bit 7.4): a technique or recipe for the user's own library. */
-    | { kind: 'knowledge'; target: 'technique' | 'recipe' | 'image'; revision?: { name: string } | null; paints?: 'both' | 'owned' | 'best' | null;
+    | { kind: 'knowledge'; target: 'technique' | 'recipe' | 'image'; revision?: { name: string; kind?: 'technique' | 'recipe' } | null; paints?: 'both' | 'owned' | 'best' | null;
         /** «Fra bilde»: the user's pictures as data URLs, sent to the model with the request. */
         reference_images?: string[] }
     /** Game page: facts (year, publisher, official website) and pictures for the game's illustration. */

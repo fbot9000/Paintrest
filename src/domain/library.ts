@@ -245,7 +245,7 @@ export interface KnowledgeTaskSummary {
   pending: number;
   approved: number;
   /** Bit 7.6: the technique this task improves, if any. */
-  revision_of: { id: Id; name: string } | null;
+  revision_of: { id: Id; name: string; kind: 'technique' | 'recipe' } | null;
 }
 
 function knowledgeTarget(t: Tables, task_id: Id): 'technique' | 'recipe' | 'image' {
@@ -261,10 +261,11 @@ function taskProposals(t: Tables, task_id: Id): ResearchProposal[] {
   return Object.values(t.research_proposal).filter((p) => p.task_id === task_id).sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 
-function revisionOf(t: Tables, task_id: Id): { id: Id; name: string } | null {
-  const r = Object.values(t.task_revision_target).find((x) => x.task_id === task_id && x.target_type === 'technique');
-  const tech = r ? t.technique[r.target_id] : undefined;
-  return tech ? { id: tech.id, name: tech.name } : null;
+function revisionOf(t: Tables, task_id: Id): { id: Id; name: string; kind: 'technique' | 'recipe' } | null {
+  const r = Object.values(t.task_revision_target).find((x) => x.task_id === task_id && (x.target_type === 'technique' || x.target_type === 'recipe'));
+  if (!r) return null;
+  const row = r.target_type === 'recipe' ? t.recipe[r.target_id] : t.technique[r.target_id];
+  return row ? { id: row.id, name: row.name, kind: r.target_type === 'recipe' ? 'recipe' : 'technique' } : null;
 }
 
 /** Library research tasks, newest first. */

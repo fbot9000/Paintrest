@@ -334,7 +334,8 @@ export function parseFocus(v: unknown): AnyFocus | null {
     const reference_images = (Array.isArray(f.reference_images) ? f.reference_images : [])
       .filter((x): x is string => typeof x === 'string' && DATA_IMAGE.test(x) && x.length < 700_000).slice(0, 4);
     const target = f.target === 'recipe' ? 'recipe' : f.target === 'image' ? 'image' : 'technique';
-    return { kind: 'knowledge', target, revision: rev ? { name: rev } : null, paints, ...(reference_images.length ? { reference_images } : {}) };
+    const revKind = f.revision && typeof f.revision === 'object' && (f.revision as Record<string, unknown>).kind === 'recipe' ? 'recipe' as const : 'technique' as const;
+    return { kind: 'knowledge', target, revision: rev ? { name: rev, kind: revKind } : null, paints, ...(reference_images.length ? { reference_images } : {}) };
   }
   if (f.kind === 'plan') {
     return {

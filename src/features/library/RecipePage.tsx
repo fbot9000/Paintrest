@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { useView } from '../../app/context';
+import { useApp, useView } from '../../app/context';
+import { useAiStatus } from '../../app/ai-status';
+import { startRecipeImprovement } from './research-runs';
 import type { RecipePatch, RecipePaintInput, RecipeStepInput } from '../../domain/commands';
 import { catalogProducts, knowledgeImages, libraryTags, libraryTechniques, recipeDetail } from '../../domain/library';
 import type { RecipePaintView } from '../../domain/library';
@@ -26,6 +28,8 @@ export function RecipePage() {
   const techniques = useView((t) => libraryTechniques(t).map((c) => c.technique));
   const { save, error, clearError, busy, saved } = useAutosave();
   const navigate = useNavigate();
+  const app = useApp();
+  const ai = useAiStatus();
 
   if (!d) {
     return <main className="page"><h1>Fant ikke oppskriften</h1><p><Link to="/bibliotek/oppskrifter">Til oppskriftene</Link></p></main>;
@@ -50,6 +54,16 @@ export function RecipePage() {
     if (ok && id) await addPaint(id);
   };
 
+  // O-6: the agent drafts an improved recipe; you see it in the research before it is written in.
+  const improve = async () => {
+    let task: string | undefined;
+    await save(async () => {
+      task = await startRecipeImprovement({ store: app.store, research: app.research, agent: app.agent, ai: app.ai, cmd: app.cmd }, x.id,
+        'Gå gjennom oppskriften og foreslå forbedringer.');
+    });
+    if (task) navigate(`/bibliotek/research/${task}`);
+  };
+
   // Techniques for the step picker: live ones, plus a deleted one a step still points to.
   const techniqueOptions = [
     ...techniques,
@@ -59,7 +73,10 @@ export function RecipePage() {
   return (
     <main className="page tech-page">
       <div className="tech-head">
-        <span className="eyebrow"><Link to="/bibliotek/oppskrifter">Oppskrifter</Link></span>
+        <div className="tech-head-row">
+          <span className="eyebrow"><Link to="/bibliotek/oppskrifter">Oppskrifter</Link></span>
+          {!deleted && ai === 'ready' && <div className="head-actions"><Button onClick={improve}>Forbedre med agenten</Button></div>}
+        </div>
         {deleted
           ? <h1>{x.name}</h1>
           : <InlineText as="h1" className="h1" value={x.name} label="Navn" onSave={(v) => patch({ name: v })} />}

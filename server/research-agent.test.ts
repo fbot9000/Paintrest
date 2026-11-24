@@ -755,6 +755,11 @@ describe('malingsvalg er brukerens (brukerbeslutning 11.11.2026)', () => {
   });
 
   it('følger valget: bare det jeg har, beste valg, eller begge som to forslag', () => {
+    const improve = knowledgeInstructions({}, ['recipe'], 'none', { kind: 'knowledge', target: 'recipe', revision: { name: 'Ild', kind: 'recipe' } });
+    expect(improve).toContain('OPPDRAG: FORBEDRE OPPSKRIFTEN «Ild»');
+    expect(improve).toContain('recipe_to_improve');
+    expect(improve).toContain('Oppskriften finnes fra før');
+    expect(knowledgeInstructions({}, ['technique'], 'none', { kind: 'knowledge', target: 'technique', revision: { name: 'Kantlys' } })).toContain('FORBEDRE TEKNIKKEN «Kantlys»');
     const owned = knowledgeInstructions({}, ['recipe'], 'none', { kind: 'knowledge', target: 'recipe', paints: 'owned' });
     const best = knowledgeInstructions({}, ['recipe'], 'none', { kind: 'knowledge', target: 'recipe', paints: 'best' });
     const both = knowledgeInstructions({}, ['recipe'], 'none', { kind: 'knowledge', target: 'recipe', paints: 'both' });

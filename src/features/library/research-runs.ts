@@ -39,3 +39,10 @@ export async function startImprovement(deps: Deps, technique_id: Id, text: strin
   startRun(deps, task, text);
   return task;
 }
+
+/** O-6: opens an improvement task for a recipe and starts the first turn. Returns the task id. */
+export async function startRecipeImprovement(deps: Deps, recipe_id: Id, text: string): Promise<Id> {
+  const task = await deps.research.startRecipeRevision(recipe_id);
+  startRun(deps, task, text);
+  return task;
+}

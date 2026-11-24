@@ -50,6 +50,8 @@ export interface ResearchCommands {
    * The agent drafts a changed technique; approving writes it into the technique.
    */
   startTechniqueRevision(technique_id: Id): Promise<Id>;
+  /** O-6: the same for a recipe. The agent drafts a changed recipe; approving writes it into the recipe. */
+  startRecipeRevision(recipe_id: Id): Promise<Id>;
   closeTask(task_id: Id): Promise<void>;
   addUserMessage(task_id: Id, body: string): Promise<Id>;
   openRevisionTarget(task_id: Id, subject_id: Id): Promise<void>;

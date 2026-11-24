@@ -222,4 +222,5 @@ Panelet viser hvert søk og hver side mens agenten jobber, og du kan stoppe den.
 - Er kildene uenige, vises fremgangsmåtene side om side. Du velger hvilken som er utgangspunktet.
 - Hvert steg er merket «Vist i kilde» eller «Forslag fra agenten».
 - «Lagre og foreslå forbedring» (etter en erfaring) og «Forbedre med agenten» (på en teknikk) gir et forslag til endring. Du ser hva som endres, med «Nå» og «Forslag», før du tar det i bruk. Har du endret teknikken i mellomtiden, må agenten lage et nytt forslag.
+- «Forbedre med agenten» på en oppskrift gjør det samme for oppskriften. Forslaget viser hele den nye fargerekken og stegene, med en linje om hvordan oppskriften er nå. «Ta i bruk endringene» skriver det inn i oppskriften; status, bilder og kilder blir værende.
 - Ingenting lagres i biblioteket før du trykker «Lagre i biblioteket». Da lagres det som utkast, og du kan endre alt etterpå. Malinger som ikke finnes i katalogen, kobler du til et produkt eller legger til som ubekreftet.

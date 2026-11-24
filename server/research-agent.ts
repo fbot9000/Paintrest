@@ -244,7 +244,8 @@ export interface KnowledgeFocus {
   /** image = suggestions for recipes and techniques from the user's pictures. */
   target: 'technique' | 'recipe' | 'image';
   /** Bit 7.6: improve this technique from the library instead of drafting a new one. */
-  revision?: { name: string } | null;
+  /** An improvement of a technique (bit 7.6) or a recipe (O-6) in the library. Absent kind = technique. */
+  revision?: { name: string; kind?: 'technique' | 'recipe' } | null;
   /** Recipes: the user's paint choice. both = two drafts (owned / best). */
   paints?: 'both' | 'owned' | 'best' | null;
   /** «Fra bilde»: up to 4 pictures (data URLs), sent to the model with the request. */
@@ -544,7 +545,15 @@ Sider du bare leser med web_search, ser brukeren som «lest via UiB», uten bild
   {"action": "final", "message": "…", "proposals": [ … ]}     – ferdig svar til brukeren`
       : `Du har ikke nettilgang i dette oppsettet. Svar direkte med ett JSON-objekt {"action": "final", "message": "…", "proposals": [ … ]}.
 Alt du skriver, bygger da på det du vet fra før. Merk forslaget "synthesized", alle steg med "basis": "synthesized", og si tydelig i meldingen at det ikke er sjekket mot kilder.`;
-  const what = focus.revision
+  const what = focus.revision?.kind === 'recipe'
+    ? `OPPDRAG: FORBEDRE OPPSKRIFTEN «${focus.revision.name}» i brukerens bibliotek.
+Hele oppskriften står i "recipe_to_improve": fargerekken med roller, stegene og kildene den bygger på.
+- Ta utgangspunkt i det som står der. Behold det som fungerer, og endre det brukerens melding peker på.
+- Bruk malinger fra "paints" i konteksten når du kan, med eksakt produsent, serie og navn.
+- Lag ETT recipe-forslag med HELE den forbedrede oppskriften (hele fargerekken og alle steg, også det som ikke endres). Brukeren ser forslaget før det tas i bruk.
+- Skriv i "note" og i meldingen kort hva du endret og hvorfor.
+- Navnet skal være det samme med mindre brukeren ber om noe annet.`
+    : focus.revision
     ? `OPPDRAG: FORBEDRE TEKNIKKEN «${focus.revision.name}» i brukerens bibliotek.
 Hele teknikken står i "technique_to_improve", sammen med brukerens erfaringer ("experiences") og kildene den bygger på.
 - Ta utgangspunkt i det som står der. Behold det som fungerer, og endre det erfaringene og meldingen peker på.
@@ -619,7 +628,7 @@ Tolkning:
 
 Regler:
 - Du kan ikke endre biblioteket, prosjektene eller malingskatalogen. Utkastet ditt lagres først når brukeren godkjenner det.
-${focus.revision ? '- Teknikken finnes fra før; du lager et forslag til endring av den, ikke en ny.' : '- Ikke lag et utkast som finnes fra før i "library" (sammenlign navn). Si heller fra i meldingen.'}
+${focus.revision ? `- ${focus.revision.kind === 'recipe' ? 'Oppskriften' : 'Teknikken'} finnes fra før; du lager et forslag til endring av den, ikke en ny.` : '- Ikke lag et utkast som finnes fra før i "library" (sammenlign navn). Si heller fra i meldingen.'}
 - For å endre et eget ventende utkast (your_pending_proposals), sett "update_of" til dets ref.
 - Tillatte forslagstyper: ${resultTypes.join(', ') || 'ingen'}.
 - Hold teksten kort og praktisk. Steg skal kunne leses ved malebordet.

@@ -169,7 +169,7 @@ Ingen nye tabeller og ingen nye felt. `source_link` får `target_type: 'techniqu
 
 Agenten skriver ikke direkte i biblioteket (AVVIK punkt 28, sonen *Globalt*). Den lager forslag.
 - **Godkjenner du et forslag til ny teknikk eller oppskrift,** opprettes den med statusen `draft`. Deretter redigerer du fritt.
-- **Godkjenner du et forslag til endring av en eksisterende teknikk eller oppskrift,** skrives endringen rett inn. Er raden endret etter at forslaget ble laget, stopper godkjenningen (`updated_at`), slik som for maleplaner. Bygget for teknikker (7.6). Oppskrifter kan ikke forbedres med agenten ennå.
+- **Godkjenner du et forslag til endring av en eksisterende teknikk eller oppskrift,** skrives endringen rett inn. Er raden endret etter at forslaget ble laget, stopper godkjenningen (`updated_at`), slik som for maleplaner. Bygget for teknikker (7.6) og oppskrifter (O-6).
 
 `checkScope` godtar `technique` og `recipe` bare når `allow_new_knowledge` er sann, og avviser prosjektendringer i en `new_knowledge`-oppgave.
 

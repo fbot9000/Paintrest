@@ -681,11 +681,11 @@ export interface TaskResultType {
 export interface TaskRevisionTarget {
   id: Id;
   task_id: Id;
-  /** PROTOTYPE (bit 7.6): 'technique' for an improvement of a technique in the library. */
-  target_type: 'paint_plan' | 'technique';
+  /** PROTOTYPE (bit 7.6, O-6): 'technique' or 'recipe' for an improvement of a technique or recipe in the library. */
+  target_type: 'paint_plan' | 'technique' | 'recipe';
   /** For paint_plan: the subject whose plan is opened for revision. For technique: the technique. */
   target_id: Id;
-  /** For technique: technique.updated_at when the task was opened (the library has no versions). */
+  /** For technique and recipe: its updated_at when the task was opened (the library has no versions). */
   base_version_id: Id;
   opened_at: Timestamp;
 }

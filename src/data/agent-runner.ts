@@ -42,14 +42,14 @@ run_id: string | null = null): Promise<TurnSummary> {
   // Library tasks get their own assignment; the agent only drafts (global zone).
   const library = scope.area_kind === 'new_knowledge';
   if (library) {
-    const rev = Object.values(t.task_revision_target).find((r) => r.task_id === task_id && r.target_type === 'technique');
-    const tech = rev ? t.technique[rev.target_id] : undefined;
+    const rev = Object.values(t.task_revision_target).find((r) => r.task_id === task_id && (r.target_type === 'technique' || r.target_type === 'recipe'));
+    const row = rev?.target_type === 'recipe' ? t.recipe[rev.target_id] : rev ? t.technique[rev.target_id] : undefined;
     // The pictures are loaded by the caller (it can scale them); the target comes from the task.
     const pictures = focus?.kind === 'knowledge' ? focus.reference_images ?? [] : [];
     focus = {
       kind: 'knowledge',
       target: scope.image_file_ids?.length ? 'image' : ctx.allowedTypes.includes('recipe') ? 'recipe' : 'technique',
-      revision: tech && !tech.deleted_at ? { name: tech.name } : null,
+      revision: row && !row.deleted_at ? { name: row.name, kind: rev!.target_type === 'recipe' ? 'recipe' : 'technique' } : null,
       paints: scope.paint_choice ?? null,
       ...(pictures.length ? { reference_images: pictures } : {}),
     };

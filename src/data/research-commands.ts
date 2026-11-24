@@ -83,10 +83,16 @@ export function checkScope(t: Tables, task_id: Id, p: { result_type: ProposalKin
     }
     // An improvement task (bit 7.6): the draft is based on the technique as it is now.
     const target = libraryRevisionTarget(t, task_id);
-    if (target && p.result_type === 'technique') {
+    if (target && p.result_type === 'technique' && target.target_type === 'technique') {
       const tech = t.technique[target.target_id];
       if (!tech || tech.deleted_at) throw new CommandError('Teknikken som skal forbedres, finnes ikke lenger');
       return { result_type: 'technique', base_version_id: tech.updated_at };
+    }
+    // O-6: an improvement of a recipe.
+    if (target && p.result_type === 'recipe' && target.target_type === 'recipe') {
+      const recipe = t.recipe[target.target_id];
+      if (!recipe || recipe.deleted_at) throw new CommandError('Oppskriften som skal forbedres, finnes ikke lenger');
+      return { result_type: 'recipe', base_version_id: recipe.updated_at };
     }
     return { result_type: p.result_type, base_version_id: null };
   }
@@ -394,6 +400,21 @@ export function createResearchCommands(store: Store, deps: ResearchDeps = {}): R
       });
     },
 
+    async startRecipeRevision(recipe_id) {
+      return tx((t, ws) => {
+        const recipe = must(t.recipe[recipe_id], 'Oppskriften');
+        if (recipe.deleted_at) throw new CommandError('Oppskriften er slettet');
+        const id = newId();
+        t.research_task[id] = { id, workspace_id: ws, status: 'open', created_at: now() };
+        t.task_scope[id] = { task_id: id, area_kind: 'new_knowledge', work_project_id: null, allow_new_knowledge: true };
+        t.task_result_type.push({ task_id: id, result_type: 'recipe' });
+        const rid = newId();
+        t.task_revision_target[rid] = { id: rid, task_id: id, target_type: 'recipe', target_id: recipe_id, base_version_id: recipe.updated_at, opened_at: now() };
+        record(t, ws, 'research_task', id, 'create', { initiated_by: 'user', task_id: id });
+        return id;
+      });
+    },
+
     async closeTask(task_id) {
       tx((t, ws) => {
         must(t.research_task[task_id], 'Oppgaven').status = 'closed';
@@ -660,9 +681,11 @@ function approve(t: Tables, ws: Id, proposal_id: Id, opts: ApproveOptions, files
   if (kind === 'technique' || kind === 'recipe') {
     // The user approves the draft into the library; it starts as «utkast» and is edited freely after.
     const userWho: Who = { ...who, initiated_by: 'user' };
-    const revision = kind === 'technique' ? libraryRevisionTarget(t, p.task_id) : undefined;
-    p.applied_target_id = revision
+    const revision = libraryRevisionTarget(t, p.task_id);
+    p.applied_target_id = revision && kind === 'technique' && revision.target_type === 'technique'
       ? reviseTechnique(t, ws, p, revision.target_id, opts.primary_variant, userWho)
+      : revision && kind === 'recipe' && revision.target_type === 'recipe'
+      ? reviseRecipe(t, ws, p, revision.target_id, opts.product_choices ?? {}, opts.primary_variant, userWho)
       : kind === 'technique'
       ? approveTechnique(t, ws, p, opts.primary_variant, userWho)
       : approveRecipe(t, ws, p, opts.product_choices ?? {}, opts.primary_variant, userWho);
@@ -870,9 +893,9 @@ function chosenImages(images: KnowledgeImage[] | undefined, chosen: string[] | u
   return (images ?? []).filter((i) => !chosen || chosen.includes(i.image_url));
 }
 
-/** The technique an improvement task is about (bit 7.6), if any. */
+/** The technique (bit 7.6) or recipe (O-6) an improvement task is about, if any. */
 export function libraryRevisionTarget(t: Tables, task_id: Id) {
-  return Object.values(t.task_revision_target).find((r) => r.task_id === task_id && r.target_type === 'technique');
+  return Object.values(t.task_revision_target).find((r) => r.task_id === task_id && (r.target_type === 'technique' || r.target_type === 'recipe'));
 }
 
 /**
@@ -927,6 +950,51 @@ function approveTechnique(t: Tables, ws: Id, p: ResearchProposal, primary: numbe
   return id;
 }
 
+/**
+ * Writes an approved improvement into the recipe (O-6), like reviseTechnique: refused when the recipe
+ * was changed after the draft was made. The colour sequence and the steps are replaced; status,
+ * pictures and existing sources stay. Plan steps that use the recipe keep pointing to it.
+ */
+function reviseRecipe(t: Tables, ws: Id, p: ResearchProposal, recipe_id: Id, choices: Record<string, Id | 'create'>, primary: number | undefined, who: Who): Id {
+  const recipe = must(t.recipe[recipe_id], 'Oppskriften');
+  if (recipe.deleted_at) throw new CommandError('Oppskriften er slettet');
+  if (recipe.updated_at !== p.base_version_id) {
+    throw new CommandError('Oppskriften er endret etter at forslaget ble laget. Be agenten om et nytt forslag.');
+  }
+  const x = p.payload as RecipePayload;
+  const variants = variantsText(x.comparison, primary);
+  const note = [x.note, variants ? `Varianter:\n${variants}` : null].filter(Boolean).join('\n\n') || null;
+  const products = resolveProducts(t, ws, recipeProductRefs(x), choices, who);
+  Object.assign(recipe, { name: x.name, tags: x.tags, effect: x.effect, note, evidence: p.evidence, uncertainty: p.uncertainty, updated_at: now() });
+  for (const r of Object.values(t.recipe_paint)) if (r.recipe_id === recipe_id) delete t.recipe_paint[r.id];
+  for (const s of Object.values(t.recipe_step)) if (s.recipe_id === recipe_id) delete t.recipe_step[s.id];
+  writeRecipeRows(t, recipe_id, x, products);
+  record(t, ws, 'recipe', recipe_id, 'update', who);
+  const linked = new Set(Object.values(t.source_link)
+    .filter((l) => !l.deleted_at && l.target_type === 'recipe' && l.target_id === recipe_id)
+    .map((l) => t.source[l.source_id]?.url));
+  linkMethodSources(t, ws, 'recipe', recipe_id, x.sources.filter((s) => !linked.has(s.url)), x.sources_read, who);
+  return recipe_id;
+}
+
+/** The colour sequence and steps of a recipe from a draft. */
+function writeRecipeRows(t: Tables, recipe_id: Id, x: RecipePayload, products: Record<string, Id>): void {
+  const paintIds = x.paints.map((pe, position) => {
+    const pid = newId();
+    t.recipe_paint[pid] = { id: pid, recipe_id, position, product_id: products[productKey(pe.product)]!, role: pe.role, note: pe.note };
+    return pid;
+  });
+  x.steps.forEach((st, position) => {
+    const sid = newId();
+    const tech = st.technique_id ? t.technique[st.technique_id] : undefined;
+    t.recipe_step[sid] = {
+      id: sid, recipe_id, position, instruction: st.instruction,
+      paint_ids: st.paints.map((i) => paintIds[i]).filter((v): v is Id => !!v),
+      technique_id: tech && !tech.deleted_at ? tech.id : null,
+    };
+  });
+}
+
 function approveRecipe(t: Tables, ws: Id, p: ResearchProposal, choices: Record<string, Id | 'create'>, primary: number | undefined, who: Who): Id {
   const x = p.payload as RecipePayload;
   // A recipe has no variants field: the compared variants go into the note.
@@ -940,20 +1008,7 @@ function approveRecipe(t: Tables, ws: Id, p: ResearchProposal, choices: Record<s
     id, workspace_id: ws, name: taken.has(x.name.toLowerCase()) ? `${x.name} (ny)` : x.name, tags: x.tags, status: 'draft',
     effect: x.effect, note, evidence: p.evidence, uncertainty: p.uncertainty, created_at: ts, updated_at: ts, deleted_at: null,
   };
-  const paintIds = x.paints.map((pe, position) => {
-    const pid = newId();
-    t.recipe_paint[pid] = { id: pid, recipe_id: id, position, product_id: products[productKey(pe.product)]!, role: pe.role, note: pe.note };
-    return pid;
-  });
-  x.steps.forEach((st, position) => {
-    const sid = newId();
-    const tech = st.technique_id ? t.technique[st.technique_id] : undefined;
-    t.recipe_step[sid] = {
-      id: sid, recipe_id: id, position, instruction: st.instruction,
-      paint_ids: st.paints.map((i) => paintIds[i]).filter((v): v is Id => !!v),
-      technique_id: tech && !tech.deleted_at ? tech.id : null,
-    };
-  });
+  writeRecipeRows(t, id, x, products);
   record(t, ws, 'recipe', id, 'create', who);
   linkMethodSources(t, ws, 'recipe', id, x.sources, x.sources_read, who);
   return id;

@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router';
 import { useApp, useView } from '../../app/context';
 import { matchProduct, productKey, recipeProductRefs, variantsText } from '../../domain/agent';
 import type { KnowledgeComparison, KnowledgeImage, ProductRef, RecipePayload, SourceRead, SourceRef, TechniquePayload } from '../../domain/agent';
-import { catalogProducts, knowledgeTaskView, techniqueDetail } from '../../domain/library';
+import { catalogProducts, knowledgeTaskView, recipeDetail, techniqueDetail } from '../../domain/library';
 import { ownershipOf } from '../../domain/views';
 import type { Id, ResearchMessage, ResearchProposal } from '../../domain/types';
 import { Badge, Button, ErrorNote, FileImage, OwnershipFlag } from '../../ui/components';
@@ -51,7 +51,7 @@ export function ResearchTaskPage() {
           <div className="tech-head">
             <span className="eyebrow">
               <Link to="/bibliotek/research">Research</Link> / {view.revision_of
-                ? <Link to={`/bibliotek/teknikker/${view.revision_of.id}`}>{view.revision_of.name}</Link>
+                ? <Link to={`/bibliotek/${view.revision_of.kind === 'recipe' ? 'oppskrifter' : 'teknikker'}/${view.revision_of.id}`}>{view.revision_of.name}</Link>
                 : view.target === 'image' ? 'Fra bilde' : view.target === 'technique' ? 'Teknikk' : 'Oppskrift'}
             </span>
             <h1>{view.title}</h1>
@@ -67,7 +67,7 @@ export function ResearchTaskPage() {
 
           {pending.length > 0 && (
             <div className={`drafts ${pending.length > 1 ? 'drafts-many' : ''}`}>
-              {pending.map((p) => <DraftCard key={p.id} p={p} messages={view.messages} revisionOf={view.revision_of?.id ?? null} />)}
+              {pending.map((p) => <DraftCard key={p.id} p={p} messages={view.messages} revisionOf={view.revision_of ?? null} />)}
             </div>
           )}
           {pending.length === 0 && !running && view.proposals.length === 0 && (
@@ -123,12 +123,16 @@ function DoneLine({ p }: { p: ResearchProposal }) {
   );
 }
 
-function DraftCard({ p, messages, revisionOf }: { p: ResearchProposal; messages: ResearchMessage[]; revisionOf: Id | null }) {
+function DraftCard({ p, messages, revisionOf }: { p: ResearchProposal; messages: ResearchMessage[]; revisionOf: { id: Id; kind: 'technique' | 'recipe' } | null }) {
   const app = useApp();
   const payload = p.payload as TechniquePayload | RecipePayload;
   // Improvement (bit 7.6): compare with the technique as it is now.
-  const current = useView((t) => (revisionOf ? techniqueDetail(t, revisionOf) : undefined), [revisionOf]);
-  const stale = !!current && current.technique.updated_at !== p.base_version_id;
+  const current = useView((t) => (revisionOf?.kind === 'technique' ? techniqueDetail(t, revisionOf.id) : undefined), [revisionOf?.id]);
+  // O-6: an improved recipe is shown whole, with the recipe as it is now in a short line.
+  const currentRecipe = useView((t) => (revisionOf?.kind === 'recipe' ? recipeDetail(t, revisionOf.id) : undefined), [revisionOf?.id]);
+  const stale = (!!current && current.technique.updated_at !== p.base_version_id)
+    || (!!currentRecipe && currentRecipe.recipe.updated_at !== p.base_version_id);
+  const revising = !!current || !!currentRecipe;
   const comparison = payload.comparison ?? null;
   const [primary, setPrimary] = useState(() => Math.max(0, comparison?.variants.findIndex((v) => v.primary) ?? 0));
   const images = payload.images ?? [];
@@ -162,7 +166,7 @@ function DraftCard({ p, messages, revisionOf }: { p: ResearchProposal; messages:
       {hasSources && <SourceInspector sources={payload.sources} read={payload.sources_read ?? []} messages={messages} />}
       <div className="draft-main tech-section">
       <div className="tech-head-row">
-        <span className="eyebrow">{current ? 'Forslag til endring' : `Utkast fra agenten · ${p.result_type === 'technique' ? 'teknikk' : 'oppskrift'}`}</span>
+        <span className="eyebrow">{revising ? 'Forslag til endring' : `Utkast fra agenten · ${p.result_type === 'technique' ? 'teknikk' : 'oppskrift'}`}</span>
         <div className="tech-badges">
           {hasSources
             ? <Badge>{payload.sources.length} {payload.sources.length === 1 ? 'kilde' : 'kilder'}</Badge>
@@ -179,7 +183,9 @@ function DraftCard({ p, messages, revisionOf }: { p: ResearchProposal; messages:
             comparison={comparison && <Comparison c={comparison} sources={payload.sources} primary={primary} onPick={setPrimary} />} />
         : p.result_type === 'technique'
         ? <TechniqueDraft x={p.payload as TechniquePayload} comparison={comparison && <Comparison c={comparison} sources={payload.sources} primary={primary} onPick={setPrimary} />} />
-        : <RecipeDraft x={p.payload as RecipePayload} comparison={comparison && <Comparison c={comparison} sources={payload.sources} primary={primary} onPick={setPrimary} />} />}
+        : <>{currentRecipe && (
+            <p className="small muted">Nå: {currentRecipe.paints.length} {currentRecipe.paints.length === 1 ? 'maling' : 'malinger'} ({currentRecipe.paints.map((x) => x.product.name).join(', ') || 'ingen'}) og {currentRecipe.steps.length} steg. Forslaget under erstatter fargerekken og stegene.</p>
+          )}<RecipeDraft x={p.payload as RecipePayload} comparison={comparison && <Comparison c={comparison} sources={payload.sources} primary={primary} onPick={setPrimary} />} /></>}
 
       {images.length > 0 && (
         <DraftImages images={images} dropped={dropped}
@@ -203,15 +209,15 @@ function DraftCard({ p, messages, revisionOf }: { p: ResearchProposal; messages:
 
       {stale && (
         <div className="tech-uncertain" role="alert">
-          Du har endret teknikken etter at forslaget ble laget. Be agenten om et nytt forslag, så det bygger på det som står der nå.
+          Du har endret {currentRecipe ? 'oppskriften' : 'teknikken'} etter at forslaget ble laget. Be agenten om et nytt forslag, så det bygger på det som står der nå.
         </div>
       )}
       <ErrorNote error={error} onClose={() => setError(null)} />
       <div className="draft-actions">
         <Button variant="danger" disabled={busy} onClick={() => act(() => app.research.rejectProposal(p.id))}>Forkast</Button>
-        <Button variant="primary" disabled={busy || stale} onClick={approve}>{current ? 'Ta i bruk endringene' : 'Lagre i biblioteket'}</Button>
+        <Button variant="primary" disabled={busy || stale} onClick={approve}>{revising ? 'Ta i bruk endringene' : 'Lagre i biblioteket'}</Button>
       </div>
-      <p className="small muted draft-hint">{current ? 'Endringene skrives inn i teknikken. Erfaringer og status blir værende.' : 'Lagres som utkast. Du kan endre alt etterpå.'}</p>
+      <p className="small muted draft-hint">{current ? 'Endringene skrives inn i teknikken. Erfaringer og status blir værende.' : currentRecipe ? 'Endringene skrives inn i oppskriften. Status, bilder og kilder blir værende.' : 'Lagres som utkast. Du kan endre alt etterpå.'}</p>
       </div>
     </article>
     </div>

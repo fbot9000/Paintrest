@@ -268,6 +268,60 @@ describe('research til biblioteket (bit 7.4)', () => {
     expect(t.research_proposal[prop.id]!.decision).toBe('pending');
   });
 
+  it('forbedring av en oppskrift (O-6): agenten får hele oppskriften, og godkjenning skriver den inn', async () => {
+    const { store, research, agent, cmd } = await setup();
+    const recipe = Object.values(store.getTables().recipe).find((r) => !r.deleted_at && Object.values(store.getTables().recipe_paint).some((x) => x.recipe_id === r.id))!;
+    await cmd.setRecipeStatus(recipe.id, 'approved');
+    const usedBy = Object.values(store.getTables().plan_step)[0]!;
+    store.transaction((t) => { t.plan_step[usedBy.id]!.recipe_version_id = recipe.id; });
+    const task = await research.startRecipeRevision(recipe.id);
+    const { ai, seen } = fakeAi((ctx) => {
+      const cur = ctx.recipe_to_improve as { name: string; paints: { product: unknown; role: string }[] };
+      return [{ type: 'recipe', evidence: 'synthesized', payload: {
+        name: cur.name, effect: 'Bedre overganger', note: 'La til et høylys',
+        paints: [...cur.paints, { product: { manufacturer: 'Citadel', range: 'Base', name: 'Rhinox Hide' }, role: 'highlight' }],
+        steps: [{ instruction: 'Base', paints: [1] }, { instruction: 'Høylys til slutt', paints: [cur.paints.length + 1] }],
+        sources: [],
+      } }];
+    });
+    await runAgentTurn({ store, research, agent, ai }, task, 'Gå gjennom oppskriften');
+    const ctx = seen[0]!.context as { recipe_to_improve: { paints: unknown[]; steps: unknown[] } };
+    const before = Object.values(store.getTables().recipe_paint).filter((x) => x.recipe_id === recipe.id).length;
+    expect(ctx.recipe_to_improve.paints).toHaveLength(before);
+    expect(seen[0]!.focus).toMatchObject({ kind: 'knowledge', target: 'recipe', revision: { name: recipe.name, kind: 'recipe' } });
+
+    const count = Object.keys(store.getTables().recipe).length;
+    const prop = Object.values(store.getTables().research_proposal).find((p) => p.task_id === task)!;
+    expect(prop.base_version_id).toBe(store.getTables().recipe[recipe.id]!.updated_at);
+    await research.approveProposal(prop.id);
+    const t = store.getTables();
+    expect(Object.keys(t.recipe).length).toBe(count);
+    expect(t.research_proposal[prop.id]!.applied_target_id).toBe(recipe.id);
+    expect(t.recipe[recipe.id]).toMatchObject({ effect: 'Bedre overganger', status: 'approved' });
+    const rows = Object.values(t.recipe_paint).filter((x) => x.recipe_id === recipe.id).sort((a, b) => a.position - b.position);
+    expect(rows).toHaveLength(before + 1);
+    expect(rows.at(-1)!.role).toBe('highlight');
+    const steps = Object.values(t.recipe_step).filter((x) => x.recipe_id === recipe.id).sort((a, b) => a.position - b.position);
+    expect(steps.map((x) => x.paint_ids)).toEqual([[rows[0]!.id], [rows.at(-1)!.id]]);
+    // A plan step that uses the recipe keeps pointing to it.
+    expect(t.plan_step[usedBy.id]!.recipe_version_id).toBe(recipe.id);
+  });
+
+  it('forbedring av en oppskrift stopper hvis den er endret etter forslaget, og kan ikke startes for en slettet', async () => {
+    const { store, research, agent, cmd } = await setup();
+    const recipe = Object.values(store.getTables().recipe).find((r) => !r.deleted_at)!;
+    const task = await research.startRecipeRevision(recipe.id);
+    const { ai } = fakeAi(() => [{ type: 'recipe', payload: { name: recipe.name, effect: 'Annet', paints: [{ product: { manufacturer: 'Citadel', range: 'Base', name: 'Rhinox Hide' }, role: 'base' }] } }]);
+    await runAgentTurn({ store, research, agent, ai }, task, 'Forbedre');
+    await new Promise((r) => setTimeout(r, 5));
+    await cmd.updateRecipe(recipe.id, { effect: 'Endret av meg' });
+    const prop = Object.values(store.getTables().research_proposal).find((p) => p.task_id === task)!;
+    await expect(research.approveProposal(prop.id)).rejects.toThrow('endret etter');
+    expect(store.getTables().recipe[recipe.id]!.effect).toBe('Endret av meg');
+    await cmd.deleteRecipe(recipe.id);
+    await expect(research.startRecipeRevision(recipe.id)).rejects.toThrow('slettet');
+  });
+
   it('kan ikke forbedre en slettet teknikk', async () => {
     const { store, research, cmd } = await setup();
     const tech = Object.values(store.getTables().technique)[0]!;

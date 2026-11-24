@@ -701,12 +701,31 @@ function knowledgeContext(t: Tables, task_id: Id, allowedTypes: ResultType[]): A
     sources: Object.values(t.source_link).filter((l) => !l.deleted_at && l.target_type === 'technique' && l.target_id === tech.id)
       .map((l) => t.source[l.source_id]).filter((x): x is NonNullable<typeof x> => !!x && !!x.url).map((x) => ({ url: x.url, title: x.title })),
   } : null;
+  // Improvement of a recipe (O-6): the whole colour sequence with roles, the steps and the sources.
+  const rtarget = Object.values(t.task_revision_target).find((r) => r.task_id === task_id && r.target_type === 'recipe');
+  const recipe = rtarget ? t.recipe[rtarget.target_id] : undefined;
+  const recipeRevision = recipe && !recipe.deleted_at ? (() => {
+    const rows = Object.values(t.recipe_paint).filter((r) => r.recipe_id === recipe.id).sort((a, b) => a.position - b.position);
+    const index = new Map(rows.map((r, i) => [r.id, i + 1]));
+    return {
+      name: recipe.name, tags: recipe.tags, status: recipe.status, effect: recipe.effect, note: recipe.note,
+      paints: rows.flatMap((r) => {
+        const p = t.paint_product[r.product_id];
+        return p ? [{ product: { manufacturer: p.manufacturer, range: p.range_name, name: p.name }, role: r.role, note: r.note, ownership: ownershipOf(t, p.id) }] : [];
+      }),
+      steps: Object.values(t.recipe_step).filter((st) => st.recipe_id === recipe.id).sort((a, b) => a.position - b.position)
+        .map((st) => ({ instruction: st.instruction, paints: st.paint_ids.map((id) => index.get(id)).filter((n): n is number => !!n) })),
+      sources: Object.values(t.source_link).filter((l) => !l.deleted_at && l.target_type === 'recipe' && l.target_id === recipe.id)
+        .map((l) => t.source[l.source_id]).filter((x): x is NonNullable<typeof x> => !!x && !!x.url).map((x) => ({ url: x.url, title: x.title })),
+    };
+  })() : null;
   return {
     subjectRefs: {},
     techniqueRefs,
     allowedTypes,
     data: {
       ...(revision ? { technique_to_improve: revision } : {}),
+      ...(recipeRevision ? { recipe_to_improve: recipeRevision } : {}),
       ...(t.task_scope[task_id]?.paint_choice ? { paint_choice: t.task_scope[task_id]!.paint_choice } : {}),
       library: { techniques, recipes },
       paints,
