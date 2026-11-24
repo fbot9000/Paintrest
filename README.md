@@ -20,11 +20,11 @@ npm run dev -- --host
 Bruk så LAN-adressen Vite viser.
 
 ```bash
-npm test          # kommandolaget: versjoner, avvik, ferdigstilling, BGG-kobling, biblioteket
+npm test          # kommandolaget, agentens forslag og kontroller, malingsimporten, biblioteket og serveren
 npm run build     # typesjekk og produksjonsbygg til dist/
 ```
 
-Ved første start får appen eksempeldata: prosjektet Avalon med fire figurer og maleplaner for Merlin og Druid Champions. Eksempeldataene har ingen malinger: malingssamlingen er din egen (se «Malingssamlingen» under). «⋯ → Tilbakestill eksempeldata» setter dataene tilbake, men beholder malingssamlingen. Du må skrive «tilbakestill» for å bekrefte, og serveren tar en sikkerhetskopi først.
+Ved første start får appen eksempeldata: prosjektet Avalon med fire figurer og maleplaner for Merlin og Druid Champions, et tomt prosjekt («Nytt spill 1») og én eksempelteknikk i biblioteket. Eksempeldataene har ingen malinger: malingssamlingen er din egen (se «Malingssamlingen» under). «⋯ → Tilbakestill eksempeldata» setter dataene tilbake, men beholder malingssamlingen. Du må skrive «tilbakestill» for å bekrefte, og serveren tar en sikkerhetskopi først.
 
 ## Malingssamlingen
 
@@ -85,8 +85,8 @@ Panelet til høyre i hvert prosjekt. Det bruker nøkkelen og standardmodellen fr
 - Panelet er kompakt. Modell og nettsøk står på én linje, og arbeidskonteksten er brettet sammen. Paintrest sine egne meldinger (lagrede kilder, avviste forslag) viser første linje, og resten får du med ett trykk. Usikkerhet på et forslag ligger bak «Usikkerhet (N)».
 - Bildeforslag vises som én rad per miniatyr, med små bilder. Trykk på raden for å velge bilder i verkstedets gjennomgang, eller × for å avvise.
 
-- Agenten leser prosjektet, miniatyrene, maleplanene og malingene dine. Den lager **utkast**: nye miniatyrer (`catalog_subject`) og maleplaner (`paint_plan`).
-- En godkjent plan kan agenten bare foreslå ny versjon av når du har trykket «Revider planen med agenten» på miniatyren. Det åpner planen som revisjonsmål (`plan_revision`).
+- Agenten leser prosjektet, miniatyrene, maleplanene og malingene dine. Den kan lage nye miniatyrer (`catalog_subject`), endre miniatyrer (`catalog_change`), lage maleplaner (`paint_plan`) og foreslå bilder (`reference_selection`).
+- Agenten kan også foreslå en ny versjon av en godkjent plan (`plan_revision`), uten at du åpner planen for revisjon først (brukerbeslutning 10. november 2026, avvik 27 i [docs/AVVIK.md](docs/AVVIK.md)).
 - Hvert forslag godkjennes for seg i én transaksjon. Maling som ikke finnes i katalogen, må du koble til et produkt eller opprette som ubekreftet før planen kan godkjennes. Er planen endret siden forslaget ble laget, stopper godkjenningen.
 - Inne i prosjektet **endrer agenten direkte** når du skriver i panelet. Den kan lage, endre, dele, slå sammen og slette miniatyrer, og lage maleplaner med malinger som finnes i katalogen. Panelet viser «Agenten endret: …» med **Angre**, som fører hele runden tilbake. Har du endret det samme etterpå, sier angre fra i stedet for å overskrive.
 - Bildeutvalg og planer med malinger som ikke finnes i katalogen, venter på deg som forslag. «Godkjenn alle» godkjenner dem som ikke trenger valg.
@@ -242,11 +242,15 @@ Alle sider agenten leser, lagres automatisk som kilder for spillet («Funnet av 
 | 0 Grunnmur | Domenetyper fra skjema §6, kommandolag, lokal lagring i IndexedDB, eksempeldata og stil fra Figma |
 | 1 Prosjekter og spill | Nytt prosjekt med en gang («Nytt spill N»), endring av navn, år, utgiver og illustrasjon, utvidelser med kobling og løsning, simulert BGG-kobling, sletting og gjenoppretting |
 | 2 (delvis) Miniatyrer | Galleri med planstatus og malefremdrift hver for seg, filtre, legge til, redigere og slette |
+| 3 (delvis) Palett | Palett-fanen i verkstedet: malingene per miniatyr, gruppert per del, med rolle. Siden «Palett og prosess» for prosjektet er en plassholder |
 | 5 Painting Mode | iPad liggende: referanser på 1/3 og plan på 2/3. Felles operasjoner og deler, steg, materialer med eierstatus, blandinger, «Finn fram malingene», avvik, delen ferdig, gruppeteller, «Marker ferdig» og historikk |
+| 6 (delvis) Kilder og bilder | «Fordel bilder» i prosjektmenyen, og kildelisten i verkstedet. Se «Fordel bildene» og «Miniatyrverkstedet» over |
+| Agent og verksted | Agentpanelet, miniatyrverkstedet, bildejakt i tre faser, kartlegging av spillet og maleplan med AI. Planforslaget kan redigeres før du godkjenner det. Se seksjonene over |
+| Lagring | Paintrest-serveren og datamappen `~/Paintrest`, med revisjon og sikkerhetskopier. Se «Lagring» over |
 | Malingssamlingen | «Malinger» i toppfeltet: samlingen med søk og filtre, legg til en og en (med «Fyll ut med AI»), rediger og skjul, fjern eksempelmalingene, og AI-assistert import av en liste eller fil med spørsmål og svar. Se «Malingssamlingen» over |
 | 7.0–7.6 Bibliotek | Teknikker og oppskrifter (fargerekke med valgfri fremgangsmåte) i datamodellen. «Bibliotek» i toppfeltet: søk, merkelapper og redigering av teknikker og oppskrifter, som lagres når du forlater et felt. Teknikken som artikkel, verkstedguide for iPad og registrering av erfaring. Research med agenten gir utkast til teknikker og oppskrifter, som du godkjenner inn i biblioteket. Se [docs/BIT7-KUNNSKAP.md](docs/BIT7-KUNNSKAP.md) |
 
-Neste: produktbilder og malekjeder (base, layer, highlight, shade, effekter) for malingene, bit 3 (palett), bit 4 (redigering av maleplanen), bit 6 (kilder), bit 7.7 (bruk i prosjekt, etter bit 4) og bit 8 (simulert agent).
+Neste: produktbilder og malekjeder (base, layer, highlight, shade, effekter) for malingene, bit 3 (prosjektets palett og prosess), bit 4 (redigering av en godkjent maleplan), resten av bit 6 (kildene for seg), bit 7.7 (bruk i prosjekt, etter bit 4) og bit 8 (simulert agent). Detaljene står under «Ikke bygget ennå» i [docs/AVVIK.md](docs/AVVIK.md).
 
 ## Arkitektur
 
@@ -254,10 +258,15 @@ Neste: produktbilder og malekjeder (base, layer, highlight, shade, effekter) for
 src/domain/types.ts      tabellene fra skjema §6 (snake_case, samme navn)
 src/domain/commands.ts   brukerkommandoene: grensesnittet skjermene skriver gjennom
 src/domain/views.ts      lesefunksjoner (skjema §9)
-src/data/local-*.ts      v0-implementasjon mot lokal lagring
+src/domain/research.ts   kommandoene for agentens oppgaver og forslag
+src/data/local-*.ts      v0-implementasjon av kommandolaget
+src/data/research-commands.ts   sjekker omfanget og godkjenner forslag (kjører i nettleseren)
+src/data/server-persistence.ts  lagring gjennom Paintrest-serveren, med revisjon
 src/data/seed.ts         eksempeldata
+src/app/runs.ts          agentkjøringene, som fortsetter når du bytter fane eller side
 src/features/*           skjermene
 src/ui/*                 komponenter og stil
+server/                  Paintrest-serveren: datamappen, nøklene, modellkall, nettsøk, sidehenting og agenten
 ```
 
 Skjermene skriver aldri rett til data. De kaller `Commands`. Senere erstattes `createLocalCommands` med en klient mot applikasjonslaget og PostgreSQL. Typer, kommandogrensesnitt, lesefunksjoner og skjermer kan stå som de er.

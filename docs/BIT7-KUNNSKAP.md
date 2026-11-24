@@ -1,6 +1,6 @@
 # Bit 7 Kunnskap: datamodell og byggeplan (utkast)
 
-Status: revidert 11. november 2026 etter tilbakemelding. **7.0–7.6 er bygget**: typer, migrering til v5, kommandoer (`src/data/knowledge-commands.ts`), lesefunksjoner (`src/domain/library.ts`), tester bibliotekets sider for teknikker og oppskrifter, teknikkartikkel, verkstedguide, erfaring og research med agenten (`src/features/library/`, `server/research-agent.ts`). Resten er forslag.
+Status: revidert 11. november 2026 etter tilbakemelding, og sjekket mot koden 24. november 2026. **7.0–7.6 er bygget**: typer, migrering til v5, kommandoer (`src/data/knowledge-commands.ts`), lesefunksjoner (`src/domain/library.ts`), tester, bibliotekets sider for teknikker og oppskrifter, teknikkartikkel, verkstedguide, erfaring og research med agenten (`src/features/library/`, `server/research-agent.ts`). **7.7 gjenstår.** Det venter på bit 4. Resten er forslag.
 
 ## Grunnlag
 
@@ -25,16 +25,18 @@ Det samme prinsippet gjelder teknikker [Forslag]:
 - Det finnes ingen kontroll som stopper godkjenning.
 - Variantene er enkel tekst.
 
-## Hva som allerede er forberedt [Kode]
+## Hva som var forberedt før bit 7 [Kode]
 
-| Sted | Hva |
-|---|---|
-| `types.ts` `PlanStep.technique_version_id`, `recipe_version_id` | Plansteg kan peke på en teknikk eller oppskrift. Begge settes alltid til `null` |
-| `types.ts` `LinkTargetType` `'technique' \| 'recipe'`, `LinkUse 'method'` | Kilder kan kobles til teknikker og oppskrifter |
-| `types.ts` `AreaKind 'new_knowledge'`, `TaskScope.allow_new_knowledge` | En egen type researchoppgave for kunnskap. Brukes ikke |
-| `types.ts` `ResultType 'technique' \| 'recipe'` | Agenten kan i prinsippet foreslå teknikker og oppskrifter. Brukes ikke |
-| `types.ts` `Evidence`, `Uncertainty` | Dokumentert, syntetisert eller uavklart |
-| `docs/AVVIK.md` regel 1 og punkt 28 | Biblioteket er **globalt**. Agenten foreslår bare, og brukeren godkjenner |
+Kolonnen «Nå» viser hvordan det brukes etter 7.0–7.6.
+
+| Sted | Hva | Nå |
+|---|---|---|
+| `types.ts` `PlanStep.technique_version_id`, `recipe_version_id` | Plansteg kan peke på en teknikk eller oppskrift | Settes fortsatt alltid til `null`. Tas i bruk i 7.7 |
+| `types.ts` `LinkTargetType` `'technique' \| 'recipe'`, `LinkUse 'method'` | Kilder kan kobles til teknikker og oppskrifter | I bruk (7.4) |
+| `types.ts` `AreaKind 'new_knowledge'`, `TaskScope.allow_new_knowledge` | En egen type researchoppgave for kunnskap | I bruk: research til biblioteket (7.4) |
+| `types.ts` `ResultType 'technique' \| 'recipe'` | Agenten kan foreslå teknikker og oppskrifter | I bruk, bare i research til biblioteket |
+| `types.ts` `Evidence`, `Uncertainty` | Dokumentert, syntetisert eller uavklart | I bruk |
+| `docs/AVVIK.md` regel 1 og punkt 28 | Biblioteket er **globalt**. Agenten foreslår bare, og brukeren godkjenner | Gjelder |
 
 ## Prinsipper fra skissene [Figma]
 
@@ -146,7 +148,7 @@ export interface RecipeStep {         // fremgangsmåten. Valgfri
 ```
 
 - Malinger som ikke finnes i katalogen, kan legges inn som ubekreftede produkter (`identity_status: 'unconfirmed'`), slik katalogen allerede tillater. Det stopper ikke lagring.
-- **Avvik som må føres i AVVIK.md:** `plan_step.technique_version_id` og `recipe_version_id` peker i første versjon på selve teknikken eller oppskriften, fordi det ikke finnes versjoner. Kolonnenavnene beholdes, slik at versjoner kan innføres senere uten å endre maleplanene.
+- **Avvik, ført i AVVIK.md (avvik 33):** `plan_step.technique_version_id` og `recipe_version_id` peker i første versjon på selve teknikken eller oppskriften, fordi det ikke finnes versjoner. Kolonnenavnene beholdes, slik at versjoner kan innføres senere uten å endre maleplanene.
 
 ### Kilder
 
@@ -163,7 +165,7 @@ Ingen nye tabeller og ingen nye felt. `source_link` får `target_type: 'techniqu
 
 Agenten skriver ikke direkte i biblioteket (AVVIK punkt 28, sonen *Globalt*). Den lager forslag.
 - **Godkjenner du et forslag til ny teknikk eller oppskrift,** opprettes den med statusen `draft`. Deretter redigerer du fritt.
-- **Godkjenner du et forslag til endring av en eksisterende teknikk eller oppskrift,** skrives endringen rett inn. Er raden endret etter at forslaget ble laget, stopper godkjenningen (`updated_at`), slik som for maleplaner.
+- **Godkjenner du et forslag til endring av en eksisterende teknikk eller oppskrift,** skrives endringen rett inn. Er raden endret etter at forslaget ble laget, stopper godkjenningen (`updated_at`), slik som for maleplaner. Bygget for teknikker (7.6). Oppskrifter kan ikke forbedres med agenten ennå.
 
 `checkScope` godtar `technique` og `recipe` bare når `allow_new_knowledge` er sann, og avviser prosjektendringer i en `new_knowledge`-oppgave.
 
@@ -177,7 +179,7 @@ Agenten skriver ikke direkte i biblioteket (AVVIK punkt 28, sonen *Globalt*). De
 |---|---|---|---|
 | **7.0 Grunnmur** ✓ | Typene over, migrering v4→v5, kommandoer (`createTechnique`, `updateTechnique`, `setTechniqueStatus`, `setTechniqueSteps`, `deleteTechnique`/`restoreTechnique`, `recordExperience`/`deleteExperience`, og det samme for oppskrifter med `setRecipePaints` og `setRecipeSteps`) og lesefunksjoner (`libraryTechniques`, `libraryRecipes`, `libraryTags`, `techniqueDetail`, `recipeDetail`, `practicalExperience`). Tester i `knowledge-commands.test.ts`. Ingen skjerm | – | – |
 | **7.1 Bibliotek: teknikker** ✓ | «Bibliotek» i toppfeltet. `/bibliotek/teknikker` med søk, filter på merkelapper og egne erfaringer, og kort med de tre egenskapene. `/bibliotek/teknikker/:id`: alle felt lagres når du forlater dem, steg kan legges til, flyttes og fjernes, godkjenning kan slås av og på, og teknikken kan slettes og gjenopprettes. Ett eksempel i `seed.ts`, merket som eksempel. Uten bilder, agent og erfaringsregistrering (kommer senere) | 01, 04 | 7.0 |
-| **7.2 Bibliotek: oppskrifter** ✓ | `/bibliotek/oppskrifter` med søk (også på malingsnavn) og filter. `/bibliotek/oppskrifter/:id`: effekt, merkelapper, fargerekke (søk i katalogen, eller legg til en ny ubekreftet maling, med rolle og merknad), valgfrie steg som velger malinger fra fargerekken og kan peke på en teknikk, og notat. Teknikksiden viser hvilke oppskrifter som bruker teknikken. To eksempler i `seed.ts` | ingen skisse. Enkel første versjon | 7.0 |
+| **7.2 Bibliotek: oppskrifter** ✓ | `/bibliotek/oppskrifter` med søk (også på malingsnavn) og filter. `/bibliotek/oppskrifter/:id`: effekt, merkelapper, fargerekke (søk i katalogen, eller legg til en ny ubekreftet maling, med rolle og merknad), valgfrie steg som velger malinger fra fargerekken og kan peke på en teknikk, og notat. Teknikksiden viser hvilke oppskrifter som bruker teknikken. De to eksemplene i `seed.ts` finnes nå bare i testdataene (`examplePaints`, avvik 37) | ingen skisse. Enkel første versjon | 7.0 |
 | **7.3 Guide og erfaring** ✓ | En teknikk åpnes som artikkel (`/bibliotek/teknikker/:id`), og «Rediger» går til `…/rediger`. Verkstedguide i fullskjerm (`…/verksted`) med materialer, forbehold og steg du kan krysse av (ikke lagret), og knappene «Må justeres» og «Dette fungerte». Erfaring med utfall og merknad kan registreres fra artikkelen og guiden, og fjernes. «Foreslå forbedring» (7.6) og «Bruk i prosjekt» (7.7) er ikke med | 05, 06, 07 | 7.1 |
 | **7.4 Global research** ✓ | `/bibliotek/research`: velg teknikk eller oppskrift, beskriv idéen og legg eventuelt ved en kilde. `/bibliotek/research/:id`: fremdrift, samtale og utkast. Oppgaven har `area_kind = new_knowledge`, ingen arbeidsprosjekt og én resultattype. Agenten får biblioteket, malingskatalogen og tidligere bibliotekkilder, men ikke prosjektene. Egen instruks på serveren (`knowledgeInstructions`). «Lagre i biblioteket» lager teknikken eller oppskriften som utkast, med kilder (`use = method`). Ukjente malinger må kobles eller opprettes som ubekreftet | 02 | 7.1, 7.2 |
 | **7.5 Kildearbeid og syntese** ✓ | Utkastet har kildeinspektør («Hva er dokumentert?»): hver kilde med status (lest, bare sett i søk) og hva den bidro med. En lenke du la ved, men som ikke ble brukt, vises med grunnen (for eksempel «Kunne ikke leses: 403»). Fremgangsmåter side om side (`comparison`: felles trekk og varianter med kildene sine). Du velger utgangspunktet, og variantene lagres i den rekkefølgen i teknikken, eller i notatet på en oppskrift | 03 | 7.4 |
