@@ -186,6 +186,7 @@ function StepEditor({ st, products, t, onChange, onRemove }: {
         })}
         {st.mix && <li className="small muted">Blanding: {st.mix.components.map((c) => `${c.parts} ${c.product.name}`).join(' + ')}</li>}
       </ul>
+      <StepLinks st={st} t={t} onChange={onChange} />
       <div className="plan-step-actions">
         <select aria-label="Legg til maling" value="" onChange={(e) => {
           const p = products.find((x) => x.id === e.target.value);
@@ -196,6 +197,30 @@ function StepEditor({ st, products, t, onChange, onRemove }: {
         </select>
         {onRemove && <button type="button" className="link small danger" onClick={onRemove}>Fjern steg</button>}
       </div>
+    </div>
+  );
+}
+
+/**
+ * O-2 (7.7): a technique or recipe from the library for the step. Painting Mode links to it.
+ * Hidden ones are not offered, but a step that already uses one keeps it.
+ */
+function StepLinks({ st, t, onChange }: { st: PlanStepPayload; t: Tables; onChange: (fn: (s: PlanStepPayload) => void) => void }) {
+  const live = <T extends { id: Id; name: string; deleted_at: string | null }>(rows: Record<Id, T>, keep: Id | null | undefined) =>
+    Object.values(rows).filter((r) => !r.deleted_at || r.id === keep).sort((a, b) => a.name.localeCompare(b.name, 'nb'));
+  const techniques = live(t.technique, st.technique_id);
+  const recipes = live(t.recipe, st.recipe_id);
+  if (!techniques.length && !recipes.length && st.technique_id === undefined && st.recipe_id === undefined) return null;
+  return (
+    <div className="plan-step-links">
+      <select aria-label="Teknikk" value={st.technique_id ?? ''} onChange={(e) => onChange((x) => { x.technique_id = e.target.value || null; })}>
+        <option value="">Ingen teknikk</option>
+        {techniques.map((r) => <option key={r.id} value={r.id}>Teknikk: {r.name}</option>)}
+      </select>
+      <select aria-label="Oppskrift" value={st.recipe_id ?? ''} onChange={(e) => onChange((x) => { x.recipe_id = e.target.value || null; })}>
+        <option value="">Ingen oppskrift</option>
+        {recipes.map((r) => <option key={r.id} value={r.id}>Oppskrift: {r.name}</option>)}
+      </select>
     </div>
   );
 }

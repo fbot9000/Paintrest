@@ -4,6 +4,7 @@
  * ownership is shown only when something is missing.
  */
 import type { ReactNode } from 'react';
+import { Link } from 'react-router';
 import { matchProduct } from '../../domain/agent';
 import type { PaintPlanPayload } from '../../domain/agent';
 import type { ElementKind, MaterialRole, Tables } from '../../domain/types';
@@ -28,12 +29,23 @@ export interface DocMaterial {
 
 export type Change = 'new' | 'changed' | null;
 
+/** A technique or recipe from the library (O-2). */
+export interface DocLink {
+  id: string;
+  name: string;
+}
+
 export interface DocStep {
   instruction: string;
   materials: DocMaterial[];
   mix: string | null;
   change: Change;
+  /** O-2: the step's technique and recipe. Undefined: not stated (an agent's proposal keeps the earlier step's). */
+  technique?: DocLink | null;
+  recipe?: DocLink | null;
 }
+
+const link = (row: { id: string; name: string } | undefined | null): DocLink | null => (row ? { id: row.id, name: row.name } : null);
 
 export interface DocElement {
   name: string;
@@ -49,6 +61,8 @@ export function docFromPayload(t: Tables, p: PaintPlanPayload): DocElement[] {
     name: el.name, key: el.from_element_id ?? null, kind: el.kind, change: null,
     steps: el.steps.map((st) => ({
       instruction: st.instruction, change: null,
+      technique: st.technique_id === undefined ? undefined : link(st.technique_id ? t.technique[st.technique_id] : null),
+      recipe: st.recipe_id === undefined ? undefined : link(st.recipe_id ? t.recipe[st.recipe_id] : null),
       mix: st.mix ? st.mix.components.map((c) => `${c.parts} ${c.product.name}`).join(' + ') : null,
       materials: st.materials.map((m) => {
         const match = matchProduct(t, m.product);
@@ -67,6 +81,7 @@ export function docFromView(v: PaintingView): DocElement[] {
     name: ev.element.name, key: ev.element.id, kind: ev.element.kind, change: null,
     steps: ev.steps.map((sv) => ({
       instruction: sv.step.instruction, change: null, mix: null,
+      technique: link(sv.technique), recipe: link(sv.recipe),
       materials: sv.materials.map((m) => ({
         name: m.product.name, maker: [m.product.manufacturer, m.product.range_name].filter(Boolean).join(' · ') || null,
         hex: m.product.swatch_hex, role: m.material.role, role_label: m.material.role_label ?? null, status: m.ownership,
@@ -76,6 +91,9 @@ export function docFromView(v: PaintingView): DocElement[] {
 }
 
 const sig = (s: DocStep) => `${s.instruction.trim()}|${s.materials.map((m) => `${m.name}:${m.role}`).sort().join(',')}`;
+/** A link that is not stated (undefined) is kept from the earlier step, so it is not a change. */
+const sameLink = (a: DocLink | null | undefined, b: DocLink | null | undefined) => a === undefined || b === undefined || (a?.id ?? null) === (b?.id ?? null);
+const sameStep = (a: DocStep, b: DocStep) => sig(a) === sig(b) && sameLink(a.technique, b.technique) && sameLink(a.recipe, b.recipe);
 
 /** Marks new and changed steps compared with the current version (matched by part, then name, and position). */
 export function markChanges(next: DocElement[], current: DocElement[]): { elements: DocElement[]; changed: number; added: number; removed: string[] } {
@@ -96,7 +114,7 @@ export function markChanges(next: DocElement[], current: DocElement[]): { elemen
       steps: el.steps.map((s, i) => {
         const before = old.steps[i];
         if (!before) { added++; return { ...s, change: 'new' as const }; }
-        if (sig(before) !== sig(s)) { changed++; return { ...s, change: 'changed' as const }; }
+        if (!sameStep(before, s)) { changed++; return { ...s, change: 'changed' as const }; }
         return s;
       }),
     };
@@ -160,6 +178,12 @@ export function StepRead({ s, actions }: { s: DocStep; actions?: ReactNode }) {
         <div className="pd-paints">
           {s.materials.map((m, i) => <PaintChip key={i} m={m} />)}
           {s.mix && <span className="small muted">Blanding: {s.mix}</span>}
+        </div>
+      )}
+      {(s.technique || s.recipe) && (
+        <div className="pd-links small">
+          {s.technique && <Link to={`/bibliotek/teknikker/${s.technique.id}`}>Teknikk: {s.technique.name}</Link>}
+          {s.recipe && <Link to={`/bibliotek/oppskrifter/${s.recipe.id}`}>Oppskrift: {s.recipe.name}</Link>}
         </div>
       )}
       {actions && <span className="pd-step-actions">{actions}</span>}

@@ -11,7 +11,7 @@ import { useApp, useView } from '../../app/context';
 import type { Run } from '../../app/runs';
 import { matchProduct, planProductRefs, productKey } from '../../domain/agent';
 import type { PaintPlanPayload } from '../../domain/agent';
-import { openDeviations, payloadFromVersion, pendingPlanProposal } from '../../domain/plan-versions';
+import { inheritLinks, openDeviations, payloadFromVersion, pendingPlanProposal } from '../../domain/plan-versions';
 import type { Id, LocalDeviation, MiniatureSubject, Tables } from '../../domain/types';
 import { paintingView, subjectPalette } from '../../domain/views';
 import { Button, ErrorNote } from '../../ui/components';
@@ -63,7 +63,7 @@ export function PlanTab({ subject: s, game, run, planFileIds }: { subject: Minia
   const stamp = proposal?.updated_at ?? null;
 
   useEffect(() => {
-    setDraft(edit ? structuredClone(edit.start) : proposal ? structuredClone(proposal.payload as PaintPlanPayload) : null);
+    setDraft(edit ? structuredClone(edit.start) : proposal ? inheritLinks(data.t, s.current_plan_version_id, structuredClone(proposal.payload as PaintPlanPayload)) : null);
     setBakes([]); setChoices({}); setEditAll(false); setEditSummary(false); setShowCurrent(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proposalId, stamp, edit]);
@@ -80,7 +80,7 @@ export function PlanTab({ subject: s, game, run, planFileIds }: { subject: Minia
   const refs = draft ? planProductRefs(draft) : [];
   const missing = refs.filter((r) => !matchProduct(data.t, r));
   const unresolved = missing.filter((r) => !choices[productKey(r)]);
-  const dirty = !!draft && (edit ? JSON.stringify(draft) !== JSON.stringify(edit.start) : !!proposal && JSON.stringify(draft) !== JSON.stringify(proposal.payload));
+  const dirty = !!draft && (edit ? JSON.stringify(draft) !== JSON.stringify(edit.start) : !!proposal && JSON.stringify(draft) !== JSON.stringify(inheritLinks(data.t, s.current_plan_version_id, proposal.payload as PaintPlanPayload)));
   const openPalette = () => navigate(`/p/${s.project_id}/m/${s.id}/palett`);
   // Deviations belong to the version the draft replaces.
   const baseVersion = edit ? edit.base : s.current_plan_version_id;

@@ -5,7 +5,7 @@
  * deviations and completions — all user commands.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useLocation, useParams } from 'react-router';
 import { useCommand, useView } from '../../app/context';
 import type { DeviationKind, Id, LocalDeviation, PaintProduct, Tables } from '../../domain/types';
 import { ownershipOf, paintingView, productList } from '../../domain/views';
@@ -343,6 +343,7 @@ function PartDetail({ ev, isGroup, physical, texts, onBack, onPrev, onNext, onDo
                   </ul>
                 </div>
               )}
+              <StepLinks sv={sv} />
               <button type="button" className="pm-dev-link" onClick={() => onDeviation(sv)}>Rediger</button>
             </div>
           </li>
@@ -393,6 +394,22 @@ function InstructionWithDeviations({ sv, onRemove, texts }: { sv: StepView; onRe
         return <DeviationNote key={d.id} d={d} onRemove={onRemove} compact hideText={inPlace} text={texts[d.id]} />;
       })}
     </>
+  );
+}
+
+/** O-2 (7.7): the technique (to its workshop guide) and recipe from the library the step uses. */
+function StepLinks({ sv }: { sv: StepView }) {
+  const here = useLocation().pathname;
+  if (!sv.technique && !sv.recipe) return null;
+  return (
+    <div className="pm-links">
+      {sv.technique && (sv.technique.deleted_at
+        ? <span className="muted">Teknikk: {sv.technique.name} (skjult i biblioteket)</span>
+        : <Link to={`/bibliotek/teknikker/${sv.technique.id}/verksted`} state={{ from: here }}>Teknikk: {sv.technique.name} · Åpne verkstedguiden</Link>)}
+      {sv.recipe && (sv.recipe.deleted_at
+        ? <span className="muted">Oppskrift: {sv.recipe.name} (skjult i biblioteket)</span>
+        : <Link to={`/bibliotek/oppskrifter/${sv.recipe.id}`}>Oppskrift: {sv.recipe.name}</Link>)}
+    </div>
   );
 }
 

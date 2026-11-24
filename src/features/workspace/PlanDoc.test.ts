@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { markChanges } from './PlanDoc';
-import type { DocElement } from './PlanDoc';
+import type { DocElement, DocStep } from './PlanDoc';
 
-const step = (instruction: string, paints: string[] = []) => ({
+const step = (instruction: string, paints: string[] = []): DocStep => ({
   instruction, change: null, mix: null,
   materials: paints.map((name) => ({ name, maker: null, hex: null, role: 'base' as const, role_label: null, status: 'owns' as const })),
 });
-const el = (name: string, steps: ReturnType<typeof step>[]): DocElement => ({ name, kind: 'part', change: null, steps });
+const el = (name: string, steps: DocStep[]): DocElement => ({ name, kind: 'part', change: null, steps });
 
 describe('endringer mot gjeldende plan', () => {
   it('merker nye og endrede steg, og deler som er fjernet', () => {
@@ -22,5 +22,11 @@ describe('endringer mot gjeldende plan', () => {
     const current = [{ ...el('Hud', [step('Base')]), key: 'e1' }];
     const next = [{ ...el('Ansikt og hender', [step('Base')]), key: 'e1' }];
     expect(markChanges(next, current)).toMatchObject({ changed: 0, added: 0, removed: [] });
+  });
+
+  it('en teknikk som er lagt til eller tatt bort, er en endring; en som ikke er oppgitt, er ikke det', () => {
+    const current = [el('Hud', [{ ...step('Base'), technique: { id: 't1', name: 'Svamp' } }])];
+    expect(markChanges([el('Hud', [{ ...step('Base'), technique: null }])], current).changed).toBe(1);
+    expect(markChanges([el('Hud', [step('Base')])], current).changed).toBe(0);
   });
 });

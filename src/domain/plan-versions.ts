@@ -52,7 +52,7 @@ export function payloadFromVersion(t: Tables, version_id: Id): PaintPlanPayload 
       steps: elementSteps(t, e.id).map((s): PlanStepPayload => {
         const mg = Object.values(t.mix_group).find((g) => g.step_id === s.id);
         return {
-          instruction: s.instruction, from_step_id: s.id,
+          instruction: s.instruction, from_step_id: s.id, technique_id: s.technique_version_id, recipe_id: s.recipe_version_id,
           materials: Object.values(t.step_material).filter((m) => m.step_id === s.id).sort(byPosition)
             .map((m) => ({ product: ref(m.product_id), role: m.role, role_label: m.role_label })),
           mix: mg
@@ -208,4 +208,27 @@ export function pendingPlanProposal(t: Tables, s: MiniatureSubject): ResearchPro
     .filter((p) => p.decision === 'pending' && (p.result_type === 'paint_plan' || p.result_type === 'plan_revision') && openTasks.has(p.task_id)
       && (p.payload as PaintPlanPayload).subject_id === s.id)
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0] ?? null;
+}
+
+/**
+ * O-2: an agent's proposal does not state the steps' technique and recipe. A step found in the
+ * earlier version keeps its own; this writes that into the draft, so the user sees it and can change it.
+ */
+export function inheritLinks(t: Tables, prev_version_id: Id | null, p: PaintPlanPayload): PaintPlanPayload {
+  if (!p.elements.some((e) => e.steps.some((s) => s.technique_id === undefined || s.recipe_id === undefined))) return p;
+  const m = matchVersion(t, prev_version_id, p);
+  return {
+    ...p,
+    elements: p.elements.map((e, ei) => ({
+      ...e,
+      steps: e.steps.map((s, si) => {
+        const old = m.steps[ei]![si] ? t.plan_step[m.steps[ei]![si]!] : undefined;
+        return {
+          ...s,
+          technique_id: s.technique_id !== undefined ? s.technique_id : old?.technique_version_id ?? null,
+          recipe_id: s.recipe_id !== undefined ? s.recipe_id : old?.recipe_version_id ?? null,
+        };
+      }),
+    })),
+  };
 }

@@ -135,3 +135,7 @@
 /* «Planen virker ikke» (O-13): what the agent is doing with the plan. */
 .pm-agent { margin: 0 0 12px; padding: 10px 14px; border-left: 3px solid var(--pine); background: var(--paper); border-radius: var(--r-sm); font-size: 15px; }
 .pm-agent.warn { border-left-color: var(--warn); }
+
+/* Teknikk og oppskrift i et steg (O-2) */
+.pm-links { display: flex; gap: 14px; flex-wrap: wrap; font-size: 15px; }
+.pm-links a { min-height: 36px; display: inline-flex; align-items: center; }

@@ -50,8 +50,14 @@ export function writePlanVersion(t: Tables, { subject: s, payload: plan, product
     if (oldEl) elementMap.set(oldEl, eid);
     el.steps.forEach((st, si) => {
       const sid = newId();
-      t.plan_step[sid] = { id: sid, element_id: eid, position: si, instruction: st.instruction, technique_version_id: null, recipe_version_id: null };
       const oldStep = match.steps[ei]![si];
+      const old = oldStep ? t.plan_step[oldStep] : undefined;
+      // O-2: links to the library. Left out (the agent's proposals): a step found in the earlier version keeps its own.
+      const technique = st.technique_id !== undefined ? st.technique_id ?? null : old?.technique_version_id ?? null;
+      const recipe = st.recipe_id !== undefined ? st.recipe_id ?? null : old?.recipe_version_id ?? null;
+      if (technique && !t.technique[technique]) throw new CommandError('Teknikken i steget finnes ikke i biblioteket');
+      if (recipe && !t.recipe[recipe]) throw new CommandError('Oppskriften i steget finnes ikke i biblioteket');
+      t.plan_step[sid] = { id: sid, element_id: eid, position: si, instruction: st.instruction, technique_version_id: technique, recipe_version_id: recipe };
       if (oldStep) stepMap.set(oldStep, sid);
       st.materials.forEach((m, mi) => {
         const product_id = products[productKey(m.product)];

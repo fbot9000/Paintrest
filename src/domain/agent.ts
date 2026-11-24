@@ -138,6 +138,13 @@ export interface PlanStepPayload {
   instruction: string;
   /** PROTOTYPE: the step in the current version this one was edited from (user edits only). */
   from_step_id?: Id | null;
+  /**
+   * O-2 (7.7): the technique and recipe from the library this step uses (plan_step.technique_version_id
+   * and recipe_version_id, which point to the row itself while the library has no versions, avvik 33).
+   * Left out (undefined) by the agent: a step found in the earlier version then keeps its links.
+   */
+  technique_id?: Id | null;
+  recipe_id?: Id | null;
   materials: PlanMaterialPayload[];
   mix: { label: string | null; components: { product: ProductRef; parts: number }[] } | null;
 }
@@ -599,6 +606,9 @@ export function buildAgentContext(t: Tables, task_id: Id): AgentContext {
                   const p = t.paint_product[m.product_id];
                   return { product: p ? fullName(p) : '?', role: m.role };
                 }),
+                // O-2: the technique and recipe from the library the step uses.
+                ...(st.technique_version_id && t.technique[st.technique_version_id] ? { technique: t.technique[st.technique_version_id]!.name } : {}),
+                ...(st.recipe_version_id && t.recipe[st.recipe_version_id] ? { recipe: t.recipe[st.recipe_version_id]!.name } : {}),
               })),
             })),
             // What the user changed while painting (Painting Mode). A new version lets the user choose which become part of the plan.

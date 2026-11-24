@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { NormalisedProposal, PaintPlanPayload } from '../domain/agent';
-import { bakeDeviation, matchVersion, openDeviations, payloadFromVersion, versionElements } from '../domain/plan-versions';
+import { bakeDeviation, inheritLinks, matchVersion, openDeviations, payloadFromVersion, versionElements } from '../domain/plan-versions';
 import { paintingView } from '../domain/views';
 import { createLocalCommands } from './local-commands';
 import { memoryPersistence } from './persistence';
@@ -231,5 +231,59 @@ describe('«Planen virker ikke» (O-13)', () => {
     const t = store.getTables();
     expect(t.paint_plan_version[v1]!.state).toBe('superseded');
     expect(t.paint_completion[completion]).toEqual(before);
+  });
+});
+
+describe('teknikk eller oppskrift i et plansteg (O-2)', () => {
+  it('lagres på steget, følger med når agenten beholder steget, og må finnes i biblioteket', async () => {
+    const { store, cmd, agent, research, project, subject } = await setup();
+    const t0 = store.getTables();
+    const technique = Object.values(t0.technique).find((x) => !x.deleted_at)!;
+    const recipe = Object.values(t0.recipe).find((x) => !x.deleted_at)!;
+    const merlin = subject('Merlin');
+    const v1 = merlin.current_plan_version_id!;
+    const payload = payloadFromVersion(t0, v1);
+    const hud = payload.elements.find((e) => e.name === 'Hud')!;
+    hud.steps[0]!.technique_id = technique.id;
+    hud.steps[0]!.recipe_id = recipe.id;
+    await cmd.savePlanVersion(merlin.id, { base_version_id: v1, payload, baked_deviation_ids: [] });
+    const step = paintingView(store.getTables(), merlin.id)!.elements.find((e) => e.element.name === 'Hud')!.steps[0]!;
+    expect(step.step).toMatchObject({ technique_version_id: technique.id, recipe_version_id: recipe.id });
+    expect(step.technique?.name).toBe(technique.name);
+
+    // The agent does not state links: a step with the same text keeps them, a rewritten one does not.
+    const instr = step.step.instruction;
+    const task = await research.startTask(project.id);
+    const w = agent.writeProposal(task, { result_type: 'paint_plan', update_of: null, evidence: 'synthesized', uncertainty: [], payload: {
+      subject_id: merlin.id, note: null,
+      elements: [{ kind: 'part', name: 'Hud', steps: [{ instruction: instr, materials: [], mix: null }, { instruction: 'Helt nytt', materials: [], mix: null }] }],
+    } satisfies PaintPlanPayload }, 'uib', 'm');
+    if (!w.ok) throw new Error(w.reason);
+    await research.approveProposal(w.id);
+    const steps = paintingView(store.getTables(), merlin.id)!.elements[0]!.steps;
+    expect(steps[0]!.step.technique_version_id).toBe(technique.id);
+    expect(steps[1]!.step.technique_version_id).toBeNull();
+
+    const v3 = store.getTables().miniature_subject[merlin.id]!.current_plan_version_id!;
+    const bad = payloadFromVersion(store.getTables(), v3);
+    bad.elements[0]!.steps[0]!.technique_id = 'finnes-ikke';
+    await expect(cmd.savePlanVersion(merlin.id, { base_version_id: v3, payload: bad, baked_deviation_ids: [] })).rejects.toThrow(/Teknikken/);
+  });
+
+  it('agentens forslag viser lenkene fra steget det beholder', async () => {
+    const { store, cmd, subject } = await setup();
+    const t0 = store.getTables();
+    const technique = Object.values(t0.technique).find((x) => !x.deleted_at)!;
+    const merlin = subject('Merlin');
+    const v1 = merlin.current_plan_version_id!;
+    const payload = payloadFromVersion(t0, v1);
+    payload.elements[0]!.steps[0]!.technique_id = technique.id;
+    const v2 = await cmd.savePlanVersion(merlin.id, { base_version_id: v1, payload, baked_deviation_ids: [] });
+    const t = store.getTables();
+    const fromAgent: PaintPlanPayload = { subject_id: merlin.id, note: null, elements: [
+      { kind: payload.elements[0]!.kind, name: payload.elements[0]!.name, steps: [{ instruction: payload.elements[0]!.steps[0]!.instruction, materials: [], mix: null }] },
+    ] };
+    const shown = inheritLinks(t, v2, fromAgent);
+    expect(shown.elements[0]!.steps[0]).toMatchObject({ technique_id: technique.id, recipe_id: null });
   });
 });

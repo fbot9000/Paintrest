@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useLocation, useParams } from 'react-router';
 import { useView } from '../../app/context';
 import { knowledgeImages, techniqueDetail } from '../../domain/library';
 import { FileImage } from '../../ui/components';
@@ -20,6 +20,9 @@ export function WorkshopGuide() {
   const [done, setDone] = useState<Set<string>>(new Set());
   const [dialog, setDialog] = useState<ExperienceOutcome | null>(null);
   const [thanks, setThanks] = useState(false);
+  // O-2: opened from a step in Painting Mode, ← goes back there.
+  const from = (useLocation().state as { from?: string } | null)?.from;
+  const back = from?.startsWith('/male/') ? from : null;
 
   if (!d || d.technique.deleted_at) {
     return <main className="page"><h1>Fant ikke teknikken</h1><p><Link to="/bibliotek/teknikker">Til teknikkene</Link></p></main>;
@@ -34,7 +37,7 @@ export function WorkshopGuide() {
   return (
     <div className="wg">
       <header className="wg-bar">
-        <Link to={`/bibliotek/teknikker/${x.id}`} className="wg-back" aria-label="Tilbake til teknikken">←</Link>
+        <Link to={back ?? `/bibliotek/teknikker/${x.id}`} className="wg-back" aria-label={back ? 'Tilbake til Painting Mode' : 'Tilbake til teknikken'}>←</Link>
         <div className="wg-title">
           <span className="eyebrow">Verkstedguide</span>
           <h1>{x.name}</h1>

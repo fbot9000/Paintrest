@@ -6,7 +6,7 @@
 import type {
   Expansion, Game, GroupProgress, Id, LocalDeviation, MiniatureSubject, MixComponent,
   Ownership, PaintCompletion, PaintPlanVersion, PaintProduct, PlanElement, PlanStep,
-  LinkUse, Project, SourceAsset, Source, StepMaterial, Tables,
+  LinkUse, Project, Recipe, SourceAsset, Source, StepMaterial, Tables, Technique,
 } from './types';
 import { deviationBody } from './plan-versions';
 
@@ -120,6 +120,9 @@ export interface MixView {
 
 export interface StepView {
   step: PlanStep;
+  /** O-2 (7.7): the technique and recipe from the library the step uses, also when hidden from the library since. */
+  technique: Technique | null;
+  recipe: Recipe | null;
   materials: MaterialView[];
   mix: MixView | null;
   deviations: LocalDeviation[];
@@ -237,7 +240,11 @@ export function paintingView(t: Tables, subject_id: Id): PaintingView | undefine
                       }),
                   }
                 : null;
-              return { step, materials, mix, deviations: stepDevs };
+              return {
+                step, materials, mix, deviations: stepDevs,
+                technique: step.technique_version_id ? t.technique[step.technique_version_id] ?? null : null,
+                recipe: step.recipe_version_id ? t.recipe[step.recipe_version_id] ?? null : null,
+              };
             });
           return {
             element,
