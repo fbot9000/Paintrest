@@ -203,7 +203,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-16 Malekjeder som oppskrifter
 
-- **Status:** ledig
+- **Status:** pågår (spor B: malinger, 24. november 2026)
 - **Avhenger av:** O-5 (typene brukes i forslagene)
 - **Berører:** `src/features/paints/`, `src/features/library/`, `src/data/research-commands.ts`, `server/research-agent.ts`
 - **I dag:** oppskrifter i biblioteket er fargerekker med roller. Research til biblioteket kan lage dem, men ikke med utgangspunkt i én maling (C7 i [kilder/VURDERING.md](kilder/VURDERING.md)).
