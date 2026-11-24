@@ -120,7 +120,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-7 Knytt en erfaring til en miniatyr
 
-- **Status:** pågår (spor B, 24. november 2026)
+- **Status:** ferdig (24. november 2026, 9a96fb0)
 - **Avhenger av:** –
 - **Berører:** `src/features/library/ExperienceDialog.tsx`
 - **I dag:** feltet `subject_id` finnes på `technique_experience`, men skjermen bruker det ikke.
@@ -144,7 +144,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-10 Del opp JavaScript-fila
 
-- **Status:** ledig
+- **Status:** pågår (spor B, 24. november 2026)
 - **Avhenger av:** –
 - **Berører:** `vite.config.ts`, `src/app/App.tsx`
 - **I dag:** fila er 741 kB, og Vite varsler over 500 kB.
