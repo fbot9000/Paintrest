@@ -113,14 +113,14 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-6 Forbedre oppskrifter med agenten
 
-- **Status:** pågår (spor B, 24. november 2026)
+- **Status:** ferdig (24. november 2026, da392c2)
 - **Avhenger av:** –
 - **Berører:** `src/features/library/`, `src/data/research-commands.ts`, `server/research-agent.ts`
 - **I dag:** bare teknikker kan forbedres (7.6).
 
 ### O-7 Knytt en erfaring til en miniatyr
 
-- **Status:** ledig
+- **Status:** pågår (spor B, 24. november 2026)
 - **Avhenger av:** –
 - **Berører:** `src/features/library/ExperienceDialog.tsx`
 - **I dag:** feltet `subject_id` finnes på `technique_experience`, men skjermen bruker det ikke.
