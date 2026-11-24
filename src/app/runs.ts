@@ -16,9 +16,10 @@ import type { Id } from '../domain/types';
  * 'game' runs a game survey from the miniature list (id = project id);
  * 'gameinfo' looks up the game's facts and illustration from the game page (id = game id);
  * 'paints' reads a paint list or answers in the import dialog (id = import draft id).
+ * 'paintimage' finds product pictures of one paint (id = paint_product id, O-15).
  * Runs of different kinds never block each other, even on the same task.
  */
-export type RunKind = 'images' | 'plan' | 'knowledge' | 'project' | 'game' | 'gameinfo' | 'paints';
+export type RunKind = 'images' | 'plan' | 'knowledge' | 'project' | 'game' | 'gameinfo' | 'paints' | 'paintimage';
 
 /** What the global indicator shows for a run, and where it leads. */
 export interface RunMeta {

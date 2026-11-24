@@ -344,6 +344,17 @@ export function parseFocus(v: unknown): AnyFocus | null {
       tagged_sources: pageRefs(f.tagged_sources),
     };
   }
+  if (f.kind === 'paint_image') {
+    // Product picture for one paint (O-15): what the collection knows about it.
+    return {
+      kind: 'paint_image',
+      maker: text(f.maker, 120),
+      range: text(f.range, 120),
+      name: text(f.name, 160) ?? 'ukjent maling',
+      code: text(f.code, 60),
+      paint_kind: text(f.paint_kind, 30),
+    };
+  }
   if (f.kind === 'game_info') {
     // Game lookup from the game page: what the page holds now, and official pages a survey found.
     const year = typeof f.year === 'number' && Number.isInteger(f.year) && f.year > 0 && f.year < 3000 ? f.year : null;

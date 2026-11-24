@@ -85,6 +85,8 @@ export interface AgentTurnInput {
     | { kind: 'game_info'; game: string; year: number | null; publishers: string[]; website: string | null; expansions: string[];
         /** Official pages a game survey found for the game. */
         known_pages: TaggedSourceRef[] }
+    /** Product picture for one paint (O-15). */
+    | { kind: 'paint_image'; maker: string | null; range: string | null; name: string; code: string | null; paint_kind: string | null }
     | null;
 }
 
@@ -106,6 +108,18 @@ export interface GameInfoImage {
   page_title: string | null;
   site: string;
   kind: 'box' | 'cover_art' | 'other';
+  caption: string | null;
+  confidence: 'high' | 'medium' | 'low' | null;
+}
+
+/** A product picture of a paint (O-15), from a page the agent opened or an image search. */
+export interface PaintImage {
+  image_url: string;
+  thumbnail_url: string | null;
+  page_url: string;
+  page_title: string | null;
+  site: string;
+  source_kind: 'maker' | 'shop' | 'other';
   caption: string | null;
   confidence: 'high' | 'medium' | 'low' | null;
 }
@@ -176,7 +190,9 @@ export type ResearchEvent =
       /** Game survey: sources for the whole game, with role and which miniatures they show. */
       game_sources?: GameSourceIn[];
       /** Game lookup (game page): facts and picture suggestions. */
-      game_info?: GameInfo | null }
+      game_info?: GameInfo | null;
+      /** Product picture (O-15): pictures of the paint, checked by the server. */
+      paint_images?: { images: PaintImage[]; uncertainty: string | null } | null }
   | { type: 'error'; error: string };
 
 import type { SubjectIdentity, SubjectIdentityRecord } from './types';

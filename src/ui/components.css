@@ -84,6 +84,8 @@
 .own-unknown { background: var(--panel); color: var(--muted); }
 
 .product-name { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
+.paint-thumb { display: inline-flex; flex: none; align-self: center; border-radius: 4px; overflow: hidden; background: #fff; border: 1px solid var(--line); }
+.paint-thumb img, .paint-thumb .img-fallback { width: 100%; height: 100%; object-fit: contain; }
 
 .inline-text { display: inline-flex; align-items: baseline; gap: 8px; }
 .inline-edit {

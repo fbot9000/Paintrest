@@ -5,7 +5,7 @@ import { KIND_LABEL, OWNERSHIP_LABEL, liveProducts, paintLabel } from '../../dom
 import { PRIORITY_LABEL, SHOPPING_PRIORITIES, projectName, shoppingList, shoppingProjects } from '../../domain/shopping';
 import type { ShoppingRow } from '../../domain/shopping';
 import type { Id, ShoppingPriority } from '../../domain/types';
-import { Badge, Button, ErrorNote, Swatch } from '../../ui/components';
+import { Badge, Button, ErrorNote, PaintThumb, Swatch } from '../../ui/components';
 import { Chip } from '../library/parts';
 import './paints.css';
 
@@ -125,6 +125,7 @@ function ShoppingLine({ row, onPriority, onBought, onRemove }: {
   return (
     <div className="paint-line shopping-line">
       <span className="paint-swatch"><Swatch hex={p.swatch_hex} size={28} /></span>
+      <PaintThumb product={p} size={44} />
       <div className="paint-line-main shopping-main">
         <span className="paint-line-name">
           <strong>{paintLabel(p)}</strong>

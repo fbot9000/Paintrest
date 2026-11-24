@@ -329,6 +329,28 @@ describe('importutkast', () => {
   });
 });
 
+describe('produktbilde (O-15)', () => {
+  it('lagres med kilden, byttes og fjernes; det gamle bildet merkes som slettet', async () => {
+    const { store, cmd } = emptyStore();
+    const id = await cmd.createProduct({ name: 'Black', manufacturer: 'Vallejo', confirmed: true });
+    const src = { image_url: 'https://acrylicosvallejo.com/img/71057.png', page_url: 'https://acrylicosvallejo.com/p/71057', page_title: 'Black' };
+    await cmd.setProductImage(id, new Blob(['x'], { type: 'image/png' }), src);
+    let p = store.getTables().paint_product[id]!;
+    const first = p.image_file_id!;
+    expect(p.image_source).toEqual(src);
+    expect(store.getTables().stored_file[first]).toMatchObject({ purpose: 'product', deleted_at: null });
+    // An uploaded picture has no web source.
+    await cmd.setProductImage(id, new Blob(['y'], { type: 'image/jpeg' }), null);
+    p = store.getTables().paint_product[id]!;
+    expect(p.image_source).toBeNull();
+    expect(store.getTables().stored_file[first]!.deleted_at).not.toBeNull();
+    await expect(cmd.setProductImage(id, new Blob(['z'], { type: 'text/plain' }), null)).rejects.toThrow(/bilde/);
+    await expect(cmd.setProductImage(id, new Blob(['z'], { type: 'image/png' }), { ...src, page_url: 'javascript:x' })).rejects.toThrow(/nettadresse/);
+    await cmd.setProductImage(id, null);
+    expect(store.getTables().paint_product[id]).toMatchObject({ image_file_id: null, image_source: null });
+  });
+});
+
 describe('import uten AI', () => {
   it('leser regneark med kolonnenavn', () => {
     const rows = rowsWithoutAi(splitLines('Produsent;Serie;Navn;Kode;Type;Har\nVallejo;Model Color;"Black; matt";70.950;Wash;ja\nCitadel;Base;Abaddon Black;;base;nei\n;;;;;'));

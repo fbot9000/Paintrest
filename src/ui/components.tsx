@@ -134,11 +134,22 @@ export function OwnershipFlag({ ownership }: { ownership: Ownership }) {
   return <span className={`own own-${ownership}`}>{OWN_LABEL[ownership]}</span>;
 }
 
+/** The paint's product picture (O-15), when it has one. Nothing otherwise. */
+export function PaintThumb({ product, size = 24 }: { product: PaintProduct; size?: number }) {
+  if (!product.image_file_id) return null;
+  return (
+    <span className="paint-thumb" style={{ width: size, height: size }} title="Produktbilde">
+      <FileImage fileId={product.image_file_id} alt={`Produktbilde av ${product.name}`} />
+    </span>
+  );
+}
+
 /** Exact product identity: manufacturer · range · name (spesifikasjon §1). */
 export function ProductName({ product, compact }: { product: PaintProduct; compact?: boolean }) {
   const meta = [product.manufacturer ?? 'Ukjent produsent', product.range_name].filter(Boolean).join(' · ');
   return (
     <span className="product-name">
+      <PaintThumb product={product} />
       <strong>{product.name}</strong>
       {!compact && <span className="small muted"> {meta}</span>}
       {product.identity_status === 'unconfirmed' && <Badge tone="warn">Ubekreftet</Badge>}

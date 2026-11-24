@@ -19,7 +19,7 @@ export interface Workspace {
 
 // ---------- Filer ----------
 
-export type FilePurpose = 'cover' | 'source_asset' | 'import';
+export type FilePurpose = 'cover' | 'source_asset' | 'import' | 'product';
 
 export interface StoredFile {
   id: Id;
@@ -63,6 +63,13 @@ export interface PaintProduct {
   product_code?: string | null;
   /** PROTOTYPE: true when swatch_hex is the AI's estimate, not a colour the user chose. */
   swatch_estimated?: boolean;
+  /**
+   * PROTOTYPE (O-15, brukerbeslutning 24.11.2026): a product picture the user chose, stored
+   * for personal use (stored_file, purpose `product`). Not in skjema. Absent = none.
+   */
+  image_file_id?: Id | null;
+  /** Where the product picture came from. Null for a picture the user uploaded. */
+  image_source?: GameCoverSource | null;
   created_at: Timestamp;
   deleted_at: Timestamp | null;
 }

@@ -43,7 +43,9 @@ export type ResearchEvent =
       /** Game survey: the sources for the whole game, with what they are good for and which miniatures they show. */
       game_sources?: GameSource[];
       /** Game lookup from the game page: facts and picture suggestions, checked against the pages of this run. */
-      game_info?: GameInfo | null }
+      game_info?: GameInfo | null;
+      /** Product picture (O-15): pictures of the paint, checked against the pages of this run. */
+      paint_images?: { images: PaintImage[]; uncertainty: string | null } | null }
   | { type: 'error'; error: string };
 
 /** A page the agent opened in this turn; the client stores it as a draft source. */
@@ -96,7 +98,34 @@ export interface RejectedIdentity {
   image_urls: string[];
 }
 
-export type AnyFocus = ImageFocus | PlanFocus | KnowledgeFocus | GameFocus | GameInfoFocus;
+export type AnyFocus = ImageFocus | PlanFocus | KnowledgeFocus | GameFocus | GameInfoFocus | PaintImageFocus;
+
+/**
+ * Product picture for one paint (O-15, brukerbeslutning 24.11.2026): the agent finds pictures
+ * at the maker or a shop, and the user picks one. Nothing is stored here.
+ */
+export interface PaintImageFocus {
+  kind: 'paint_image';
+  maker: string | null;
+  range: string | null;
+  name: string;
+  code: string | null;
+  /** product_kind, for the search words (air, dry, ink …). */
+  paint_kind: string | null;
+}
+
+/** A product picture, checked against an opened page or an image search. */
+export interface PaintImage {
+  image_url: string;
+  thumbnail_url: string | null;
+  page_url: string;
+  page_title: string | null;
+  site: string;
+  /** maker: the maker's own site; shop: a shop; other. */
+  source_kind: 'maker' | 'shop' | 'other';
+  caption: string | null;
+  confidence: 'high' | 'medium' | 'low' | null;
+}
 
 /**
  * Facts and illustration for the game, from the game page (brukerønske 11.11.2026):
@@ -346,6 +375,9 @@ export const MAX_KNOWLEDGE_STEPS = 16;
 /** Game lookup: a handful of searches and pages is enough for year, publisher, website and the box. */
 export const MAX_GAME_INFO_STEPS = 10;
 const MAX_GAME_IMAGES = 8;
+/** Product picture: a few searches and product pages are enough. */
+export const MAX_PAINT_IMAGE_STEPS = 8;
+const MAX_PAINT_IMAGES = 6;
 
 /**
  * Which paints to use is the user's choice, never a hidden preference
@@ -373,6 +405,7 @@ const MAX_MESSAGES = 30;
 export function researchInstructions(context: unknown, resultTypes: string[], mode: WebMode, anyFocus: AnyFocus | null = null, vision = false, imagesAttached = false, direct = false, hunt0: HuntState | null = null, imageSearch = false, survey0: SurveyState | null = null): string {
   if (anyFocus?.kind === 'knowledge') return knowledgeInstructions(context, resultTypes, mode, anyFocus, imageSearch && mode !== 'none', imagesAttached ? (anyFocus.reference_images ?? []).slice(0, 4).length : 0);
   if (anyFocus?.kind === 'game_info') return gameInfoInstructions(anyFocus, mode, vision && mode !== 'none', imageSearch && mode !== 'none');
+  if (anyFocus?.kind === 'paint_image') return paintImageInstructions(anyFocus, mode, vision && mode !== 'none', imageSearch && mode !== 'none');
   const img = imageSearch && mode !== 'none';
   const focus = anyFocus?.kind === 'images' ? anyFocus : null;
   const plan = anyFocus?.kind === 'plan' ? anyFocus : null;
@@ -594,6 +627,55 @@ ${shape}
 
 Kontekst (det du kan lese; endres bare av brukeren):
 ${JSON.stringify(context)}`;
+}
+
+/** The name of a paint as one line: «Vallejo Model Air Black (71.057)». */
+export function paintTitle(f: PaintImageFocus): string {
+  return [f.maker, f.range, f.name].filter(Boolean).join(' ') + (f.code ? ` (${f.code})` : '');
+}
+
+/**
+ * Product picture for one paint (O-15): pictures of the bottle or pot at the maker or a shop.
+ * The user picks one; nothing is stored by the agent.
+ */
+export function paintImageInstructions(focus: PaintImageFocus, mode: WebMode, look = false, img = false): string {
+  const title = paintTitle(focus);
+  const tools = mode === 'hosted'
+    ? `Du har et innebygd nettsøk-verktøy (web_search) som du bruker direkte. I tillegg kan Paintrest åpne sider for deg. Hvert svar fra deg er ETT JSON-objekt:
+  {"action": "open", "url": "https://…", "why": "kort grunn"} – Paintrest leser siden og gir deg teksten og bildelisten`
+    : mode === 'search'
+      ? `Du har nettilgang gjennom verktøy. Hvert svar fra deg er ETT JSON-objekt:
+  {"action": "search", "query": "…", "why": "kort grunn"}   – nettsøk (bruk gjerne engelske søkeord)
+  {"action": "open", "url": "https://…", "why": "kort grunn"} – les én side og få tekst og bildeliste`
+      : '';
+  const extra = mode === 'none' ? '' : `${img ? `
+  {"action": "image_search", "query": "…", "why": "kort grunn"} – bildesøk, gir bilde-URL-er med siden de kommer fra` : ''}${look ? `
+  {"action": "look", "image_urls": ["https://…"], "question": "…", "why": "kort grunn"} – Paintrest viser deg bildene (høyst ${MAX_LOOK}, fra en åpnet side${img ? ' eller et bildesøk' : ''})` : ''}
+  {"action": "final", "message": "…", "paint": { … }}          – ferdig svar til brukeren`;
+  return `Du er researchagenten i Paintrest, et personlig arbeidsverktøy for miniatyrmaling.
+Brukeren vil ha et produktbilde av en maling i samlingen sin. Brukeren velger selv hvilket bilde som lagres, for personlig bruk, med lenke til kilden.
+Svar alltid på norsk bokmål.
+
+OPPDRAG: PRODUKTBILDE av malingen «${title}».
+Produsent: ${focus.maker ?? 'ukjent'}. Serie: ${focus.range ?? 'ukjent'}. Navn: ${focus.name}. Kode: ${focus.code ?? 'ukjent'}. Type: ${focus.paint_kind ?? 'ukjent'}.
+Finn høyst ${MAX_PAINT_IMAGES} bilder av akkurat dette produktet: flasken, potten eller tuben slik den selges, helst på hvit bakgrunn. Helst fra produsentens egen side ("maker"), ellers fra en nettbutikk ("shop"). Ikke fargeprøver alene, malte figurer, sett med mange flasker, eller en annen farge eller serie. Er produktet gitt ut i ny utgave med ny flaske, si det i meldingen.
+
+${mode === 'none' ? 'Du har ikke nettilgang i dette oppsettet. Svar direkte med final uten bilder, og si i meldingen at nettsøk må slås på.' : `${tools}${extra}
+Du har høyst ${MAX_PAINT_IMAGE_STEPS} verktøysteg.
+
+Arbeid slik:
+- Søk etter produktet med produsent, serie, navn og kode (for eksempel «${[focus.maker, focus.range, focus.name, focus.code].filter(Boolean).join(' ')}»).
+- Åpne produsentens produktside, eller en butikk, og ta bilder fra bildelisten på siden.
+${img ? `- Bruk gjerne bildesøk (for eksempel «${[focus.maker, focus.name, focus.code].filter(Boolean).join(' ')} paint bottle»).\n` : ''}${look ? '- Bruk «look» når du er usikker på om bildet viser riktig farge og flaske.\n' : ''}
+Kildekrav:
+- Bilder: eksakt bilde-URL og side-URL fra bildelisten på en side du har åpnet${img ? ' eller fra et bildesøk' : ''}. Lag ikke bilde-URL-er.
+- Søk med korte søk (3–6 ord) uten anførselstegn.`}
+
+Avslutt med ett JSON-objekt:
+{"action": "final", "message": "kort norsk oppsummering av hva du fant, og hva du er usikker på",
+ "paint": {"images": [{"image_url": "https://…", "page_url": "https://…", "source_kind": "maker|shop|other", "caption": "hva bildet viser", "confidence": "high|medium|low"}],
+  "uncertainty": "kort norsk om det du er usikker på, eller null"}}
+Fant du ingenting, er "images" en tom liste.`;
 }
 
 /**
@@ -886,7 +968,9 @@ type Action =
   | { action: 'next_phase'; why: string | null }
   | { action: 'final'; message: string; proposals: unknown[]; game_sources: unknown[];
       /** Game lookup: the facts and pictures, checked by verifyGameInfo. */
-      game: unknown };
+      game: unknown;
+      /** Product picture: the pictures, checked by verifyPaintImages. */
+      paint: unknown };
 
 /** Phase 1's answer, before it is checked against the pages and searches of this run. */
 export interface IdentifyAction {
@@ -953,7 +1037,7 @@ export function parseAction(text: string): Action | null {
     if (v.action === 'next_phase') return { action: 'next_phase', why };
     if (v.action === 'final' || 'message' in v || 'proposals' in v) {
       return { action: 'final', message: typeof v.message === 'string' ? v.message : '', proposals: Array.isArray(v.proposals) ? v.proposals : [],
-        game_sources: Array.isArray(v.game_sources) ? v.game_sources : [], game: v.game ?? null };
+        game_sources: Array.isArray(v.game_sources) ? v.game_sources : [], game: v.game ?? null, paint: v.paint ?? (Array.isArray(v.images) ? { images: v.images } : null) };
     }
   }
   return null;
@@ -971,13 +1055,14 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   const knowledge = input.focus?.kind === 'knowledge' ? input.focus : null;
   const game = input.focus?.kind === 'game' ? input.focus : null;
   const gameInfo = input.focus?.kind === 'game_info' ? input.focus : null;
+  const paintImage = input.focus?.kind === 'paint_image' ? input.focus : null;
   // Library research has no use for looking at images.
   let vision = !!deps.lookAtImages && !knowledge;
   // The plan request carries the chosen pictures as input_image; dropped if the model refuses images.
   // «Fra bilde» research carries the user's pictures the same way as a plan.
   const pictures = (plan?.reference_images ?? knowledge?.reference_images ?? []).slice(0, 4);
   let imagesAttached = pictures.length > 0;
-  const maxSteps = focus ? MAX_IMAGE_STEPS : plan ? MAX_PLAN_STEPS : knowledge ? MAX_KNOWLEDGE_STEPS : game ? MAX_GAME_STEPS : gameInfo ? MAX_GAME_INFO_STEPS : MAX_TOOL_STEPS;
+  const maxSteps = focus ? MAX_IMAGE_STEPS : plan ? MAX_PLAN_STEPS : knowledge ? MAX_KNOWLEDGE_STEPS : game ? MAX_GAME_STEPS : gameInfo ? MAX_GAME_INFO_STEPS : paintImage ? MAX_PAINT_IMAGE_STEPS : MAX_TOOL_STEPS;
   // Game survey: phase 1 finds the sources for the whole game, phase 2 works out who is who.
   const survey: SurveyState | null = game ? { phase: 'sources', identities: new Map() } : null;
   const gameRefs = new Map((game?.miniatures ?? []).map((m) => [m.ref, m]));
@@ -1086,7 +1171,14 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
     tell(`${note} Fase 3 starter nå: maleguider og videoer. Du har ${Math.max(0, maxSteps - steps)} verktøysteg igjen. Avslutt med final, med alt fra jakten i forslaget.`);
   };
   /** Checks the answer and sends it as the final event. An image hunt also gets what it found along the way. */
-  const finish = async (message: string, proposals: unknown[], gameSources: unknown[] = [], gameRaw: unknown = null) => {
+  const finish = async (message: string, proposals: unknown[], gameSources: unknown[] = [], gameRaw: unknown = null, paintRaw: unknown = null) => {
+    if (paintImage) {
+      const checked = verifyPaintImages(paintRaw, opened, imageHits);
+      if (mode === 'none') checked.warnings.unshift('Uten nettsøk kan agenten ikke finne bilder. Slå på nettsøk under «AI og nettsøk».');
+      emit({ ...finalEvent(message, [], model, checked.warnings, trace, opened) as Extract<ResearchEvent, { type: 'final' }>,
+        paint_images: { images: checked.images, uncertainty: checked.uncertainty } });
+      return;
+    }
     if (gameInfo) {
       const checked = verifyGameInfo(gameRaw, opened, searched, imageHits, hostedOpened);
       if (mode === 'none') checked.warnings.unshift('Uten nettsøk: forslagene bygger bare på det modellen vet fra før, og ingenting er sjekket mot kilder. Slå på nettsøk under «AI og nettsøk».');
@@ -1162,7 +1254,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
   };
   if (confirmedId) await loadIdentityRef(confirmedId);
   instructions = build();
-  emit({ type: 'status', text: gameInfo ? `Fakta og illustrasjon for ${gameInfo.game}` : knowledge ? (knowledge.revision ? `Forbedring av ${knowledge.revision.name}` : knowledge.target === 'image' ? `Research fra bilde${imagesAttached ? ` · ${pictures.length} ${pictures.length === 1 ? 'bilde' : 'bilder'}` : ''}` : knowledge.target === 'technique' ? 'Research: teknikk' : 'Research: oppskrift') : plan ? `Maleplan for ${plan.subject_name}${imagesAttached ? ` · ${plan.reference_images.length} bilder` : ''}` : focus ? `Bildejakt for ${focus.subject_name}` : mode === 'hosted' ? 'Agenten søker via UiB' : mode === 'search' ? 'Agenten planlegger søket' : 'Agenten svarer uten nettilgang' });
+  emit({ type: 'status', text: paintImage ? `Produktbilde av ${paintTitle(paintImage)}` : gameInfo ? `Fakta og illustrasjon for ${gameInfo.game}` : knowledge ? (knowledge.revision ? `Forbedring av ${knowledge.revision.name}` : knowledge.target === 'image' ? `Research fra bilde${imagesAttached ? ` · ${pictures.length} ${pictures.length === 1 ? 'bilde' : 'bilder'}` : ''}` : knowledge.target === 'technique' ? 'Research: teknikk' : 'Research: oppskrift') : plan ? `Maleplan for ${plan.subject_name}${imagesAttached ? ` · ${plan.reference_images.length} bilder` : ''}` : focus ? `Bildejakt for ${focus.subject_name}` : mode === 'hosted' ? 'Agenten søker via UiB' : mode === 'search' ? 'Agenten planlegger søket' : 'Agenten svarer uten nettilgang' });
 
   for (let round = 0; round < maxSteps + (hunt || survey ? 14 : 4); round++) {
     if (deps.signal?.aborted) throw new UserError('Avbrutt');
@@ -1322,6 +1414,12 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
         + ' før du svarer med final. Bruk kildene du faktisk leser.' });
       continue;
     }
+    // Product picture: pictures must come from a page or an image search; the agent gets one reminder.
+    if (action.action === 'final' && paintImage && mode !== 'none' && !readNudged && opened.size === 0 && hostedOpened.size === 0 && imageHits.size === 0 && steps < maxSteps) {
+      readNudged = true;
+      tell(`Du har verken åpnet en side eller gjort et bildesøk. Åpne produsentens produktside eller en butikk med {"action": "open", …}${imageSearchOn ? ', eller bruk {"action": "image_search", …}' : ''}, og svar så med final. Paintrest godtar bare bilder fra sider du har åpnet${imageSearchOn ? ' eller et bildesøk' : ''}.`);
+      continue;
+    }
     // Game lookup: a website the agent has neither opened nor found in a search would be dropped; it gets one chance to open it.
     if (action.action === 'final' && gameInfo && mode !== 'none' && !websiteNudged && steps < maxSteps) {
       const site = websiteUrlOf(action.game);
@@ -1333,7 +1431,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
       }
     }
     if (action.action === 'final') {
-      await finish(action.message || held?.message || '', action.proposals, action.game_sources, action.game);
+      await finish(action.message || held?.message || '', action.proposals, action.game_sources, action.game, action.paint);
       return;
     }
     const allowed = action.action === 'look'
@@ -1392,7 +1490,7 @@ export async function runResearch(deps: ResearchDeps, input: ResearchInput, emit
           const id = survey!.identities.get(ref) ?? gameRefs.get(ref)!.identity;
           if (image) references.push({ label: `${ref} «${id?.official_name ?? gameRefs.get(ref)!.name}»`, image });
         }
-        const verdict = await deps.lookAtImages!(fetchable, action.question || (gameInfo ? `Viser bildene esken eller illustrasjonen til ${gameInfo.game}?` : `Viser bildene ${focus?.subject_name ?? 'figuren'}?`),
+        const verdict = await deps.lookAtImages!(fetchable, action.question || (paintImage ? `Viser bildene flasken eller potten til ${paintTitle(paintImage)}?` : gameInfo ? `Viser bildene esken eller illustrasjonen til ${gameInfo.game}?` : `Viser bildene ${focus?.subject_name ?? 'figuren'}?`),
           focus?.reference_image ?? identityRef ?? plan?.reference_images[0] ?? null, references.length ? references : undefined);
         emit({ type: 'look_done', summary: verdict.slice(0, 300) });
         trace.push({ action: 'look', target: `${urls.length} bilder`, result: verdict.slice(0, 160) });
@@ -1674,6 +1772,64 @@ function plain(s: string): string {
   return ` ${s.replace(/&(amp|#38|#0?39|apos|quot|#34|nbsp);/gi, ' ').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()} `;
 }
 
+type PickedImage = Omit<GameInfoImage, 'kind'> & { x: Record<string, unknown> };
+
+/**
+ * The pictures in a final answer that are on the image list of a page the agent opened, or came
+ * from an image search in this run. Repeats are skipped and not counted as dropped.
+ */
+function pickImages(rawImages: unknown[], opened: Map<string, PageResult>, imageHits: Map<string, ImageHit>): { images: PickedImage[]; dropped: number } {
+  const text = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
+  const seen = new Set<string>();
+  const images = rawImages.flatMap((i): PickedImage[] => {
+    const x = (i && typeof i === 'object' ? i : {}) as Record<string, unknown>;
+    const imageUrl = typeof x.image_url === 'string' ? normUrl(x.image_url) : '';
+    if (!imageUrl || seen.has(imageUrl)) return [];
+    let page = typeof x.page_url === 'string' ? opened.get(normUrl(x.page_url)) : undefined;
+    if (!page || !page.images.some((p) => normUrl(p.url) === imageUrl)) page = [...opened.values()].find((pg) => pg.images.some((p) => normUrl(p.url) === imageUrl));
+    const hit = imageHits.get(imageUrl);
+    const confidence = x.confidence === 'high' || x.confidence === 'medium' || x.confidence === 'low' ? x.confidence : null;
+    const caption = text(x.caption, 300);
+    if (page) {
+      seen.add(imageUrl);
+      const img = page.images.find((p) => normUrl(p.url) === imageUrl)!;
+      return [{ x, image_url: img.url, thumbnail_url: hit?.thumbnail_url ?? null, page_url: page.url, page_title: page.title, site: page.site,
+        caption: caption ?? img.caption ?? (img.alt || null), confidence }];
+    }
+    if (hit) {
+      seen.add(imageUrl);
+      return [{ x, image_url: hit.image_url, thumbnail_url: hit.thumbnail_url, page_url: hit.page_url, page_title: hit.title || hit.site, site: hit.site,
+        caption: caption ?? (hit.title || null), confidence }];
+    }
+    return [];
+  });
+  const offered = new Set(rawImages.flatMap((i) => {
+    const u = i && typeof i === 'object' ? (i as Record<string, unknown>).image_url : null;
+    return typeof u === 'string' && u ? [normUrl(u)] : [];
+  }));
+  return { images, dropped: offered.size - images.length };
+}
+
+/**
+ * Checks the answer of a product-picture run (O-15): only pictures from a page the agent opened
+ * or an image search are kept, the maker's own pictures first, then by how sure the agent is.
+ */
+export function verifyPaintImages(raw: unknown, opened: Map<string, PageResult>, imageHits: Map<string, ImageHit> = new Map()):
+  { images: PaintImage[]; uncertainty: string | null; warnings: string[] } {
+  const warnings: string[] = [];
+  const o = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  const picked = pickImages(Array.isArray(o.images) ? o.images : [], opened, imageHits);
+  if (picked.dropped > 0) warnings.push(`Fjernet ${picked.dropped} bilde(r) som ikke fantes på en side agenten åpnet eller i et bildesøk.`);
+  const order = { high: 0, medium: 1, low: 2 } as Record<string, number>;
+  const kindOrder = { maker: 0, shop: 1, other: 2 } as const;
+  const images = picked.images.map(({ x, ...img }): PaintImage => {
+    const k = String(x.source_kind ?? x.kind ?? '').toLowerCase();
+    return { ...img, source_kind: k === 'maker' || k === 'manufacturer' || k === 'produsent' ? 'maker' : k === 'shop' || k === 'store' || k === 'butikk' ? 'shop' : 'other' };
+  }).sort((a, b) => kindOrder[a.source_kind] - kindOrder[b.source_kind] || (order[a.confidence ?? ''] ?? 3) - (order[b.confidence ?? ''] ?? 3));
+  const uncertainty = typeof o.uncertainty === 'string' && o.uncertainty.trim() ? o.uncertainty.trim().slice(0, 400) : null;
+  return { images: images.slice(0, MAX_PAINT_IMAGES), uncertainty, warnings };
+}
+
 const GAME_IMAGE_KIND: Record<string, GameInfoImage['kind']> = {
   box: 'box', box_art: 'box', boxart: 'box', cover: 'box', esken: 'box',
   cover_art: 'cover_art', key_art: 'cover_art', keyart: 'cover_art', illustration: 'cover_art', concept_art: 'cover_art', art: 'cover_art',
@@ -1748,37 +1904,9 @@ export function verifyGameInfo(raw: unknown, opened: Map<string, PageResult>, se
   }
 
   const rawImages = Array.isArray(o.images) ? o.images : [];
-  const seen = new Set<string>();
-  const images = rawImages.flatMap((i): GameInfoImage[] => {
-    const x = (i && typeof i === 'object' ? i : {}) as Record<string, unknown>;
-    const imageUrl = typeof x.image_url === 'string' ? normUrl(x.image_url) : '';
-    if (!imageUrl || seen.has(imageUrl)) return [];
-    let page = typeof x.page_url === 'string' ? opened.get(normUrl(x.page_url)) : undefined;
-    if (!page || !page.images.some((p) => normUrl(p.url) === imageUrl)) page = [...opened.values()].find((pg) => pg.images.some((p) => normUrl(p.url) === imageUrl));
-    const hit = imageHits.get(imageUrl);
-    const kind = GAME_IMAGE_KIND[String(x.kind ?? '').toLowerCase()] ?? 'other';
-    const confidence = x.confidence === 'high' || x.confidence === 'medium' || x.confidence === 'low' ? x.confidence : null;
-    const caption = text(x.caption, 300);
-    if (page) {
-      seen.add(imageUrl);
-      const img = page.images.find((p) => normUrl(p.url) === imageUrl)!;
-      return [{ image_url: img.url, thumbnail_url: hit?.thumbnail_url ?? null, page_url: page.url, page_title: page.title, site: page.site,
-        kind, caption: caption ?? img.caption ?? (img.alt || null), confidence }];
-    }
-    if (hit) {
-      seen.add(imageUrl);
-      return [{ image_url: hit.image_url, thumbnail_url: hit.thumbnail_url, page_url: hit.page_url, page_title: hit.title || hit.site, site: hit.site,
-        kind, caption: caption ?? (hit.title || null), confidence }];
-    }
-    return [];
-  });
-  // Repeats of the same picture are not counted as removed.
-  const offered = new Set(rawImages.flatMap((i) => {
-    const u = i && typeof i === 'object' ? (i as Record<string, unknown>).image_url : null;
-    return typeof u === 'string' && u ? [normUrl(u)] : [];
-  }));
-  const dropped = offered.size - images.length;
-  if (dropped > 0) warnings.push(`Fjernet ${dropped} bilde(r) som ikke fantes på en side agenten åpnet eller i et bildesøk.`);
+  const picked = pickImages(rawImages, opened, imageHits);
+  const images = picked.images.map(({ x, ...img }): GameInfoImage => ({ ...img, kind: GAME_IMAGE_KIND[String(x.kind ?? '').toLowerCase()] ?? 'other' }));
+  if (picked.dropped > 0) warnings.push(`Fjernet ${picked.dropped} bilde(r) som ikke fantes på en side agenten åpnet eller i et bildesøk.`);
   const order = { high: 0, medium: 1, low: 2 } as Record<string, number>;
   // Box and cover art before other pictures, then by how sure the agent is.
   images.sort((a, b) => Number(a.kind === 'other') - Number(b.kind === 'other') || (order[a.confidence ?? ''] ?? 3) - (order[b.confidence ?? ''] ?? 3));

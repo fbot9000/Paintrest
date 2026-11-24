@@ -29,7 +29,7 @@ Bitene kommer fra byggeplanen den første økta laget 9. november (README i «Pr
 | 7.0–7.6 Bibliotek | Teknikker og oppskrifter, søk og merkelapper, teknikken som artikkel, verkstedguide for iPad, erfaring, research med agenten og forbedring av teknikker. Se [BIT7-KUNNSKAP.md](BIT7-KUNNSKAP.md) | 7.7 «Bruk i prosjekt». Oppskrifter kan ikke forbedres med agenten. Erfaring knyttes ikke til en miniatyr |
 | 8 Simulert agent | Trolig overtatt. Den var planlagt 9. november, før det fantes AI i appen. Nå finnes en ekte agent (raden «Agent og verksted») | – |
 | Agent og verksted | Agentpanelet, miniatyrverkstedet, bildejakt i tre faser, kartlegging av spillet og maleplan med AI | – |
-| Malingssamlingen | Søk og filtre (eierskap, produsent og type, med typene ink, dry og air), legg til en og en (med «Fyll ut med AI»), rediger, skjul og slett for godt, fjern eksempelmalingene, og import av en liste eller fil med AI | Produktbilder og malekjeder |
+| Malingssamlingen | Søk og filtre (eierskap, produsent og type, med typene ink, dry og air), legg til en og en (med «Fyll ut med AI»), rediger, skjul og slett for godt, fjern eksempelmalingene, import av en liste eller fil med AI, og produktbilder (agenten finner, du velger) | Malekjeder |
 | Handleliste | Malinger du ikke har fra godkjente planer, og dem du legger til selv. Prioritet, filter per prosjekt og «Kjøpt». Under «Malinger → Handleliste» | Knappen i «Finn fram malingene» i Painting Mode (venter på O-1) |
 | Lagring | Paintrest-serveren og datamappen `~/Paintrest`, med revisjon og sikkerhetskopier. Uten server: IndexedDB i nettleseren. Se [ARKITEKTUR.md](ARKITEKTUR.md) | Ekte database |
 

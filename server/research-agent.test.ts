@@ -1227,3 +1227,65 @@ describe('fakta og illustrasjon for spillet (brukerønske 11.11.2026)', () => {
     expect(final.game_info).toMatchObject({ year_published: { basis: 'model' }, website: null, images: [] });
   });
 });
+
+describe('produktbilde av en maling (O-15)', () => {
+  const focus = { kind: 'paint_image' as const, maker: 'Vallejo', range: 'Model Air', name: 'Black', code: '71.057', paint_kind: 'air' };
+  const MAKER: PageResult = {
+    url: 'https://acrylicosvallejo.com/en/product/black-71057', title: 'Black 71.057 – Model Air', site: 'acrylicosvallejo.com', author: null,
+    text: 'Model Air Black 71.057, 17 ml.', language: 'en',
+    images: [{ url: 'https://acrylicosvallejo.com/img/71057.png', alt: '71.057 Black', caption: null, context: null }],
+  };
+  const shopHit = { image_url: 'https://shop.example/71057.jpg', thumbnail_url: 'https://imgs.search.brave.com/t1', page_url: 'https://shop.example/vallejo-71057', title: 'Vallejo Model Air Black', site: 'shop.example' };
+  const search = {
+    configured: () => true,
+    search: async () => [],
+    imageSearch: async () => [shopHit],
+  } as unknown as WebSearch;
+  function provider(replies: string[], seen: string[] = [], instr: string[] = []) {
+    let i = 0;
+    return { respond: async (input: { content: unknown }[], opts: { instructions?: string }) => {
+      seen.push(String(input.at(-1)?.content ?? ''));
+      instr.push(opts.instructions ?? '');
+      return { text: replies[i++] ?? '{"action":"final","message":"slutt","paint":null}', model: 'm', usage: null, searches: [], citations: [] };
+    } } as unknown as ResponsesProvider;
+  }
+  const answer = (images: unknown[]) => JSON.stringify({ action: 'final', message: 'Fant flasken', paint: { images, uncertainty: 'Ny flaske fra 2024' } });
+
+  it('har egen instruks, og beholder bare bilder fra åpnede sider og bildesøk, produsenten først', async () => {
+    const instr: string[] = [];
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider: provider([
+      '{"action":"image_search","query":"Vallejo Black 71.057 paint bottle"}',
+      '{"action":"open","url":"https://acrylicosvallejo.com/en/product/black-71057"}',
+      answer([
+        { image_url: 'https://shop.example/71057.jpg', page_url: 'https://shop.example/vallejo-71057', source_kind: 'shop', confidence: 'high' },
+        { image_url: 'https://acrylicosvallejo.com/img/71057.png', page_url: MAKER.url, source_kind: 'maker', confidence: 'medium', caption: 'Flasken' },
+        { image_url: 'https://diktet.example/71057.png', page_url: 'https://diktet.example', source_kind: 'shop' },
+      ]),
+    ], [], instr), search, openPage: async () => MAKER }, { context: {}, messages: [{ role: 'user', content: 'Finn produktbilde' }], result_types: [], focus }, (e) => events.push(e));
+
+    expect(instr[0]).toContain('OPPDRAG: PRODUKTBILDE av malingen «Vallejo Model Air Black (71.057)»');
+    expect(instr[0]).toContain('"image_search"');
+    expect(events[0]).toEqual({ type: 'status', text: 'Produktbilde av Vallejo Model Air Black (71.057)' });
+    const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    expect(final.paint_images!.images.map((i) => [i.image_url, i.source_kind, i.page_url])).toEqual([
+      ['https://acrylicosvallejo.com/img/71057.png', 'maker', MAKER.url],
+      ['https://shop.example/71057.jpg', 'shop', 'https://shop.example/vallejo-71057'],
+    ]);
+    expect(final.paint_images!.images[0]).toMatchObject({ caption: 'Flasken', page_title: MAKER.title });
+    expect(final.paint_images!.uncertainty).toBe('Ny flaske fra 2024');
+    expect(final.warnings.join(' ')).toContain('Fjernet 1 bilde');
+  });
+
+  it('må åpne en side eller gjøre et bildesøk før svaret (én påminnelse)', async () => {
+    const seen: string[] = [];
+    const events: ResearchEvent[] = [];
+    await runResearch({ provider: provider([
+      answer([{ image_url: 'https://diktet.example/1.png', page_url: 'https://diktet.example' }]),
+      answer([{ image_url: 'https://diktet.example/1.png', page_url: 'https://diktet.example' }]),
+    ], seen), search, openPage: async () => MAKER }, { context: {}, messages: [{ role: 'user', content: 'Finn' }], result_types: [], focus }, (e) => events.push(e));
+    expect(seen[1]).toContain('Du har verken åpnet en side eller gjort et bildesøk');
+    const final = events.at(-1) as Extract<ResearchEvent, { type: 'final' }>;
+    expect(final.paint_images!.images).toEqual([]);
+  });
+});

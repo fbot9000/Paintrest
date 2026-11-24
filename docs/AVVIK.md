@@ -179,6 +179,13 @@ Flere av punktene er skrevet av agenter som ikke hadde dokumentene (se avvik 33 
     - **«Kjøpt»** setter `inventory_entry` til `owns` med `ownership_source = purchase` og sletter `shopping_need` og koblingene til prosjekter, med `change_record`.
     - **Tilbakestill eksempeldata** beholder handlelisten, men ikke koblingene til de gamle prosjektene. **Slett for godt** fjerner malingen fra handlelisten.
 
+41. **BRUKERBESLUTNING 24. november 2026: produktbilder, agenten finner og du velger** ([beslutningen](beslutninger/2026-11-24-produktbilder-agenten-finner-du-velger.md), O-15).
+    - **Nye felt på `paint_product`, ikke i skjemaet:** `image_file_id` (bildet, i `stored_file` med `purpose = product`) og `image_source` (`image_url`, `page_url`, `page_title`, samme form som `game.cover_source`). Begge er valgfrie, så eldre data trenger ingen migrering og skjemaversjonen er uendret. Et opplastet bilde har ingen kilde. Et byttet eller fjernet bilde merkes som slettet i `stored_file`, og «Slett for godt» gjør det samme.
+    - **Eget oppdrag uten oppgave**, som bilde og fakta for spillet (avvik 39): `POST /api/agent/run` med `focus.kind = 'paint_image'`, egen instruks og høyst 8 verktøysteg. Det lages ingen `research_task`, meldinger eller forslag, og sidene agenten leser, lagres ikke som kilder.
+    - **Serveren sjekker bildene** (`verifyPaintImages`): bare bilder fra bildelisten på en side agenten har åpnet, eller fra et bildesøk, beholdes. Produsentens egne bilder står først. Har agenten verken åpnet en side eller gjort et bildesøk, får den én påminnelse.
+    - **Der malingen brukes:** bildet vises i den felles komponenten for malingsnavn (`ProductName`), og dermed i Painting Mode, oppskriftene og agentens forslag, i tillegg til samlingen og handlelisten.
+    - **Testing:** Ikke testet mot UiB eller ekte søketjenester. Flyten er kjørt i nettleseren mot en simulert modell og en lokal produktside: knappen, fremdriften, kontrollen som fjerner et oppdiktet bilde, valget, nedlastingen og lagringen i datamappen.
+
 ## Antakelser
 
 - **Klient:** React og TypeScript som webapp med hash-ruting. Det er godkjent av brukeren 9. november 2026 ([beslutningen](beslutninger/2026-11-09-klient-react-og-typescript.md)).

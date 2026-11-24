@@ -245,6 +245,11 @@ export interface Commands extends KnowledgeCommands, ShoppingCommands {
   deleteProduct(product_id: Id): Promise<void>;
   restoreProduct(product_id: Id): Promise<void>;
   setOwnership(product_id: Id, ownership: Ownership): Promise<void>;
+  /**
+   * Sets the paint's product picture (O-15), with where it came from; null removes it.
+   * The old file is marked deleted (the data folder keeps it in files/trash).
+   */
+  setProductImage(product_id: Id, file: Blob | null, source?: GameCoverSource | null): Promise<void>;
   /** Saves a checked import list in one transaction (matching existing and hidden paints). */
   importProducts(paints: ImportPaintInput[], opts?: { source?: 'manual' | 'import' }): Promise<ImportSummary>;
   /** Hides the paints from the old sample data and clears their ownership. Returns how many. */

@@ -62,7 +62,7 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
   const blobs = store.persistence;
   const urlCache = new Map<Id, string>();
 
-  async function storeFile(ws: Id, purpose: 'cover' | 'source_asset' | 'import', file: Blob) {
+  async function storeFile(ws: Id, purpose: 'cover' | 'source_asset' | 'import' | 'product', file: Blob) {
     const id = newId();
     await blobs.putBlob(id, file);
     return {
@@ -619,6 +619,22 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
       });
     },
 
+    async setProductImage(product_id, file, source) {
+      const ws = store.snapshot.workspace_id;
+      const from = file && source ? coverSourceOf(source) : null;
+      if (file && !/^image\//.test(file.type)) throw new CommandError('Velg et bilde');
+      const sf = file ? await storeFile(ws, 'product', file) : null;
+      tx((t) => {
+        const p = must(t.paint_product[product_id], 'Malingen');
+        const old = p.image_file_id ? t.stored_file[p.image_file_id] : undefined;
+        if (old) old.deleted_at = now();
+        if (sf) t.stored_file[sf.id] = sf;
+        p.image_file_id = sf?.id ?? null;
+        p.image_source = from;
+        record(t, ws, { target_type: 'paint_product', target_id: product_id, action: 'update' });
+      });
+    },
+
     async setOwnership(product_id, ownership) {
       tx((t, ws) => {
         must(t.paint_product[product_id], 'Malingen');
@@ -767,6 +783,8 @@ export function createLocalCommands(store: Store, deps: { fetchImage?: (url: str
         }
         for (const pid of touchedProjects) { const p = t.project[pid]; if (p) p.content_revision++; }
         for (const id of ids) {
+          const img = t.paint_product[id]?.image_file_id;
+          if (img && t.stored_file[img]) t.stored_file[img]!.deleted_at = now();
           delete t.paint_product[id];
           record(t, ws, { target_type: 'paint_product', target_id: id, action: 'delete' });
         }

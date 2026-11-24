@@ -4,11 +4,12 @@ import { useApp, useCommand, useView } from '../../app/context';
 import { KIND_LABEL, OWNERSHIP_LABEL, hiddenProducts, kindsIn, makersIn, normText, paintCounts, paintLabel, paintRows, productUsage, sampleProducts, usageDetail, usageText } from '../../domain/paints';
 import type { OwnershipFilter, PaintRow } from '../../domain/paints';
 import type { Id, Ownership, PaintProduct, ProductKind } from '../../domain/types';
-import { Badge, Button, Dialog, ErrorNote, Swatch } from '../../ui/components';
+import { Badge, Button, Dialog, ErrorNote, PaintThumb, Swatch } from '../../ui/components';
 import { Chip, SearchBox } from '../library/parts';
 import { EMPTY_PAINT, PaintForm, valueOf } from './PaintForm';
 import type { PaintValue } from './PaintForm';
 import { useImport } from './importStore';
+import { ProductImageField } from './ProductImageField';
 import { shoppingList } from '../../domain/shopping';
 import './paints.css';
 
@@ -160,7 +161,8 @@ export function PaintsPage() {
                   <ul>
                     {g.rows.map((r) => (
                       <li key={r.product.id} className={editing === r.product.id ? 'open' : ''}>
-                        {editing === r.product.id ? (
+                        {editing === r.product.id ? (<>
+                          <ProductImageField productId={r.product.id} />
                           <PaintForm mode="edit" productId={r.product.id} initial={valueOf(r.product, r.ownership)}
                             onCancel={() => setEditing(null)}
                             onDelete={async () => { if (await run(async (c) => { await c.deleteProduct(r.product.id); return true; })) setEditing(null); }}
@@ -181,7 +183,7 @@ export function PaintsPage() {
                               setEditing(null);
                               return '';
                             }} />
-                        ) : <PaintLine row={r} onEdit={() => { setEditing(r.product.id); setAdding(false); }}
+                        </>) : <PaintLine row={r} onEdit={() => { setEditing(r.product.id); setAdding(false); }}
                           onOwn={(o) => run((c) => c.setOwnership(r.product.id, o))} />}
                       </li>
                     ))}
@@ -282,6 +284,7 @@ function PaintLine({ row, onEdit, onOwn }: { row: PaintRow; onEdit: () => void; 
         <Swatch hex={p.swatch_hex} size={28} />
         {p.swatch_estimated && <span className="swatch-est" aria-label="omtrentlig farge">≈</span>}
       </span>
+      <PaintThumb product={p} size={44} />
       <button type="button" className="paint-line-main" onClick={onEdit} aria-label={`Rediger ${paintLabel(p)}`}>
         <span className="paint-line-name">
           <strong>{p.name}</strong>

@@ -287,5 +287,8 @@ describe('fakta og illustrasjon: det klienten sender (brukerønske 11.11.2026)',
       known_pages: [{ url: 'https://www.cmon.com/zombicide', title: 'CMON' }],
     });
     expect(parseFocus({ kind: 'game_info', year: 'snart', website: 'https://www.cmon.com/' })).toMatchObject({ game: 'ukjent spill', year: null, website: 'https://www.cmon.com/' });
+    expect(parseFocus({ kind: 'paint_image', maker: ' Vallejo ', name: 'Black', code: 71057, paint_kind: 'air', extra: 'x' }))
+      .toEqual({ kind: 'paint_image', maker: 'Vallejo', range: null, name: 'Black', code: null, paint_kind: 'air' });
+    expect(parseFocus({ kind: 'paint_image' })).toMatchObject({ name: 'ukjent maling' });
   });
 });
