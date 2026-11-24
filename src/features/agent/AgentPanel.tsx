@@ -24,8 +24,6 @@ import './agent.css';
 interface PanelCtl {
   open: boolean;
   setOpen: (v: boolean) => void;
-  /** Opens the panel with text ready to send. */
-  compose: (text: string) => void;
   draft: string;
   setDraft: (v: string) => void;
 }
@@ -43,7 +41,6 @@ export function AgentPanelProvider({ children }: { children: ReactNode }) {
   };
   const value = useMemo<PanelCtl>(() => ({
     open, setOpen, draft, setDraft,
-    compose: (text) => { setDraft(text); setOpen(true); },
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [open, draft]);
   return <PanelCtx.Provider value={value}>{children}</PanelCtx.Provider>;
@@ -53,26 +50,6 @@ export function useAgentPanel(): PanelCtl {
   const c = useContext(PanelCtx);
   if (!c) throw new Error('AgentPanelProvider mangler');
   return c;
-}
-
-/** Actions the project pages use to hand work to the agent. */
-export function useAgentActions(projectId: Id) {
-  const app = useApp();
-  const ctl = useAgentPanel();
-  const ensureTask = async () => {
-    const t = app.store.getTables();
-    return researchView(t, projectId)?.task.id ?? app.research.startTask(projectId);
-  };
-  return {
-    ensureTask,
-    suggestPlan: (name: string) => ctl.compose(`Foreslå en maleplan for ${name}. `),
-    /** Opens one plan as revision target: an explicit user action (datamodell v3 §12). */
-    revisePlan: async (subjectId: Id, name: string) => {
-      const task = await ensureTask();
-      await app.research.openRevisionTarget(task, subjectId);
-      ctl.compose(`Foreslå en ny versjon av maleplanen for ${name}. Dette bør endres: `);
-    },
-  };
 }
 
 // ---------- Read model ----------

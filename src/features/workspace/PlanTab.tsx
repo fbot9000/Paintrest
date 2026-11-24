@@ -11,7 +11,7 @@ import { useApp, useView } from '../../app/context';
 import type { Run } from '../../app/runs';
 import { matchProduct, planProductRefs, productKey } from '../../domain/agent';
 import type { PaintPlanPayload } from '../../domain/agent';
-import { openDeviations, payloadFromVersion } from '../../domain/plan-versions';
+import { openDeviations, payloadFromVersion, pendingPlanProposal } from '../../domain/plan-versions';
 import type { Id, LocalDeviation, MiniatureSubject, Tables } from '../../domain/types';
 import { paintingView, subjectPalette } from '../../domain/views';
 import { Button, ErrorNote } from '../../ui/components';
@@ -22,11 +22,7 @@ import { ElementBlock, MissingPaints } from './PlanEditor';
 import { Outline, PaletteStrip, PlanRead, docFromPayload, docFromView, markChanges } from './PlanDoc';
 
 function view(t: Tables, s: MiniatureSubject) {
-  const openTasks = new Set(Object.values(t.research_task).filter((x) => x.status === 'open' && t.task_scope[x.id]?.work_project_id === s.project_id).map((x) => x.id));
-  const proposal = Object.values(t.research_proposal)
-    .filter((p) => p.decision === 'pending' && (p.result_type === 'paint_plan' || p.result_type === 'plan_revision') && openTasks.has(p.task_id)
-      && (p.payload as PaintPlanPayload).subject_id === s.id)
-    .sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0] ?? null;
+  const proposal = pendingPlanProposal(t, s);
   return {
     proposal,
     current: paintingView(t, s.id),

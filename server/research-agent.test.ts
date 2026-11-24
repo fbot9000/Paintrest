@@ -732,6 +732,19 @@ describe('brukerens egne bilder', () => {
   });
 });
 
+describe('«Planen virker ikke» (O-13)', () => {
+  it('ny versjon: problemet står i instruksen, og agenten bes beholde navnene på delene', () => {
+    const base = { kind: 'plan' as const, subject_ref: 'M1', subject_name: 'Merlin', game: 'Avalon', reference_images: [], revision: true };
+    const plain = researchInstructions({}, ['plan_revision'], 'none', base);
+    const problem = researchInstructions({}, ['plan_revision'], 'none', { ...base, problem: { text: 'Washen blir flekkete', part: 'Kappe' } });
+    expect(plain).toContain('Behold navnet på delene');
+    expect(plain).not.toContain('sier at den ikke virker');
+    expect(problem).toContain('sier at den ikke virker for «Kappe»: «Washen blir flekkete»');
+    // A first plan has nothing to keep.
+    expect(researchInstructions({}, ['paint_plan'], 'none', { ...base, revision: false })).not.toContain('Behold navnet på delene');
+  });
+});
+
 describe('malingsvalg er brukerens (brukerbeslutning 11.11.2026)', () => {
   it('ingen instruks har en skjult preferanse for malinger brukeren eier', () => {
     const general = researchInstructions({}, ['paint_plan'], 'none');

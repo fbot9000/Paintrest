@@ -278,6 +278,14 @@ function text(v: unknown, max: number): string | null {
   return typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null;
 }
 
+/** O-13: what the user says is wrong with the plan (the text is required), and which part. */
+function problemOf(v: unknown): { text: string; part: string | null } | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  const t = text(o.text, 1500);
+  return t ? { text: t, part: text(o.part, 120) } : null;
+}
+
 /** Pages the user tagged or saved, as {url, title}; only web addresses. */
 function pageRefs(v: unknown, max = 12): TaggedSource[] {
   return list(v).flatMap((x) => {
@@ -342,6 +350,7 @@ export function parseFocus(v: unknown): AnyFocus | null {
       guides: pageRefs(f.guides, 8),
       game_guides: pageRefs(f.game_guides, 8),
       tagged_sources: pageRefs(f.tagged_sources),
+      problem: problemOf(f.problem),
     };
   }
   if (f.kind === 'paint_image') {

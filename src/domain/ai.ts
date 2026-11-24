@@ -73,7 +73,9 @@ export interface AgentTurnInput {
         guides?: TaggedSourceRef[];
         /** Painting guides for the whole game (game survey). */
         game_guides?: TaggedSourceRef[];
-        tagged_sources?: TaggedSourceRef[] }
+        tagged_sources?: TaggedSourceRef[];
+        /** O-13 «Planen virker ikke»: what the user says is wrong, and which part (null: the whole plan). */
+        problem?: { text: string; part: string | null } | null }
     /** Game survey: sources for the whole game, and which miniature is which (started from the miniature list). */
     | { kind: 'game'; game: string; miniatures: { ref: string; name: string; images: number; identity?: SubjectIdentityRecord | null;
         rejected?: { official_name: string | null; image_urls: string[] }[] }[] }

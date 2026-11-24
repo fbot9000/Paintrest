@@ -8,7 +8,7 @@
  * «Maleplan: nye versjoner».
  */
 import type { PaintPlanPayload, PlanElementPayload, PlanStepPayload, ProductRef } from './agent';
-import type { Id, LocalDeviation, PaintProduct, PlanElement, PlanStep, Tables } from './types';
+import type { Id, LocalDeviation, MiniatureSubject, PaintProduct, PlanElement, PlanStep, ResearchProposal, Tables } from './types';
 
 const byPosition = (a: { position: number }, b: { position: number }) => a.position - b.position;
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -199,4 +199,13 @@ export function deviationPlace(t: Tables, d: LocalDeviation): string {
   if (!d.step_id) return el.name;
   const i = elementSteps(t, el.id).findIndex((s) => s.id === d.step_id);
   return i >= 0 ? `${el.name}, steg ${i + 1}` : el.name;
+}
+
+/** The newest pending plan proposal for a miniature, in an open task of its project. */
+export function pendingPlanProposal(t: Tables, s: MiniatureSubject): ResearchProposal | null {
+  const openTasks = new Set(Object.values(t.research_task).filter((x) => x.status === 'open' && t.task_scope[x.id]?.work_project_id === s.project_id).map((x) => x.id));
+  return Object.values(t.research_proposal)
+    .filter((p) => p.decision === 'pending' && (p.result_type === 'paint_plan' || p.result_type === 'plan_revision') && openTasks.has(p.task_id)
+      && (p.payload as PaintPlanPayload).subject_id === s.id)
+    .sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0] ?? null;
 }

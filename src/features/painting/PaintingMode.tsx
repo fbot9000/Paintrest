@@ -14,6 +14,7 @@ import { Logo } from '../../ui/Logo';
 import {
   Badge, Button, Dialog, ErrorNote, Field, FileImage, OwnershipFlag, ProductName, Segmented, Stepper, Swatch,
 } from '../../ui/components';
+import { PlanProblemDialog, PlanProblemStatus } from './PlanProblem';
 import './painting.css';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -30,6 +31,7 @@ export function PaintingMode() {
   const [zoom, setZoom] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [finishOpen, setFinishOpen] = useState(false);
+  const [problemOpen, setProblemOpen] = useState(false);
   const [deviationFor, setDeviationFor] = useState<{ element: ElementView; step: StepView | null } | null>(null);
 
   // Reopen the part the user had open last time (datamodell v3 §14 «sist åpnede del»).
@@ -76,6 +78,7 @@ export function PaintingMode() {
               {s.in_progress ? '✓ Påbegynt' : 'Merk påbegynt'}
             </button>
           )}
+          {view.elements.length > 0 && <button type="button" className="pm-toggle" onClick={() => setProblemOpen(true)}>Planen virker ikke</button>}
           <Button variant="moss" onClick={() => setListOpen(true)} disabled={!view.elements.length}>Finn fram malingene</Button>
           <Button variant="primary" onClick={() => setFinishOpen(true)} disabled={left === 0 || !view.plan}>
             {left === 0 ? 'Ferdig ✓' : isGroup ? 'Marker ferdige' : 'Marker ferdig'}
@@ -88,6 +91,7 @@ export function PaintingMode() {
         <References view={view} index={refIndex} onIndex={setRefIndex} onZoom={() => setZoom(true)} />
 
         <section className="pm-plan" aria-label="Maleplan">
+          <PlanProblemStatus view={view} />
           {!view.plan || view.elements.length === 0 ? (
             <div className="pm-empty">
               <h2>Planen er tom</h2>
@@ -132,6 +136,10 @@ export function PaintingMode() {
           if (r) setFinishOpen(false);
         }}
       />
+
+      {problemOpen && view.plan && (
+        <PlanProblemDialog view={view} part={open?.element.name ?? null} onClose={() => setProblemOpen(false)} />
+      )}
 
       {deviationFor && view.plan && (
         <DeviationDialog

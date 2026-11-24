@@ -234,6 +234,8 @@ export interface PlanFocus {
   game_guides?: TaggedSource[];
   /** Pages the user tagged as showing the miniature. */
   tagged_sources?: TaggedSource[];
+  /** O-13 «Planen virker ikke» in Painting Mode: what the user says is wrong, and which part (null: the whole plan). */
+  problem?: { text: string; part: string | null } | null;
 }
 
 /** Library research (bit 7.4): a technique or a recipe for the user's own library. */
@@ -465,7 +467,8 @@ ${planGuides.length ? `Brukeren har lagret disse maleguidene og videoene for fig
 2. Let etter maleguider for denne figuren eller lignende uttrykk${mode !== 'none' ? ` (${planGuides.length ? 'de lagrede guidene først, så ' : ''}known_sources; koreanske og japanske malere oppgir ofte malingene sine, og agenten må oversette)` : ''}. Bruk det kildene faktisk sier om malinger og metode.
 3. Velg en arbeidsmåte som passer (for eksempel svart grunning med zenithal og slapchop, kontrastmaling, eller lagvis med glasur) og begrunn kort.
 4. Lag ETT paint_plan-forslag for ${plan.subject_ref}${plan.revision ? ' (ny versjon av den åpnede planen)' : ''}: felles operasjoner først (grunning, zenithal, avslutning), så én del per fargesone. Hvert steg har en konkret instruks og eksakte malinger med produsent, serie og navn, og rolle. Følg malingsvalget nedenfor.${plan.revision ? `
-   Behold navnet på delene som finnes i planen fra før, og teksten i stegene du ikke endrer. Det er slik Paintrest kjenner igjen delene, så avkrysninger og avvik følger med til den nye versjonen. Står det åpne avvik på planen (open_deviations i konteksten), er det endringer brukeren gjorde mens de malte. Ta dem inn der de gjør planen bedre. Brukeren velger selv hvilke som blir en del av planen.` : ''}
+${plan.problem ? `   Brukeren maler etter planen og sier at den ikke virker${plan.problem.part ? ` for «${plan.problem.part}»` : ''}: «${plan.problem.text}». Finn ut hvorfor, og endre det som trengs for å løse akkurat det. Behold resten av planen slik den er. Si kort i summary hva som er endret og hvorfor.
+` : ''}   Behold navnet på delene som finnes i planen fra før, og teksten i stegene du ikke endrer. Det er slik Paintrest kjenner igjen delene, så avkrysninger og avvik følger med til den nye versjonen. Står det åpne avvik på planen (open_deviations i konteksten), er det endringer brukeren gjorde mens de malte. Ta dem inn der de gjør planen bedre. Brukeren velger selv hvilke som blir en del av planen.` : ''}
 5. Legg i payload:
    "summary": norsk sammendrag av arbeidsmåte og fargevalg (3–6 setninger),
    "palette": [{"product": {"manufacturer": "…", "range": "…", "name": "…", "hex": "#rrggbb"}, "role_label": "kappe – skygge", "part": "Kappe"}] – én rad per maling planen bruker, med omtrentlig farge,

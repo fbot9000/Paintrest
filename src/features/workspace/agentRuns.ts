@@ -90,19 +90,32 @@ export function startImageHunt(app: App, s: MiniatureSubject, game: string, refe
   }, { label: `Bilder til ${s.name}`, href: `/p/${s.project_id}/m/${s.id}/bilder` });
 }
 
-/** paints: the user's active choice (brukerbeslutning 11.11.2026); the agent has no hidden preference. */
-export function startPlan(app: App, s: MiniatureSubject, game: string, fileIds: (Id | null)[], paints: 'owned' | 'best') {
+/** O-13 «Planen virker ikke»: what the user says is wrong, and which part (null: the whole plan). */
+export interface PlanProblem {
+  text: string;
+  part: string | null;
+}
+
+/**
+ * paints: the user's active choice (brukerbeslutning 11.11.2026); the agent has no hidden preference.
+ * problem (O-13): the plan does not work. The current plan is opened as revision target, so the
+ * proposal is a new version of exactly that plan, and is refused if a newer version is approved first.
+ */
+export function startPlan(app: App, s: MiniatureSubject, game: string, fileIds: (Id | null)[], paints: 'owned' | 'best', problem?: PlanProblem) {
   runs.start(s.id, 'plan', async (onEvent, signal) => {
     const task = await ensureTask(app, s, 'plan');
+    if (problem && s.current_plan_version_id) await app.research.openRevisionTarget(task, s.id);
     const ref = refOf(app, task, s.id, s.name);
     const reference_images = (await Promise.all(fileIds.map((f) => imageDataUrl(app.store.getTables(), app.cmd, f)))).filter((x): x is string => !!x);
-    const prompt = `Lag en maleplan for «${s.name}» fra «${game}» som gjenskaper uttrykket i bildene jeg har valgt: arbeidsmåte, deler og steg med eksakte malinger, og en palett. `
-      + (paints === 'owned' ? 'Bruk bare malinger jeg har.' : 'Velg de malingene som gir best resultat, uansett hva jeg har.');
+    const choice = paints === 'owned' ? 'Bruk bare malinger jeg har.' : 'Velg de malingene som gir best resultat, uansett hva jeg har.';
+    const prompt = problem
+      ? `Maleplanen for «${s.name}» virker ikke${problem.part ? ` for «${problem.part}»` : ''}: ${problem.text}\nLag et forslag til en ny versjon av planen som løser dette, og behold resten. ${choice}`
+      : `Lag en maleplan for «${s.name}» fra «${game}» som gjenskaper uttrykket i bildene jeg har valgt: arbeidsmåte, deler og steg med eksakte malinger, og en palett. ${choice}`;
     await runAgentTurn({ store: app.store, research: app.research, agent: app.agent, ai: app.ai }, task, prompt, onEvent, signal,
       { kind: 'plan', subject_ref: ref, subject_name: s.name, game, reference_images, revision: !!s.current_plan_version_id, paints,
         identity: s.identity?.status === 'confirmed' ? s.identity : null, guides: pagesFor(app, s, 'method'), game_guides: pagesFor(app, s, 'game_guides'),
-        tagged_sources: pagesFor(app, s, 'evidence') });
-  }, { label: `Maleplan for ${s.name}`, href: `/p/${s.project_id}/m/${s.id}/maleplan` });
+        tagged_sources: pagesFor(app, s, 'evidence'), problem: problem ?? null });
+  }, { label: problem ? `Ny versjon av planen for ${s.name}` : `Maleplan for ${s.name}`, href: `/p/${s.project_id}/m/${s.id}/maleplan` });
 }
 
 /** «Viser figuren»: saves the tag on the miniature, and tells a running hunt for it at once. */

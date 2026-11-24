@@ -131,3 +131,7 @@
 .pm-palette li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-sm); }
 .pm-pal-text { display: grid; min-width: 0; }
 .pm-pal-text strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* «Planen virker ikke» (O-13): what the agent is doing with the plan. */
+.pm-agent { margin: 0 0 12px; padding: 10px 14px; border-left: 3px solid var(--pine); background: var(--paper); border-radius: var(--r-sm); font-size: 15px; }
+.pm-agent.warn { border-left-color: var(--warn); }

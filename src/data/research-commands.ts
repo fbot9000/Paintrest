@@ -118,6 +118,11 @@ export function checkScope(t: Tables, task_id: Id, p: { result_type: ProposalKin
   if (!subject || subject.deleted_at || subject.project_id !== project.id) {
     throw new CommandError('Forslaget gjelder en miniatyr utenfor prosjektet');
   }
+  // The workspace's plan task (and «Planen virker ikke», O-13) is about one miniature's plan only.
+  const focus = scope.subject_focus;
+  if (p.result_type === 'paint_plan' && focus?.kind === 'plan' && focus.subject_id !== subject.id) {
+    throw new CommandError(`Oppgaven gjelder bare maleplanen for «${t.miniature_subject[focus.subject_id]?.name ?? 'miniatyren'}»`);
+  }
   if (p.result_type === 'reference_selection') {
     // New source links on a subject inside the work project (datamodell v3 §12).
     if (!types.has('reference_selection')) throw new CommandError('Oppgaven tillater ikke bildeutvalg');

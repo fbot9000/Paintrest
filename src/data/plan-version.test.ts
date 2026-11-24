@@ -203,3 +203,33 @@ describe('kobling mellom versjoner', () => {
     expect(openDeviations(t, v1)).toHaveLength(0);
   });
 });
+
+describe('«Planen virker ikke» (O-13)', () => {
+  it('forslaget er en ny versjon av akkurat denne planen, og gjeldende versjon står til du godkjenner', async () => {
+    const { store, cmd, agent, research, project, subject, product } = await setup();
+    const merlin = subject('Merlin');
+    const v1 = merlin.current_plan_version_id!;
+    const completion = await cmd.markFinished(merlin.id, 1);
+    // As startPlan does with a problem: the miniature's own plan task, with the plan opened as revision target.
+    const task = await research.startTask(project.id, { subject_id: merlin.id, kind: 'plan' });
+    await research.openRevisionTarget(task, merlin.id);
+    const p = product('Nuln Oil');
+    const w = agent.writeProposal(task, { result_type: 'paint_plan', update_of: null, evidence: 'synthesized', uncertainty: [], payload: {
+      subject_id: merlin.id, note: null, summary: 'Tynnere wash på kappen',
+      elements: [{ kind: 'part', name: 'Kappe og fjær', steps: [{ instruction: 'Tynn wash', materials: [{ product: { manufacturer: p.manufacturer, range: null, name: p.name }, role: 'wash', role_label: null }], mix: null }] }],
+    } satisfies PaintPlanPayload }, 'uib', 'm');
+    if (!w.ok) throw new Error(w.reason);
+    // Only this miniature's plan: a plan for another miniature in the same task is refused.
+    const other = agent.writeProposal(task, { result_type: 'paint_plan', update_of: null, evidence: 'synthesized', uncertainty: [],
+      payload: { subject_id: subject('Druid Champions').id, note: null, elements: [{ kind: 'part', name: 'X', steps: [{ instruction: 'Y', materials: [], mix: null }] }] } satisfies PaintPlanPayload }, 'uib', 'm');
+    expect(!other.ok && other.reason).toMatch(/bare maleplanen for «Merlin»/);
+    const t0 = store.getTables();
+    expect(t0.research_proposal[w.id]).toMatchObject({ result_type: 'plan_revision', base_version_id: v1, decision: 'pending' });
+    expect(t0.miniature_subject[merlin.id]!.current_plan_version_id).toBe(v1);
+    const before = structuredClone(t0.paint_completion[completion]);
+    await research.approveProposal(w.id);
+    const t = store.getTables();
+    expect(t.paint_plan_version[v1]!.state).toBe('superseded');
+    expect(t.paint_completion[completion]).toEqual(before);
+  });
+});

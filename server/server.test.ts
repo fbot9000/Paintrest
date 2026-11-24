@@ -220,6 +220,8 @@ describe('bildejakt: det klienten sender (brukerønske 11.11.2026)', () => {
     expect(parseFocus({ kind: 'images', identity: { status: 'whatever', official_name: 'x' } })).toMatchObject({ identity: null });
     expect(parseFocus({ kind: 'plan', subject_ref: 'M1', guides: [{ url: 'https://blog.example/g', title: 'G' }], identity: { status: 'confirmed', official_name: 'M' } }))
       .toMatchObject({ kind: 'plan', guides: [{ url: 'https://blog.example/g' }], identity: { official_name: 'M' } });
+    expect(parseFocus({ kind: 'plan', subject_ref: 'M1', problem: { text: '  Flekkete wash ', part: 'Kappe' } })).toMatchObject({ problem: { text: 'Flekkete wash', part: 'Kappe' } });
+    expect(parseFocus({ kind: 'plan', subject_ref: 'M1', problem: { text: '  ', part: 'Kappe' } })).toMatchObject({ problem: null });
     expect(parseHint({ kind: 'tagged_source', url: 'https://blog.example/merlin', title: 'T' })).toEqual({ kind: 'tagged_source', url: 'https://blog.example/merlin', title: 'T' });
     expect(parseHint({ kind: 'tagged_source', url: 'javascript:x' })).toBeNull();
     expect(parseHint({ kind: 'other', url: 'https://a.example' })).toBeNull();
