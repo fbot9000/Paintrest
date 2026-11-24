@@ -2,7 +2,7 @@
 
 Det opprinnelige grunnlaget for Paintrest, fra 8. og 9. november 2026. **Historisk grunnlag, ikke fasit:** løsningen har utviklet seg siden, og dokumentene oppdateres ikke ([beslutningen](../beslutninger/2026-11-24-kildedokumentene-er-historisk-grunnlag.md)).
 
-**Les [VURDERING.md](VURDERING.md) først.** Den viser hva som fortsatt ser ut til å gjelde, hva som er overtatt av beslutninger, og hva som er ønsket, men ikke bygget.
+**Les [VURDERING.md](VURDERING.md) først.** Den er ikke et originaldokument, og den oppdateres når noe i den bygges eller avgjøres. Den viser hva som fortsatt ser ut til å gjelde, hva som er overtatt av beslutninger, og hva som er ønsket, men ikke bygget.
 
 | Fil | Opprinnelig filnavn | Navnet i koden og dokumentene |
 |---|---|---|

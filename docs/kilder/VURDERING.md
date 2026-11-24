@@ -1,6 +1,6 @@
 # Vurdering av kildedokumentene
 
-Gjort 24. november 2026, mot koden på `main` og brukerens beslutninger. Gjelder:
+Gjort 24. november 2026, mot koden på `main` og brukerens beslutninger. «I dag» er oppdatert samme dag, etter at O-1, O-2, O-5, O-13, O-14, O-15 og O-16 var ferdige. Gjelder:
 
 - [produktspesifikasjon-v2.0.md](produktspesifikasjon-v2.0.md) (8. november, filnavn «hovedkonsept»), kalt **spec** under
 - [datamodell-v3.md](datamodell-v3.md) (8. november), kalt **datamodell** under
@@ -14,7 +14,8 @@ Dokumentene er tidlige tanker. Prosjektet har utviklet seg siden, med nye priori
 - **Brukerens beslutninger** ([beslutninger/](../beslutninger/)) går foran dokumentene.
 - **Prinsippene i del A** er det viktigste å ta vare på. De er et forslag til brukeren og ikke bekreftet ennå (B-5 i [OPPGAVER.md](../OPPGAVER.md)). Vil du gjøre noe som bryter med et av dem, spør brukeren først.
 - **Ønskene i del C** er kandidater, ikke oppgaver. De blir oppgaver først når brukeren sier ja.
-- **Dokumentene oppdateres ikke.** Spec §10 sier at nye avklaringer skal skrives inn i dokumentet. Det gjelder ikke lenger: nye avklaringer blir beslutninger.
+- **De tre originaldokumentene oppdateres ikke.** Spec §10 sier at nye avklaringer skal skrives inn i dokumentet. Det gjelder ikke lenger: nye avklaringer blir beslutninger.
+- **Denne vurderingen oppdateres.** Når noe i del A eller C er bygget eller avgjort, rettes kolonnen «I dag».
 
 Bitene i [STATUS.md](../STATUS.md) (bit 0–8) står ikke i dokumentene. De kommer fra byggeplanen den første økta laget 9. november. Spec §9 sier tvert imot at det ikke finnes noen «vedtatt MVP-inndeling, utviklingsfaser, implementasjonsrekkefølge».
 
@@ -22,7 +23,7 @@ Bitene i [STATUS.md](../STATUS.md) (bit 0–8) står ikke i dokumentene. De komm
 
 | # | Prinsipp | Kilde | I dag |
 |---|---|---|---|
-| A1 | **Appen kan brukes fullt ut uten AI.** Brukeren har full kontroll over egne data. | skjema §1, §11 | Gjelder, med ett unntak: en godkjent maleplan kan bare endres med avvik i Painting Mode eller av agenten (O-1) |
+| A1 | **Appen kan brukes fullt ut uten AI.** Brukeren har full kontroll over egne data. | skjema §1, §11 | Gjelder. Siden 24. november kan du også redigere en godkjent maleplan selv (O-1) |
 | A2 | **Brukeren tar de endelige kreative valgene, og ingenting skjer i det skjulte.** | spec §1, §4 | Gjelder i en ny form: agenten endrer direkte i prosjektet, men alt vises og kan angres ([beslutningen](../beslutninger/2026-11-10-agenten-endrer-direkte-med-angre.md)). Biblioteket, katalogen og andre prosjekter endres bare med brukerens godkjenning |
 | A3 | **Eksakte malingsprodukter i konkrete oppskrifter og maleplaner.** En fargebetegnelse erstatter aldri produktet. | spec §1, datamodell §2, §13 | Gjelder: en plan med maling som ikke finnes i katalogen, kan ikke godkjennes før malingen er koblet eller opprettet som ubekreftet |
 | A4 | **Skill kildegrunnlag, antakelser, godkjente valg og erfaring.** Tre felt, ikke ett statusfelt. | spec §1, §6 | Gjelder i biblioteket (`evidence`, status, erfaring) og i research («Vist i kilde» eller «Forslag fra agenten») |
@@ -54,13 +55,13 @@ Kandidater, ikke oppgaver. «Ikke i koden» betyr at begrepet ikke finnes i `src
 
 | # | Ønske | Kilde | I dag |
 |---|---|---|---|
-| C1 | **Rediger en godkjent maleplan selv, og få en ny versjon.** Grunnkravet om full manuell kontroll (A1). | skjema §1, §6 «Maleplan» | Ikke bygget. Oppgave O-1, denne uka |
-| C2 | **«Planen virker ikke» i Painting Mode** åpner målrettet research for én plan. | spec §5, datamodell §14 | Ikke i koden. Oppgave O-13, denne uka |
-| C3 | **Handleliste** med prioritet (nødvendig, anbefalt, ønskeliste). Et kjøp registreres som eid. | spec §6C, datamodell §5, skjema `shopping_need` | Ikke i koden. Oppgave O-14, denne uka |
+| C1 | **Rediger en godkjent maleplan selv, og få en ny versjon.** Grunnkravet om full manuell kontroll (A1). | skjema §1, §6 «Maleplan» | Bygget 24. november (O-1) |
+| C2 | **«Planen virker ikke» i Painting Mode** åpner målrettet research for én plan. | spec §5, datamodell §14 | Bygget 24. november (O-13). Se avvik 44 |
+| C3 | **Handleliste** med prioritet (nødvendig, anbefalt, ønskeliste). Et kjøp registreres som eid. | spec §6C, datamodell §5, skjema `shopping_need` | Bygget 24. november (O-14). Knappen i Painting Mode gjenstår (O-18) |
 | C4 | **«Maleklar»:** referanser, malinger og instrukser er avklart. Maling som ikke er kjøpt, vises som et eget tilgjengelighetsproblem. | spec §3 | Ikke i koden. Sonen «Ferdig» venter på en beslutning (avvik 28) |
 | C5 | **Import av malinger fra bilder** (hyllefoto), der bildene kan slettes etterpå. | spec §6C, datamodell §5 | Bare tekst og filer (CSV, xlsx, JSON, HTML) |
 | C6 | **Remiks av en oppskrift** til en ny farge uten å endre originalen. | spec §6B, datamodell §10 | Ikke i koden |
-| C7 | **Start fra én maling du eier** og finn shade, layer og highlight. | spec §6B, §8 | Ikke bygget. Oppgave O-16, denne uka |
+| C7 | **Start fra én maling du eier** og finn shade, layer og highlight. | spec §6B, §8 | Bygget 24. november (O-16). Agenten lager et utkast til oppskrift fra én maling |
 | C8 | **Løft en teknikk eller oppskrift fra et prosjekt inn i biblioteket**, og hent metoder ut av figurbundne guider. | spec §6 | Prosjektoppgaver kan ikke foreslå bibliotekinnhold |
 | C9 | **Lagre en video nå, og «trekk ut metode» eller «lag oppskrift» senere.** | spec §4 | Videoer lagres som lenker, men det finnes ingen uttrekking |
 | C10 | **Prosjektpalett med omfang** (prosjekt, utvidelse, kategori) og **metoder for prosjektet.** | spec §3, datamodell §8 | Bare palett per miniatyr. `project_method` finnes bare som type. Oppgave O-3 |

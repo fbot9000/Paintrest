@@ -22,7 +22,7 @@ Gjelder alle økter, også når flere agenter jobber samtidig. Les [docs/PROSESS
 
 Koden og testene er fasiten for hva som finnes. Motsier et dokument koden, er dokumentet feil: rett det i samme push.
 
-Brukerens beslutninger går foran kildedokumentene. Kildedokumentene er historisk grunnlag fra 8. og 9. november 2026, ikke krav. Bruk dem til å forstå intensjonen, og endre dem aldri. Vil du gjøre noe som bryter med et prinsipp i del A av VURDERING.md, spør brukeren først.
+Brukerens beslutninger går foran kildedokumentene. Kildedokumentene er historisk grunnlag fra 8. og 9. november 2026, ikke krav. Bruk dem til å forstå intensjonen. De tre originaldokumentene endres aldri, men [VURDERING.md](docs/kilder/VURDERING.md) holdes oppdatert: når noe i del A eller C er bygget eller avgjort, retter du kolonnen «I dag». Vil du gjøre noe som bryter med et prinsipp i del A av VURDERING.md, spør brukeren først.
 
 ## Arbeidsflyt
 

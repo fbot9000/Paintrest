@@ -63,6 +63,7 @@ Dokumentene oppdateres i samme push som koden. Hvert tema har ett dokument:
 | Koden avviker fra kildedokumentene | Nytt punkt i [AVVIK.md](AVVIK.md), med neste ledige nummer |
 | Noe er antatt om en ekstern tjeneste | «Antakelser» i [AVVIK.md](AVVIK.md) |
 | Kodestruktur, lagring eller nøkler endres | [ARKITEKTUR.md](ARKITEKTUR.md) |
+| Noe i del A eller C av vurderingen er bygget eller avgjort | «I dag» i [kilder/VURDERING.md](kilder/VURDERING.md) |
 
 Står noe to steder, eller motsier et dokument koden, er dokumentet feil. Rett det.
 
