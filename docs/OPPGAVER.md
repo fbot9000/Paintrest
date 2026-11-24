@@ -22,6 +22,7 @@ Målet er at du kan redigere en godkjent plan selv, og at en ny versjon aldri sk
 2. **O-14** Handleliste
 3. **O-15** Produktbilder: agenten finner, du velger
 4. **O-16** Malekjeder som oppskrifter
+5. **O-18** Handlelisten fra «Finn fram malingene» i Painting Mode, når O-1 er ferdig
 
 ### Fredag: test mot de ekte tjenestene
 
@@ -174,7 +175,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-14 Handleliste
 
-- **Status:** pågår (spor B: malinger, 24. november 2026). Øker `SCHEMA_VERSION` fra 5 til 6 (ny tabell `shopping_need`)
+- **Status:** ferdig (24. november 2026, 195c7d9), unntatt knappen i Painting Mode, som er flyttet til O-18. Skjemaversjonen er 6
 - **Avhenger av:** –
 - **Berører:** `src/domain/types.ts` og `src/data/store.ts` (ny tabell, ny skjemaversjon), `src/data/local-commands.ts`, `src/domain/views.ts`, `src/features/paints/`, `src/app/App.tsx`
 - **I dag:** finnes ikke (C3 i [kilder/VURDERING.md](kilder/VURDERING.md)).
@@ -184,6 +185,14 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
   - Listen har én rad per maling, og kan filtreres per prosjekt.
   - «Kjøpt» setter malingen som eid.
   - En knapp i «Finn fram malingene» i Painting Mode venter til O-1 er ferdig, fordi begge endrer Painting Mode.
+
+### O-18 Handlelisten fra «Finn fram malingene» i Painting Mode
+
+- **Status:** ledig. Venter på O-1
+- **Avhenger av:** O-1 og O-14
+- **Berører:** `src/features/painting/`
+- **I dag:** handlelisten finnes under «Malinger → Handleliste», men ikke i Painting Mode.
+- **Ferdig når:** «Finn fram malingene» har en knapp som setter malinger du ikke har, på handlelisten, eller viser dem der.
 
 ### O-15 Produktbilder: agenten finner, du velger
 
