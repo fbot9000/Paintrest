@@ -147,3 +147,23 @@
 .changeset-head { display: flex; justify-content: space-between; align-items: center; }
 .changeset.undone { border-color: var(--fore); opacity: .7; }
 .changeset.undone ul { text-decoration: line-through; }
+
+/* Agentkolonnen (O-17): «Jobber nå» og «Venter på deg» over samtalen. */
+.aw { display: grid; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--fore); }
+.aw .eyebrow, .agent-talk { color: var(--moss); margin: 0; }
+.aw-run, .aw-item { display: grid; gap: 6px; padding: 8px 10px; border-radius: var(--r-md); background: var(--fore); font-size: 14px; }
+.aw-run-name { font-weight: 500; }
+.aw-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: space-between; }
+.aw-line > :first-child { flex: 1 1 auto; min-width: 0; }
+.aw-line a { color: var(--on-dark); }
+.aw-act { min-height: 36px; padding: 0 12px; border-radius: 999px; border: 0; background: var(--moss); color: var(--pine); font: inherit; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; text-decoration: none; }
+.aw-line a.aw-act { color: var(--pine); }
+.aw-act:hover { filter: brightness(1.05); }
+.aw-done p { margin: 0; color: var(--soft-dark); }
+.aw-warn { color: #f3c9a8; margin: 0; }
+.aw-hint { color: var(--soft-dark); }
+.aw-thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.aw-thumbs img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--r-sm); cursor: grab; background: var(--deep); }
+.aw-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.aw-list li { display: flex; align-items: center; gap: 6px; }
+.aw-list li > span { flex: 1; min-width: 0; }

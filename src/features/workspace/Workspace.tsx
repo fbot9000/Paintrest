@@ -1,20 +1,19 @@
 /**
  * Miniatyrverkstedet: one page per miniature, using the whole screen.
  * Left: the miniature's pictures. Middle: Bilder · Maleplan · Palett.
- * Right: what the agent is doing and the sources found for the game.
+ * Right: the agent column, the same as in the project (O-17): what the agent is doing, what waits
+ * for you, and the conversation. The sources for the game are on the Bilder tab.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, NavLink, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useCommand, useView } from '../../app/context';
 import { useRuns } from '../../app/runs';
-import type { Run } from '../../app/runs';
 import { knownSources } from '../../domain/agent';
-import type { PaintPlanPayload } from '../../domain/agent';
 import type { Id, Tables } from '../../domain/types';
 import { attachedExpansions, linkedSources, liveSubjects, subjectReferences, suggestedSources } from '../../domain/views';
-import { Badge, Button, ErrorNote, FileImage } from '../../ui/components';
-import { LiveSteps } from '../agent/AgentPanel';
-import { runs } from '../../app/runs';
+import { Button, ErrorNote, FileImage } from '../../ui/components';
+import { AgentPanel, AgentPanelProvider, useAgentPanel } from '../agent/AgentPanel';
+import { useImageDrop } from '../images/dragImages';
 import { ImagesTab, TagButton, tagState } from './ImagesTab';
 import { reviewQueue } from '../../domain/review';
 import type { ReviewItem } from '../../domain/review';
@@ -44,24 +43,12 @@ function view(t: Tables, project_id: Id, subject_id: Id) {
     position: `${i + 1} av ${siblings.length}`,
     refs,
     sources: knownSources(t, project_id),
-    planSourceUrls: planSourceUrls(t, s),
     // Pages the user tagged as showing this miniature («Viser figuren»); shown first, and the agent opens them first.
     tagged: new Set(linkedSources(t, s.id, 'evidence').map((x) => x.url!)),
     likely: new Set(suggestedSources(t, s.id).map((x) => x.url!)),
     queue: reviewQueue(t, project_id),
     order: siblings.map((x) => x.id),
   };
-}
-
-/** Pages the plan (pending proposal, or the agent's notes on it) was built on, shown first on the Maleplan tab. */
-function planSourceUrls(t: Tables, s: NonNullable<Tables['miniature_subject'][string]>): string[] {
-  const p = Object.values(t.research_proposal)
-    .filter((x) => x.decision === 'pending' && (x.result_type === 'paint_plan' || x.result_type === 'plan_revision')
-      && (x.payload as PaintPlanPayload).subject_id === s.id)
-    .sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0];
-  if (!p) return [];
-  const payload = p.payload as PaintPlanPayload;
-  return [...(payload.sources_read ?? []).map((x) => x.url), ...(payload.sources ?? []).map((x) => x.url)];
 }
 
 const COLLAPSE_KEY = 'paintrest.ws.refsCollapsed';
@@ -73,7 +60,12 @@ function readCollapsed(): boolean {
 }
 
 export function Workspace() {
+  return <AgentPanelProvider><WorkspacePage /></AgentPanelProvider>;
+}
+
+function WorkspacePage() {
   const { projectId = '', subjectId = '', tab: tabParam } = useParams();
+  const { open: agentOpen } = useAgentPanel();
   const tab: Tab = tabParam === 'maleplan' || tabParam === 'palett' ? tabParam : 'bilder';
   const data = useView((t) => view(t, projectId, subjectId), [projectId, subjectId]);
   const navigate = useNavigate();
@@ -81,6 +73,8 @@ export function Workspace() {
   const reviewing = params.has('gjennomgang');
   const app = useApp();
   const { run, error, clearError } = useCommand();
+  // O-17: a found picture dragged from «Venter på deg» onto the workspace goes on this miniature.
+  const drop = useImageDrop(app, projectId, () => data?.s.name ?? 'miniatyren');
   const imagesRun = useRuns((r) => r.get(subjectId, 'images'));
   const planRun = useRuns((r) => r.get(subjectId, 'plan'));
   // Pictures the plan is built on. Until the user ticks anything (null), it follows the
@@ -89,7 +83,6 @@ export function Workspace() {
   const [viewing, setViewing] = useState<Id | null>(null);
   const [zoom, setZoom] = useState(false);
   const [browseUrl, setBrowseUrl] = useState<string | null>(null);
-  const [showSide, setShowSide] = useState(false);
   const [collapsed, setCollapsedState] = useState(readCollapsed);
   const setCollapsed = (v: boolean) => {
     setCollapsedState(v);
@@ -111,9 +104,6 @@ export function Workspace() {
   // In a walkthrough the walkthrough follows along, also with the header's previous and next.
   const to = (id: Id, t: Tab = tab) => `${base}/${id}/${t}${reviewing ? '?gjennomgang=1' : ''}`;
   const review = reviewing ? reviewPosition(data.queue, data.order, s.id) : null;
-  const activeRun = [imagesRun, planRun].filter((r): r is Run => !!r).sort((a, b) => b.started_at.localeCompare(a.started_at))[0] ?? null;
-  // The right column belongs to finding pictures; elsewhere it shows only while the agent works, or when asked for.
-  const sideShown = tab === 'bilder' || activeRun?.status === 'running' || showSide;
 
   return (
     <div className="ws">
@@ -132,7 +122,6 @@ export function Workspace() {
           <Button variant="ghost" disabled={!data.prev} onClick={() => data.prev && navigate(to(data.prev.id))} aria-label="Forrige miniatyr">‹ {data.prev?.name ?? ''}</Button>
           <Button variant="ghost" disabled={!data.next} onClick={() => data.next && navigate(to(data.next.id))} aria-label="Neste miniatyr">{data.next?.name ?? ''} ›</Button>
           {s.current_plan_version_id && <Button variant="primary" onClick={() => navigate(`/male/${s.id}`)} title="Åpne planen i Painting Mode">Mal</Button>}
-          <Button className={`ws-side-toggle ${tab !== 'bilder' ? 'always' : ''}`} onClick={() => setShowSide((v) => !v)} aria-expanded={sideShown}>Kilder</Button>
         </div>
       </header>
       <ErrorNote error={error} onClose={clearError} />
@@ -143,7 +132,15 @@ export function Workspace() {
           onList={() => navigate(`/p/${projectId}/miniatyrer`)} />
       )}
 
-      <div className={`ws-body ${showSide ? 'side-open' : ''} ${sideShown ? '' : 'side-hidden'} ${collapsed ? 'refs-collapsed' : ''} ${data.refs.length ? '' : 'no-refs'}`}>
+      <ErrorNote error={drop.error} onClose={drop.clearError} />
+      {drop.note && (
+        <p className="drop-note" role="status">
+          {drop.note.text}. <button type="button" className="link" onClick={() => { const u = drop.note!.undo; drop.clearNote(); void run(u); }}>Angre</button>
+          <button type="button" className="link small" onClick={drop.clearNote} aria-label="Lukk">×</button>
+        </p>
+      )}
+
+      <div className={`ws-body ${agentOpen ? 'agent-open' : 'agent-closed'} ${collapsed ? 'refs-collapsed' : ''} ${data.refs.length ? '' : 'no-refs'} ${drop.over === s.id ? 'drop-over' : ''}`} {...drop.dropOn(s.id)}>
         {data.refs.length > 0 && <aside className="ws-refs" aria-label="Bilder av miniatyren">
           <button type="button" className="ws-refs-toggle" onClick={() => setCollapsed(!collapsed)} aria-expanded={!collapsed}
             aria-label={collapsed ? 'Vis bildekolonnen' : 'Skjul bildekolonnen'} title={collapsed ? 'Vis bildene' : 'Skjul bildene'}>{collapsed ? '›' : '‹'}</button>
@@ -201,42 +198,33 @@ export function Workspace() {
         <main className="ws-main">
           {tab === 'bilder' && <ImagesTab subject={s} game={data.game} run={imagesRun} browseUrl={browseUrl} setBrowseUrl={setBrowseUrl} referenceFileId={data.refs.find((r) => r.cover)?.file_id ?? data.refs[0]?.file_id ?? null}
             review={review ? { next: review.next ? () => navigate(`${base}/${review.next!.subject_id}/bilder?gjennomgang=1`) : () => navigate(`/p/${projectId}/miniatyrer`), nextName: review.next?.name ?? null } : null} />}
+          {tab === 'bilder' && data.sources.length > 0 && (
+            <section className="ws-sources" aria-label="Kilder for spillet">
+              <h2 className="eyebrow">Kilder for spillet ({data.sources.length})</h2>
+              <ul>
+                {[...data.sources].sort((a, b) => TAG_ORDER[tagState(data, a.source.url!)] - TAG_ORDER[tagState(data, b.source.url!)]).map((k) => (
+                  <li key={k.source.id} className={`${browseUrl === k.source.url ? 'on' : ''} ${data.tagged.has(k.source.url!) ? 'tagged' : data.likely.has(k.source.url!) ? 'likely' : ''}`}>
+                    <button type="button" onClick={() => { setBrowseUrl(k.source.url); document.querySelector('.ws-main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      title={[k.source.creator, k.source.language && languageName(k.source.language), k.status === 'kept' ? `lagret, ${k.asset_count} bilder` : 'funnet av agenten', k.summary].filter(Boolean).join(' · ')}>
+                      <span className="ws-src-head">
+                        <strong>{k.source.title}</strong>
+                        {k.source.role && k.source.role !== 'other' && <span className="ws-src-role">{ROLE_LABEL[k.source.role]}</span>}
+                      </span>
+                    </button>
+                    <span className="ws-src-actions">
+                      <TagButton state={tagState(data, k.source.url!)} onToggle={(on) => run(() => tagPage(app, s.id, { url: k.source.url!, title: k.source.title }, on))} />
+                      <a className="small" href={k.source.url!} target="_blank" rel="noreferrer" aria-label="Åpne siden">↗</a>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {tab === 'maleplan' && <PlanTab subject={s} game={data.game} run={planRun} planFileIds={data.refs.filter((r) => planRefs.has(r.asset.id)).map((r) => r.file_id)} />}
           {tab === 'palett' && <PaletteTab subject={s} />}
         </main>
 
-        <aside className={`ws-side ${tab === 'maleplan' ? 'compact' : ''}`} aria-label="Agenten og kildene">
-          {activeRun && (
-            <section className="ws-agent">
-              {activeRun.status === 'running'
-                ? <div className="ws-live"><LiveSteps events={activeRun.events} onStop={() => runs.stop(s.id, activeRun.kind)} /></div>
-                : <RunResult run={activeRun} />}
-            </section>
-          )}
-          <section className="ws-sources">
-            <h2 className="eyebrow">Kilder ({data.sources.length})</h2>
-            <ul>
-              {(tab === 'maleplan'
-                ? [...data.sources].sort((a, b) => Number(data.planSourceUrls.includes(b.source.url!)) - Number(data.planSourceUrls.includes(a.source.url!)))
-                : [...data.sources].sort((a, b) => TAG_ORDER[tagState(data, a.source.url!)] - TAG_ORDER[tagState(data, b.source.url!)])).map((k) => (
-                <li key={k.source.id} className={`${browseUrl === k.source.url ? 'on' : ''} ${data.tagged.has(k.source.url!) ? 'tagged' : data.likely.has(k.source.url!) ? 'likely' : ''}`}>
-                  <button type="button" onClick={() => { setBrowseUrl(k.source.url); if (tab !== 'bilder') navigate(`${base}/${s.id}/bilder`); }}
-                    title={[k.source.creator, k.source.language && languageName(k.source.language), k.status === 'kept' ? `lagret, ${k.asset_count} bilder` : 'funnet av agenten', k.summary].filter(Boolean).join(' · ')}>
-                    <span className="ws-src-head">
-                      <strong>{k.source.title}</strong>
-                      {k.source.role && k.source.role !== 'other' && <span className="ws-src-role">{ROLE_LABEL[k.source.role]}</span>}
-                      {tab === 'maleplan' && data.planSourceUrls.includes(k.source.url!) && <Badge tone="moss">I planen</Badge>}
-                    </span>
-                  </button>
-                  <span className="ws-src-actions">
-                    {tab === 'bilder' && <TagButton state={tagState(data, k.source.url!)} onToggle={(on) => run(() => tagPage(app, s.id, { url: k.source.url!, title: k.source.title }, on))} />}
-                    <a className="small" href={k.source.url!} target="_blank" rel="noreferrer" aria-label="Åpne siden">↗</a>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        </aside>
+        <AgentPanel projectId={projectId} subjectId={s.id} />
       </div>
 
       {zoom && current && (
@@ -293,23 +281,6 @@ function ReviewBar({ review: r, name, onGo, onEnd, onList }: { review: ReviewPos
           : !r.current && <Button variant="primary" onClick={onList}>Til miniatyrlisten</Button>}
         <button type="button" className="link small" onClick={onEnd}>Avslutt</button>
       </span>
-    </div>
-  );
-}
-
-function RunResult({ run: r }: { run: Run }) {
-  const final = [...r.events].reverse().find((e) => e.type === 'final');
-  const label = r.kind === 'images' ? 'Bildejakt' : 'Maleplan';
-  return (
-    <div className="ws-result">
-      <span className="small">
-        {label} {r.status === 'done' ? 'ferdig' : r.status === 'stopped' ? 'stoppet' : 'feilet'}
-        {r.finished_at ? ` kl. ${new Date(r.finished_at).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}` : ''}
-      </span>
-      {final && final.type === 'final' && <p>{final.message}</p>}
-      {/* Notes about removed, unconfirmed finds are bookkeeping; only problems the user must act on are shown. */}
-      {final && final.type === 'final' && final.warnings.filter((w) => !w.startsWith('Fjernet')).map((w, i) => <p key={i} className="small ws-warn">{w}</p>)}
-      {r.error && <p className="small ws-warn">{r.error}</p>}
     </div>
   );
 }

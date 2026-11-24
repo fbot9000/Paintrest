@@ -13,9 +13,9 @@ import type { PoolImage } from '../../domain/review';
 import type { Id, MiniatureSubject } from '../../domain/types';
 import { assetFileId, liveSubjects, subjectReferences } from '../../domain/views';
 import { Badge, Button, ErrorNote, FileImage } from '../../ui/components';
+import { DRAG_TYPE } from './dragImages';
 import './distribute.css';
 
-const DRAG_TYPE = 'application/x-paintrest-images';
 const SURE = { high: 'Sikker', medium: 'Trolig', low: 'Usikker' } as const;
 
 interface Target { s: MiniatureSubject; file: Id | null; count: number }

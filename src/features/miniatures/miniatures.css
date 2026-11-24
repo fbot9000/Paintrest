@@ -35,40 +35,14 @@
 
 /* Kartlegging av spillet */
 .page-head > .page-head-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.survey-panel { background: var(--pine); color: var(--on-dark); border-radius: var(--r-lg); padding: 14px 16px; }
-.survey-panel .msg { padding: 0; background: none; }
-.survey-result { display: grid; gap: 6px; font-size: 14px; }
-.survey-result p { margin: 0; }
-.survey-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.survey-head .eyebrow { color: var(--moss); }
-.survey-panel .link { color: var(--moss); }
-.survey-warn { color: #f3c9a8; }
 .mini-found { display: flex; gap: 10px; flex-wrap: wrap; margin: 0; }
 .mini-found .link { text-align: left; overflow-wrap: anywhere; }
-
-/* Mangler i listen (fra kartleggingen) */
-.missing { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--card); }
-.missing-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
-.missing-head h2 { font-size: 20px; margin: 0 0 4px; }
-.missing-head p { margin: 0; }
-.missing-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.missing-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 10px; border-radius: var(--r-md); background: var(--paper); }
-.missing-img { width: 72px; height: 72px; object-fit: cover; border-radius: var(--r-sm); background: var(--panel); }
-.missing-item:not(:has(.missing-img)) { grid-template-columns: minmax(0, 1fr) auto; }
-.missing-body { display: grid; gap: 3px; min-width: 0; }
-.missing-body p { margin: 0; overflow-wrap: anywhere; }
-.missing-name { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.missing-warn { color: var(--warn); }
-.missing-sources { display: flex; gap: 10px; flex-wrap: wrap; }
-.missing-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-@media (max-width: 600px) {
-  .missing-item, .missing-item:not(:has(.missing-img)) { grid-template-columns: minmax(0, 1fr); }
-  .missing-actions { justify-content: flex-start; }
-}
 
 /* Plass: listen bruker bredden mellom kolonnene */
 .project-main .page.page-wide { max-width: 1760px; }
 .mini-suggest { position: absolute; left: 10px; bottom: 10px; padding: 3px 8px; border-radius: 4px; background: rgb(247 245 237 / .92); color: var(--ink); font: 500 11px var(--font-mono); text-transform: uppercase; letter-spacing: .04em; }
 .mini-preview { filter: saturate(.9); }
-.survey-next { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
-.survey-next .small { color: var(--soft-dark); }
+
+/* O-17: a found picture dragged over a miniature card, and the note after a drop. */
+.mini-card.drop-over { outline: 3px solid var(--moss); outline-offset: 2px; }
+.drop-note { display: flex; gap: 10px; align-items: center; padding: 8px 12px; border-radius: var(--r-md); background: var(--panel); margin: 0 0 12px; }

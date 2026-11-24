@@ -1,11 +1,11 @@
 /**
- * Researchagent (spesifikasjon §4, datamodell v3 §12–13).
- * The panel only shows and sends; drafts are written by the agent command
- * set, and only the user's approval makes them canonical.
+ * The agent column (spesifikasjon §4, datamodell v3 §12–13, O-17): «Jobber nå», «Venter på deg»
+ * and the conversation with the project's agent. Changes inside the project are applied directly
+ * and can be undone (brukerbeslutning 10.11.2026).
  */
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link } from 'react-router';
 import { useApp, useView } from '../../app/context';
 import { describeOps, matchProduct, planProductRefs, productKey, proposalTitle } from '../../domain/agent';
 import type { CatalogChangePayload, CatalogSubjectPayload, PaintPlanPayload, ReferenceSelectionPayload, SourceRef } from '../../domain/agent';
@@ -14,10 +14,11 @@ import { runs, useRuns } from '../../app/runs';
 import type { AgentChangeSet, Id, ResearchMessage, ResearchProposal, Tables } from '../../domain/types';
 import { ownershipOf, projectSummary } from '../../domain/views';
 import { panelTask } from '../../domain/tasks';
-import { openImages, savedImageUrls } from '../../domain/review';
 import { runAgentTurn } from '../../data/agent-runner';
 import { Badge, Button, Dialog, ErrorNote, Field, OwnershipFlag, ProductName, Segmented, Stepper, Swatch } from '../../ui/components';
 import './agent.css';
+import { WaitingForYou, WorkingNow } from './AgentWork';
+import { projectWaiting, waitingCount } from '../../domain/waiting';
 
 // ---------- Panel control shared with the project pages ----------
 
@@ -88,9 +89,16 @@ const PROMPTS_OFFLINE = [
 
 // ---------- Panel ----------
 
-export function AgentPanel({ projectId }: { projectId: Id }) {
+/**
+ * The agent column (O-17): the same in the project pages and the workspace. Three parts, always in
+ * this order: «Jobber nå», «Venter på deg» and the conversation. subjectId: the workspace's miniature,
+ * whose runs show their steps.
+ */
+export function AgentPanel({ projectId, subjectId }: { projectId: Id; subjectId?: Id }) {
   const app = useApp();
   const ctl = useAgentPanel();
+  const waiting = useView((t) => waitingCount(projectWaiting(t, projectId)), [projectId]);
+  const working = useRuns((r) => r.active('game', 'images', 'plan').length > 0);
   const view = useView((t) => researchView(t, projectId), [projectId]);
   const titles = useView((t) => Object.fromEntries((view?.proposals ?? []).map((p) => [p.id, proposalTitle(t, p.result_type, p.payload)])), [view]);
   const [ai, setAi] = useState<AiState>('checking');
@@ -103,7 +111,6 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
   const [error, setError] = useState<string | null>(null);
   const [review, setReview] = useState<ResearchProposal | null>(null);
   const [showDone, setShowDone] = useState(false);
-  const navigate = useNavigate();
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -151,19 +158,20 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
   if (!ctl.open) {
     return (
       <aside className="agent-rail">
-        <button type="button" className="agent-rail-btn" onClick={() => ctl.setOpen(true)} aria-label="Åpne researchagenten">
+        <button type="button" className="agent-rail-btn" onClick={() => ctl.setOpen(true)} aria-label="Åpne agenten">
           <span aria-hidden>✦</span>
-          <span className="agent-rail-label">Researchagent</span>
-          {busy && <span className="run-dot" aria-label="agenten jobber" />}
-          {!!view?.proposals.filter((p) => p.decision === 'pending').length && (
-            <span className="agent-rail-count">{view.proposals.filter((p) => p.decision === 'pending').length}</span>
+          <span className="agent-rail-label">Agenten</span>
+          {(busy || working) && <span className="run-dot" aria-label="agenten jobber" />}
+          {waiting + (view?.proposals.filter((p) => p.decision === 'pending' && p.result_type !== 'reference_selection').length ?? 0) > 0 && (
+            <span className="agent-rail-count" title="Venter på deg">{waiting + (view?.proposals.filter((p) => p.decision === 'pending' && p.result_type !== 'reference_selection').length ?? 0)}</span>
           )}
         </button>
       </aside>
     );
   }
 
-  const pending = view?.proposals.filter((p) => p.decision === 'pending') ?? [];
+  // Picture proposals are taken from «Venter på deg» and the board, not one by one here.
+  const pending = view?.proposals.filter((p) => p.decision === 'pending' && p.result_type !== 'reference_selection') ?? [];
   // Proposals that need no choice from the user: no image selection, no unknown paints.
   const simple = pending.filter((p) => {
     if (p.result_type === 'reference_selection') return false;
@@ -184,10 +192,10 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
   const done = view?.proposals.filter((p) => p.decision !== 'pending') ?? [];
 
   return (
-    <aside className="agent" aria-label="Researchagent">
+    <aside className="agent" aria-label="Agenten">
       <header className="agent-head">
         <div>
-          <h2>Researchagent</h2>
+          <h2>Agenten</h2>
           {ai === 'ready' && (
             <span className="agent-sub" title={`Modell: ${model ?? 'ingen standardmodell'} · ${web ? `nettsøk: ${web}` : 'uten nettsøk'}`}>
               UiB · {model ?? 'ingen standardmodell'} · {web ? `nettsøk: ${web}` : 'uten nettsøk'}
@@ -218,6 +226,9 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
       )}
 
       <div className="agent-scroll" ref={listRef}>
+        <WorkingNow projectId={projectId} subjectId={subjectId} />
+        <WaitingForYou projectId={projectId} />
+        <h3 className="eyebrow agent-talk">Samtale</h3>
         <div className="agent-scope">
           <details>
             <summary>Arbeider i dette prosjektet</summary>
@@ -245,7 +256,7 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
         {pending.length > 0 && (
           <section className="agent-proposals">
             <div className="agent-pending-head">
-              <h3 className="eyebrow">Forslag som venter ({pending.length})</h3>
+              <h3 className="eyebrow">Forslag i samtalen ({pending.length})</h3>
               {simple.length > 1 && (
                 <button type="button" className="agent-link small" onClick={approveAll} disabled={busy}>Godkjenn alle {simple.length}</button>
               )}
@@ -260,11 +271,6 @@ export function AgentPanel({ projectId }: { projectId: Id }) {
                 onApprove={() => act(() => app.research.approveProposal(p.id))}
               />
             ))}
-            {pending.some((p) => p.result_type === 'reference_selection') && (
-              <ImageProposals proposals={pending.filter((p) => p.result_type === 'reference_selection')}
-                onOpen={(subject_id) => navigate(`/p/${projectId}/m/${subject_id}/bilder?gjennomgang=1`)}
-                onReject={(id) => act(() => app.research.rejectProposal(id))} />
-            )}
           </section>
         )}
         {done.length > 0 && (
@@ -362,45 +368,6 @@ function ProposalCard({ p, title, onReview, onReject, onApprove }: {
     </article>
   );
 }
-
-/**
- * Image proposals take little room here: one row per miniature, opened in the workshop's walkthrough,
- * where the pictures are chosen (the sure ones ticked in advance) next to who the figure is and its sources.
- */
-function ImageProposals({ proposals, onOpen, onReject }: { proposals: ResearchProposal[]; onOpen: (subject_id: Id) => void; onReject: (id: Id) => void }) {
-  const { ai } = useApp();
-  const names = useView((t) => Object.fromEntries(proposals.map((p) => {
-    const sid = (p.payload as ReferenceSelectionPayload).subject_id;
-    return [p.id, t.miniature_subject[sid]?.name ?? 'ukjent miniatyr'];
-  })), [proposals]);
-  // Only what is still open: not yet on a miniature, not set aside.
-  const open = useView((t) => {
-    const pid = t.task_scope[proposals[0]?.task_id ?? '']?.work_project_id ?? '';
-    const saved = savedImageUrls(t, pid);
-    return Object.fromEntries(proposals.map((p) => [p.id, openImages(p, saved)]));
-  }, [proposals]);
-  return (
-    <div className="img-props">
-      <span className="small img-props-head">Bildeforslag · velges i verkstedet</span>
-      {proposals.filter((p) => (open[p.id] ?? []).length > 0).map((p) => {
-        const pl = { ...(p.payload as ReferenceSelectionPayload), images: open[p.id]! };
-        return (
-          <div key={p.id} className="img-prop">
-            <button type="button" className="img-prop-open" onClick={() => onOpen(pl.subject_id)} title={`Velg bilder til ${names[p.id]} (${p.ref})`}>
-              <span className="img-prop-thumbs">
-                {pl.images.slice(0, 3).map((i) => <img key={i.image_url} src={ai.imageProxyUrl(i.thumbnail_url ?? i.image_url)} alt="" loading="lazy" />)}
-              </span>
-              <span className="img-prop-text"><strong>{names[p.id]}</strong><span className="small">{pl.images.length} {pl.images.length === 1 ? 'bilde' : 'bilder'} ›</span></span>
-            </button>
-            <button type="button" className="img-prop-x" onClick={() => onReject(p.id)} aria-label={`Avvis bildeforslaget til ${names[p.id]}`} title="Avvis">×</button>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ---------- Gjennomgang ----------
 
 function ReviewDialog({ proposalId, onClose, onDone }: { proposalId: Id; onClose: () => void; onDone: () => void }) {
   const app = useApp();

@@ -76,6 +76,11 @@ class RunRegistry {
     return this.runs.get(keyOf(id, kind)) ?? null;
   }
 
+  /** Every run the registry remembers (running, and finished ones not dismissed), newest first. */
+  all(): Run[] {
+    return [...this.runs.values()].sort((a, b) => b.started_at.localeCompare(a.started_at));
+  }
+
   /** Runs still working, optionally only of the given kinds (the gallery asks for 'images' and 'plan'). */
   active(...kinds: RunKind[]): Run[] {
     return [...this.runs.values()].filter((r) => r.status === 'running' && (kinds.length === 0 || kinds.includes(r.kind)));
