@@ -235,7 +235,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-20 Testversjon 1
 
-- **Status:** ledig
+- **Status:** pågår (spor B, 24. november 2026)
 - **Avhenger av:** O-17 og O-19, eller torsdag kveld
 - **Berører:** `docs/testversjoner/`
 - **Ferdig når:**
