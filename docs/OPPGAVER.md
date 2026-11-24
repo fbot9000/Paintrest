@@ -25,7 +25,7 @@ Målet er at du kan redigere en godkjent plan selv, og at en ny versjon aldri sk
 
 ### Fredag: test mot de ekte tjenestene
 
-**O-8**, sammen med brukeren, som kjører appen lokalt med UiB-nøkkel. Agenten i spor A eller B lager sjekklisten torsdag, med de nye AI-funksjonene fra uka først.
+**O-8**, sammen med brukeren, som kjører appen lokalt med UiB-nøkkel. Agenten i spor B lager sjekklisten torsdag, med de nye AI-funksjonene fra begge sporene først.
 
 ### Felles filer
 
