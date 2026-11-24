@@ -174,7 +174,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-14 Handleliste
 
-- **Status:** ledig
+- **Status:** pågår (spor B: malinger, 24. november 2026). Øker `SCHEMA_VERSION` fra 5 til 6 (ny tabell `shopping_need`)
 - **Avhenger av:** –
 - **Berører:** `src/domain/types.ts` og `src/data/store.ts` (ny tabell, ny skjemaversjon), `src/data/local-commands.ts`, `src/domain/views.ts`, `src/features/paints/`, `src/app/App.tsx`
 - **I dag:** finnes ikke (C3 i [kilder/VURDERING.md](kilder/VURDERING.md)).
