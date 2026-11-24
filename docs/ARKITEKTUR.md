@@ -72,6 +72,10 @@ Appen virker fullt ut uten AI. Nøkkelen legges inn under «⋯ → Innstillinge
 npm test   # også serveren: kryptering, at nøkkelen ikke lekker, feilmeldinger
 ```
 
+## Tester på GitHub
+
+`.github/workflows/tester.yml` kjører `npm ci`, `npm test` og `npm run build` med Node 22 ved hver push til `main`, ved pull requests og når den startes for hånd. Resultatet står ved hver commit på GitHub, og under «Actions».
+
 ## Bygg for innebygd forhåndsvisning
 
 Noen verter tillater bare en enkel `#navn` i adressen. Bygg da med minneruting:

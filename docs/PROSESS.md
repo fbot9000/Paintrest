@@ -48,6 +48,8 @@ npm run build
 
 Begge må gå gjennom. `npm run build` gjør også typesjekken.
 
+GitHub kjører de samme to kommandoene ved hver push til `main` (`.github/workflows/tester.yml`). Er `main` rød på GitHub, retter agenten som pushet sist, før noe annet.
+
 - Endrer du noe brukeren ser, prøv det i nettleseren. Playwright og Chromium er installert i skymiljøet.
 - Si hva som er testet og hvordan. Skymiljøet når ikke UiB, Brave, Tavily og de andre tjenestene. Det som bare er testet mot etterligninger, skal det stå at det er.
 

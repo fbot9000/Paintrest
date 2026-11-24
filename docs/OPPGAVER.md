@@ -159,7 +159,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-12 Tester og bygg på GitHub ved hver push til main
 
-- **Status:** pågår (spor B, 24. november 2026)
+- **Status:** ferdig (24. november 2026, b7eaf38). Første kjøring var grønn
 - **Avhenger av:** –
 - **Berører:** `.github/workflows/`
 - **Ferdig når:** GitHub kjører `npm test` og `npm run build` ved hver push til `main`, og en rød `main` er synlig.
@@ -187,7 +187,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-18 Handlelisten fra «Finn fram malingene» i Painting Mode
 
-- **Status:** ledig. O-1 er ferdig, men venter til O-13 er ferdig, fordi begge endrer `src/features/painting/`
+- **Status:** pågår (spor B, 24. november 2026)
 - **Avhenger av:** O-1, O-13 og O-14
 - **Berører:** `src/features/painting/`
 - **I dag:** handlelisten finnes under «Malinger → Handleliste», men ikke i Painting Mode.
