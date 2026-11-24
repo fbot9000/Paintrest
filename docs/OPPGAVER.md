@@ -29,6 +29,10 @@ git push origin --delete claude/adoring-wright-d5383x claude/bold-darwin-8732cf 
 
 Sett rekkefølgen, eller si hvilke som skal gjøres denne uka.
 
+### B-4 Legg kildedokumentene i repoet
+
+De tre dokumentene ble gitt som vedlegg til første melding i økta «Paintrest design gjennomgang» 9. november, og finnes ikke noe annet sted som agentene når. Last dem ned derfra, eller hent dem der de ble skrevet, og legg dem ved i en økt eller i `docs/kilder/`. Hvilke filer det gjelder, står i [kilder/README.md](kilder/README.md).
+
 ## Oppgaver
 
 Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berører» viser hvilke deler av koden oppgaven trolig endrer, slik at to agenter ikke tar oppgaver som kolliderer.
@@ -108,7 +112,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 ### O-11 Gå gjennom kildedokumentene mot koden
 
 - **Status:** ledig
-- **Avhenger av:** at kildedokumentene ligger i `docs/kilder/`
+- **Avhenger av:** B-4 (kildedokumentene i `docs/kilder/`)
 - **Berører:** `docs/AVVIK.md`, `docs/kilder/`, `docs/STATUS.md`
 - **Ferdig når:**
   - Hvert punkt i AVVIK er sjekket mot kildedokumentene.

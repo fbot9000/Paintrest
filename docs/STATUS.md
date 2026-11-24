@@ -38,4 +38,4 @@ Bitene er nummereringen som er brukt i dokumentene og commit-meldingene siden st
 - **Ingen innlogging.** Kjøres appen med `--host`, kan alle på samme nett bruke AI-nøkkelen gjennom serveren, men ikke lese den (avvik 10).
 - **Nettvernet er laget for en lokal maskin.** Det beskytter ikke mot DNS-rebinding, og passer ikke for en delt server.
 - **Hele tilstanden lagres i én fil.** Samtidige lagringer fra flere faner avvises i stedet for å slås sammen (avvik 29).
-- **Kildene i `docs/kilder/` er ikke gjennomgått mot koden.** Avvikene i [AVVIK.md](AVVIK.md) er skrevet av agenter, og flere av dem sier at de ikke har lest kildedokumentene.
+- **Kildedokumentene mangler i repoet.** Produktspesifikasjonen, datamodellen og databaseskjemaet ble gitt til den første økta som vedlegg, men ble aldri lagt inn. Avvikene i [AVVIK.md](AVVIK.md) er derfor ikke sjekket mot dem. Se [kilder/](kilder/README.md).

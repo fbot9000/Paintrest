@@ -2,7 +2,9 @@
 
 Brukerens beslutninger står i [beslutninger/](beslutninger/), én fil per beslutning. Grunnreglene for agentens frihet står i [beslutninger/2026-11-10-grunnregler-for-agentens-frihet.md](beslutninger/2026-11-10-grunnregler-for-agentens-frihet.md). Punktene merket BRUKERBESLUTNING under viser hva beslutningen betyr i koden.
 
-Dokumentene er førende. Denne listen viser hvor prototypen gjør et valg dokumentene ikke tar, eller avviker fra dem. Hvert punkt bør avgjøres før koden mot den ekte databasen skrives.
+Kildedokumentene ([kilder/](kilder/README.md)) er førende, men brukerens beslutninger går foran dem. Denne listen viser hvor prototypen gjør et valg dokumentene ikke tar, eller avviker fra dem. Hvert punkt bør avgjøres før koden mot den ekte databasen skrives.
+
+**Kildedokumentene ligger ikke i repoet ennå.** Flere av punktene er skrevet av agenter som ikke hadde dem (se avvik 33 og [BIT7-KUNNSKAP.md](BIT7-KUNNSKAP.md)). Punktene er derfor ikke sjekket mot dokumentene (oppgave O-11 i [OPPGAVER.md](OPPGAVER.md)).
 
 **Numrene er rettet 24. november 2026.** To punkter het 29, og to het 30. Punktene om biblioteket og om malingsvalget heter nå 33 og 34, og punktene som het 33–36, heter nå 35–38. Punktet om bilde og fakta for spillet, som het 37, heter nå 39. Henvisningene i listen er rettet.
 
