@@ -56,19 +56,29 @@ Trykk på bildet eller navnet på et miniatyrkort. Da åpnes verkstedet for mini
     - Mens agenten jobber, og når forslaget venter, står det øverst i planen i Painting Mode, med en lenke til Maleplan. Du maler videre etter den gjeldende versjonen. Forslaget ser du og godkjenner i verkstedet, der du også velger hvilke avvik som skal bakes inn. Painting Mode viser ikke selve forslaget.
   - **Palett:** malingene miniatyren males med, gruppert per del. Du kan legge til malinger, endre rolle og del, og fjerne rader.
 - **Bildekolonnen kan skjules** med ‹ øverst. Da står bare små bilder igjen, og valget huskes. «I planen» vises bare i Maleplan-fanen.
-- **Høyre: agenten og kildene.** I Maleplan-fanen vises kildene kort, og de planen bygger på står først. Her ser du hva agenten gjør akkurat nå, med «Stopp», og resultatet når den er ferdig. Under ligger alle kildene for spillet, både lagrede og funnet av agenten, med språk og norsk sammendrag. Trykk på en kilde for å hente bilder fra den. I Bilder-fanen merker du med «Viser figuren?» kilder som viser miniatyren. De står da først, og agenten åpner dem først.
+- **Høyre: agenten.** Den samme kolonnen som i prosjektet (se «Agentkolonnen» under). Bildejakten og maleplanen for miniatyren viser stegene sine der, med «Stopp», og resultatet når de er ferdige. Drar du et bildefunn fra kolonnen inn i verkstedet, legges det på miniatyren.
+- **Kildene for spillet** ligger nederst i Bilder-fanen, både lagrede og funnet av agenten, med språk og norsk sammendrag i verktøytipset. Trykk på en kilde for å hente bilder fra den. Med «Viser figuren?» merker du kilder som viser miniatyren. De står da først, og agenten åpner dem først.
 - **Forrige og neste** øverst flytter deg mellom miniatyrene i prosjektet og beholder fanen du står på.
 - **Agenten fortsetter mens du gjør noe annet.** Du kan bytte fane eller gå tilbake til galleriet. Miniatyrkortet viser «Agenten jobber …». Kjøringen lever i nettleserfanen, så laster du siden på nytt, stopper den.
-- **På iPad** ligger agent og kilder bak knappen «Agent og kilder».
+- **På iPad** ligger agenten bak knappen «Agenten» nederst til høyre.
 
 Alle sider agenten leser, lagres automatisk som kilder for spillet («Funnet av agenten»). Da slipper agenten å finne dem på nytt.
 
-## Researchagent
+## Agentkolonnen
 
-Panelet til høyre i hvert prosjekt. Det bruker nøkkelen og standardmodellen fra innstillingene.
+Kolonnen til høyre i hvert prosjekt (miniatyrlisten, «Fordel bilder», spillsiden) og i verkstedet. Den er den samme overalt, og har tre deler, alltid i samme rekkefølge:
+
+- **Jobber nå:** kartleggingen av spillet, og bildejakter og maleplaner for miniatyrene i prosjektet. Det som hører til siden du står på, viser stegene sine. Resten står på én linje med lenke og «Stopp». En ferdig kjøring står med oppsummeringen til du trykker «Lukk».
+- **Venter på deg**, for hele prosjektet, med én handling hver:
+  - **Bilder funnet:** de første bildene står som små bilder. Dra et bilde til et miniatyrkort eller inn i verkstedet for å legge det på miniatyren, eller trykk «Fordel bilder» for tavlen. Du kan angre rett etterpå.
+  - **Miniatyrer å gå gjennom:** «Gå gjennom» åpner verkstedet i gjennomgang. Antallet som venter på «Riktig figur», står på samme linje.
+  - **Miniatyrer som mangler i listen** (fra kartleggingen): «Legg til alle», eller «Vis hvilke» for å legge til én og én eller ta ut en med ×.
+  - **Maleplaner som venter:** «Se og godkjenn» åpner Maleplan-fanen.
+- **Samtale:** samtalen med agenten. Den bruker nøkkelen og standardmodellen fra innstillingene.
+
+Med × skjules kolonnen til en smal stripe. Stripen viser om agenten jobber, og hvor mange ting som venter.
 
 - Panelet er kompakt. Modell og nettsøk står på én linje, og arbeidskonteksten er brettet sammen. Paintrest sine egne meldinger (lagrede kilder, avviste forslag) viser første linje, og resten får du med ett trykk. Usikkerhet på et forslag ligger bak «Usikkerhet (N)».
-- Bildeforslag vises som én rad per miniatyr, med små bilder. Trykk på raden for å velge bilder i verkstedets gjennomgang, eller × for å avvise.
 
 - Agenten leser prosjektet, miniatyrene, maleplanene og malingene dine. Den kan lage nye miniatyrer (`catalog_subject`), endre miniatyrer (`catalog_change`), lage maleplaner (`paint_plan`) og foreslå bilder (`reference_selection`).
 - Agenten kan også foreslå en ny versjon av en godkjent plan (`plan_revision`), uten at du åpner planen for revisjon først (brukerbeslutning 10. november 2026, avvik 27 i [AVVIK.md](AVVIK.md)).
@@ -121,7 +131,7 @@ Sider som bygges med skript (typisk kampanjesider), har ofte bildene i sidedata 
 
 ## Kartlegg spillet
 
-«✦ Kartlegg spillet med AI» på miniatyrlisten gjør jobben én gang for hele spillet, i stedet for at hver bildejakt finner de samme kildene på nytt. Kartleggingen har sin egen oppgave og forstyrrer ikke panelet eller verkstedet. Fremdriften vises øverst på listen, med «Stopp».
+«✦ Kartlegg spillet med AI» på miniatyrlisten gjør jobben én gang for hele spillet, i stedet for at hver bildejakt finner de samme kildene på nytt. Kartleggingen har sin egen oppgave og forstyrrer ikke panelet eller verkstedet. Fremdriften vises under «Jobber nå» i agentkolonnen, med «Stopp».
 
 1. **Kilder for spillet (høyst 18 steg).** Agenten finner:
    - de offisielle sidene: utgiveren, kampanjen med oppdateringer og tillegg, BoardGameGeek med regelbok og komponentliste, og wikier
@@ -137,13 +147,13 @@ Sider som bygges med skript (typisk kampanjesider), har ofte bildene i sidedata 
 - **Kildene for spillet:** med rolle (Offisiell, Malt, Guide) og hvilke miniatyrer hver side viser. Kildelisten i verkstedet viser dette som «Trolig figuren». Ett trykk gjør det til ditt eget merke, og × sier at siden ikke viser figuren. Ingen av delene foreslås på nytt.
 
 **Miniatyrer som mangler.** Kartleggingen sammenligner listen med komponentlisten, regelboka og kampanjen.
-- Figurer fra grunnspillet og utvidelsene i prosjektet som mangler, legges under «Mangler i listen» øverst på miniatyrlisten. Hver figur vises med navn, enkeltfigur eller malegruppe med antall, utvidelse, kilder og det kartleggingen er usikker på.
-- Ingenting legges til før du trykker «Legg til» (eller «Legg til alle»). «Avvis» fjerner forslaget.
+- Figurer fra grunnspillet og utvidelsene i prosjektet som mangler, står under «Venter på deg» i agentkolonnen. «Vis hvilke» viser navn, enkeltfigur eller malegruppe med antall og utvidelse. Beskrivelsen og det kartleggingen er usikker på, står i verktøytipset.
+- Ingenting legges til før du trykker «Legg til alle» eller «Legg til» på én. × tar ut forslaget.
 - En figur du legger til, får med seg identifiseringen (som forslag du bekrefter) og sidene som trolig viser den («Trolig figuren»).
 - Figurer fra utvidelser som ikke er i prosjektet, nevnes bare i meldingen.
 - Et forslag med samme navn eller offisielle navn som en miniatyr i prosjektet, eller som et forslag som allerede venter, avvises, og panelet sier hvorfor. Det gjelder også forslag fra agentpanelet.
 
-**Gjennomgang.** Mens kartleggingen pågår, viser kortene «Identifisert» etter hvert som agenten finner ut hvem miniatyrene er. Etterpå viser kort uten eget bilde det beste forslaget, merket «Forslag». «Gå gjennom forslag» (øverst på listen og i kartleggingens oppsummering) åpner verkstedet i gjennomgang:
+**Gjennomgang.** Mens kartleggingen pågår, viser kortene «Identifisert» etter hvert som agenten finner ut hvem miniatyrene er. Etterpå viser kort uten eget bilde det beste forslaget, merket «Forslag». «Gå gjennom» under «Venter på deg» i agentkolonnen åpner verkstedet i gjennomgang:
 - Én miniatyr om gangen, i listens rekkefølge. En linje øverst viser hvor langt du er kommet og hva som venter: bildeforslag, en figur å bekrefte, og sider merket «Trolig figuren».
 - Bildene agenten er sikker på (offisielle bilder og forslag med høy sikkerhet), er forhåndsvalgt. Mangler miniatyren illustrasjon, foreslås det første av dem som illustrasjon. Fjern det som ikke stemmer.
 - «Lagre og neste» lagrer og går videre. «Hopp over» går videre uten å lagre. «Avslutt» går ut av gjennomgangen.

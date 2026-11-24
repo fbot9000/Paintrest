@@ -214,7 +214,7 @@ Status er `ledig`, `pågår (hvem, dato)` eller `ferdig (dato, commit)`. «Berø
 
 ### O-17 Agentkolonnen på miniatyrsiden og i verkstedet
 
-- **Status:** pågår (spor A: agenten og maleplanen, 24. november 2026)
+- **Status:** ferdig (24. november 2026, 7f4aaf1). Valgene står i avvik 46
 - **Avhenger av:** –
 - **Berører:** `src/features/miniatures/`, `src/features/agent/`, `src/features/workspace/`. Ikke Painting Mode
 - **I dag:** agentpanelet ligger til høyre i prosjektet. Kartleggingen viser fremdriften øverst på miniatyrlisten. Verkstedet har sin egen kolonne med agent og kilder. Skissene fra 18. november: [Figma](https://www.figma.com/design/Pyf2kdZuiqWqHIq3bzRDGV?node-id=24-2), fem tavler.

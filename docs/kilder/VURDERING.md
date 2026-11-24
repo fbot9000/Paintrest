@@ -66,7 +66,7 @@ Kandidater, ikke oppgaver. «Ikke i koden» betyr at begrepet ikke finnes i `src
 | C9 | **Lagre en video nå, og «trekk ut metode» eller «lag oppskrift» senere.** | spec §4 | Videoer lagres som lenker, men det finnes ingen uttrekking |
 | C10 | **Prosjektpalett med omfang** (prosjekt, utvidelse, kategori) og **metoder for prosjektet.** | spec §3, datamodell §8 | Bare palett per miniatyr. `project_method` finnes bare som type. Oppgave O-3 |
 | C11 | **Agenten ser om en godkjent versjon er nyere** enn den den jobbet med. | datamodell §2, §13 «Kontekst» | Halvveis: `context_ref` skrives, men leses aldri |
-| C12 | **Gjennomgå og godkjenne mange planer effektivt.** | spec §3, §8 | Delvis: «Godkjenn alle» i agentpanelet, og gjennomgang av bildeforslag etter kartleggingen |
+| C12 | **Gjennomgå og godkjenne mange planer effektivt.** | spec §3, §8 | Delvis: «Godkjenn alle» i samtalen, «Venter på deg» i agentkolonnen med «Legg til alle» og dra og slipp av bildefunn (O-17), og gjennomgang av bildeforslag etter kartleggingen |
 | C13 | **Ekte BoardGameGeek-oppslag.** | datamodell §6, skjema §10 | Simulert |
 | C14 | **Alternativer til malinger du ikke har**, med begrunnelse (dekkevne, finish, bruk). | spec §6C | Ikke sjekket |
 

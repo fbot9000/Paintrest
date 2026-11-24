@@ -2,13 +2,13 @@
 
 Hva som er bygget, hva som er sjekket, og kjente risikoer. Dette er det eneste stedet for status. Hva som skal gjøres, står i [OPPGAVER.md](OPPGAVER.md).
 
-**Sist oppdatert:** 24. november 2026, etter O-2 (teknikk eller oppskrift i et plansteg).
+**Sist oppdatert:** 24. november 2026, etter O-17 (agentkolonnen).
 
 ## Helse
 
 | Sjekk | Resultat |
 |---|---|
-| `npm test` | 250 tester i 20 filer går gjennom |
+| `npm test` | 256 tester i 21 filer går gjennom |
 | `npm run build` | Typesjekk og bygg går gjennom. Vite varsler om at JavaScript-fila er over 500 kB (741 kB, 214 kB gzip) |
 | Ekte tjenester | **Ikke testet.** UiB, Brave, Tavily, YouTube, Kickstarter, Gamefound og Naver er bare testet mot etterligninger, fordi skymiljøet stenger dem ute. Se «Antakelser» i [AVVIK.md](AVVIK.md) |
 | BoardGameGeek | Simulert. Navn og id-er er oppdiktet |
@@ -28,7 +28,7 @@ Bitene kommer fra byggeplanen den første økta laget 9. november (README i «Pr
 | 6 Kilder og bilder (delvis) | «Fordel bilder» i prosjektmenyen, og kildelisten i verkstedet | En egen side for kildene |
 | 7.0–7.7 Bibliotek | Teknikker og oppskrifter, søk og merkelapper, teknikken som artikkel, verkstedguide for iPad, erfaring, erfaring knyttet til en miniatyr (O-7), research med agenten og forbedring av teknikker og oppskrifter. Et plansteg kan bruke en teknikk og en oppskrift, og Painting Mode lenker til verkstedguiden (7.7, O-2). Se [BIT7-KUNNSKAP.md](BIT7-KUNNSKAP.md) | «Bruk i prosjekt» fra biblioteket (7.7 er bygget fra maleplanen) |
 | 8 Simulert agent | Trolig overtatt. Den var planlagt 9. november, før det fantes AI i appen. Nå finnes en ekte agent (raden «Agent og verksted») | – |
-| Agent og verksted | Agentpanelet, miniatyrverkstedet, bildejakt i tre faser, kartlegging av spillet og maleplan med AI | – |
+| Agent og verksted | Agentkolonnen (Jobber nå, Venter på deg, Samtale) i prosjektet og i verkstedet, miniatyrverkstedet, bildejakt i tre faser, kartlegging av spillet og maleplan med AI. Bildefunn kan dras fra kolonnen til en miniatyr (O-17) | – |
 | Malingssamlingen | Søk og filtre (eierskap, produsent og type, med typene ink, dry og air), legg til en og en (med «Fyll ut med AI»), rediger, skjul og slett for godt, fjern eksempelmalingene, import av en liste eller fil med AI, produktbilder (agenten finner, du velger), og malekjeder som oppskrifter, med oppskriftene malingen er med i | – |
 | Handleliste | Malinger du ikke har fra godkjente planer, og dem du legger til selv. Prioritet, filter per prosjekt og «Kjøpt». Under «Malinger → Handleliste», og fra «Finn fram malingene» i Painting Mode | – |
 | Lagring | Paintrest-serveren og datamappen `~/Paintrest`, med revisjon og sikkerhetskopier. Uten server: IndexedDB i nettleseren. Se [ARKITEKTUR.md](ARKITEKTUR.md) | Ekte database |

@@ -216,6 +216,16 @@ Flere av punktene er skrevet av agenter som ikke hadde dokumentene (se avvik 33 
     - **Steget peker på oppskriften, men får ikke malingene fra den.** Datamodell §9 sier at bruk av en oppskrift kopierer rollelinjene inn i planversjonen og husker `recipeVersionId`. Her settes bare `plan_step.recipe_version_id` (som peker på `recipe.id`, avvik 33).
     - **Du velger teknikk og oppskrift når du redigerer steget.** «Bruk i prosjekt» fra biblioteket, der du starter fra teknikken og velger plan og steg, er ikke bygget.
 
+46. **Agentkolonnen** (O-17, [skissene 18. november](https://www.figma.com/design/Pyf2kdZuiqWqHIq3bzRDGV?node-id=24-2), [beslutningen](beslutninger/2026-11-24-agentkolonne-i-verkstedet.md)). Skissene er brukt som inspirasjon. Valgene under er antatt av agenten etter [enkle prosesser med nok kontroll](beslutninger/2026-11-24-enkle-prosesser-nok-kontroll.md):
+    - **Én kolonne** (`AgentPanel` med `AgentWork.tsx`) i prosjektet og i verkstedet, med «Jobber nå», «Venter på deg» og «Samtale». Verkstedet har ikke lenger sin egen kolonne for agent og kilder. Åpen eller lukket gjelder begge steder.
+    - **Jobber nå** viser kartleggingen og bildejakter og maleplaner for miniatyrene i prosjektet (`runs.all()`). Agentpanelets egen tur vises i samtalen, ikke her. En ferdig kjøring står til du lukker den.
+    - **Venter på deg** (`src/domain/waiting.ts`) regnes ut for hele prosjektet: bildefunn som ikke er lagt på en miniatyr, miniatyrer med noe å gå gjennom, manglende miniatyrer fra kartleggingen, og planforslag fra verkstedet. Planforslag fra samtalen vises i samtalen, ikke to steder. Bildeforslagene står ikke lenger som rader i samtalen. Tavlen og gjennomgangen er stedet for dem.
+    - **Spørsmål 2 fra skissene (B-1):** Nye miniatyrer fra samtalen legges inn med en gang, med «Angre», som før (avvik 27). Det er raskest, og kontrollen ligger i at endringen vises og kan angres. Manglende miniatyrer fra kartleggingen venter fortsatt på «Legg til», fordi de kan være mange og usikre, men alle tas med ett trykk («Legg til alle»), og enkeltting tas ut med ×.
+    - **Dra og slipp:** Bildefunn i «Venter på deg» (de åtte første, de sikreste først) kan dras til et miniatyrkort eller inn i verkstedet. Det bruker `placeImages`, som tavlen, og kan angres. Med berøring på iPad virker ikke dra og slipp mellom kolonnen og kortene. Der er «Fordel bilder» og gjennomgangen alternativet.
+    - **Kildelisten** ligger nederst i Bilder-fanen. Maleplan-fanen viser ikke lenger hvilke kilder planen bygger på. De står i forslaget og i agentens melding.
+    - **Miniatyrlisten** har ikke lenger fremdriftsboksen, «Mangler i listen», «Fordel bilder (N)» eller «Gå gjennom én og én» øverst. Alt det står i kolonnen. Skissenes stiplede kort for manglende miniatyrer i rutenettet er ikke bygget.
+    - **Testing:** Enhetstester i `src/domain/waiting.test.ts`. Prøvd i nettleseren mot lokale data og en simulert modell: dra et bilde til et kort og angre, ta ut én manglende miniatyr og legge til resten, kolonnen i verkstedet, og «Jobber nå» under en bildejakt.
+
 ## Antakelser
 
 - **Klient:** React og TypeScript som webapp med hash-ruting. Det er godkjent av brukeren 9. november 2026 ([beslutningen](beslutninger/2026-11-09-klient-react-og-typescript.md)).
